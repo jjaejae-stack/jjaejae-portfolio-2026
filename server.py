@@ -19,6 +19,7 @@ import json
 import os
 import re
 import subprocess
+import unicodedata
 import urllib.parse
 
 PORT = 8420
@@ -68,20 +69,25 @@ def natural_key(s):
 
 
 def find_project_folder(name):
-    """Best-effort: look for a subfolder of BASE_DIR matching the project name."""
+    """Best-effort: look for a subfolder of BASE_DIR matching the project name.
+    macOS stores filenames in NFD (decomposed) Unicode, so a Korean title typed
+    into index.html/builder (NFC) won't byte-match os.listdir() results unless
+    both sides are normalized first."""
     if not name:
         return None
     candidates = [name, name.strip(), name.upper(), name.replace(" ", "")]
+    candidates = [unicodedata.normalize("NFC", c) for c in candidates]
     try:
         entries = [e for e in os.listdir(BASE_DIR) if os.path.isdir(os.path.join(BASE_DIR, e))]
     except OSError:
         return None
+    entries_nfc = {unicodedata.normalize("NFC", e): e for e in entries}
     for c in candidates:
-        if c in entries:
-            return c
+        if c in entries_nfc:
+            return entries_nfc[c]
     lowered = name.lower()
     for e in entries:
-        if e.lower() == lowered:
+        if unicodedata.normalize("NFC", e).lower() == lowered:
             return e
     return None
 
