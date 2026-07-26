@@ -672,6 +672,7 @@
       +   '<button class="btn-secondary" id="save-btn" data-action="save">SAVE</button>'
       +   '<button class="btn-secondary" id="translate-ko-en-btn" data-action="translate-ko-en">KR → EN</button>'
       +   '<button class="btn-secondary" id="translate-en-ko-btn" data-action="translate-en-ko">EN → KR</button>'
+      +   '<button class="btn-primary" id="publish-btn" data-action="publish">PUBLISH</button>'
       + '</div>'
       + '<p id="generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<div class="field-group"><label class="field-label">프로젝트명</label>'
@@ -1027,6 +1028,46 @@
     }
   }
 
+  /* ---- Publish: sends this project's exported code to server.py, which writes it
+     into index.html's live PROJECTS array and git push's it — Vercel then auto-deploys
+     from the GitHub repo. Requires server.py running AND GitHub remote configured. ---- */
+  async function runPublish(){
+    const project = getCurrentProject();
+    if(!project) return;
+    if(!confirm('"' + (project.title || "Untitled") + '" 프로젝트를 실제 사이트에 반영(Publish)할까요?\n\nindex.html이 수정되고 GitHub에 푸시되어 Vercel이 재배포합니다.')) return;
+
+    const btn = document.getElementById("publish-btn");
+    const status = document.getElementById("generate-status");
+    if(btn){ btn.disabled = true; btn.textContent = "PUBLISHING..."; }
+    if(status){ status.style.display = "block"; status.textContent = "index.html에 반영하고 GitHub에 푸시하는 중... (최대 1분)"; }
+
+    try{
+      const code = exportProjectCode(project);
+      const res = await fetch(GENERATE_SERVER + "/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: project.id, title: project.title, code: code })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      if(status){
+        status.textContent = "완료 — " + (data.action === "added" ? "새 프로젝트로 추가됨. " : "기존 항목이 갱신됨. ") + (data.note || "");
+      }
+      if(btn) btn.textContent = "PUBLISHED ✓";
+    }catch(e){
+      alert(
+        "Publish 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지, GitHub 연동이 되어 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(status) status.style.display = "none";
+    }finally{
+      setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "PUBLISH"; } }, 1800);
+    }
+  }
+
   /* ---- KR<->EN translate: same local server / claude CLI approach as Generate ---- */
   async function runTranslate(direction){
     const project = getCurrentProject();
@@ -1139,6 +1180,7 @@
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
     if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
+    if(e.target.closest('[data-action="publish"]')){ runPublish(); return; }
 
     const toggleHead = e.target.closest('[data-toggle]');
     if(toggleHead){
