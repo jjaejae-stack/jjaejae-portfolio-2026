@@ -30,6 +30,40 @@ CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_TIMEOUT_SEC = 90
 MAX_BUDGET_USD = "0.50"
 
+VAULT_DIR = "/Users/cheil/Desktop/Portfolio Wiki"
+VOICE_PATH = os.path.join(VAULT_DIR, "voice.md")
+INBOX_SAMPLE_PATH = os.path.join(VAULT_DIR, "inbox", "내가 쓴 글.md")
+PORTFOLIO_DIR = os.path.join(VAULT_DIR, "portfolio")
+
+
+def _read_file(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def load_voice_rulebook():
+    """voice.md, inserted whole into every /generate prompt as the style rulebook."""
+    return _read_file(VOICE_PATH)
+
+
+def load_voice_examples():
+    """Approved portfolio/*.md posts take priority as tone examples; otherwise fall
+    back to inbox/내가 쓴 글.md (the raw source voice.md's rules were derived from)."""
+    try:
+        approved = sorted(
+            fn for fn in os.listdir(PORTFOLIO_DIR)
+            if fn.lower().endswith(".md") and os.path.isfile(os.path.join(PORTFOLIO_DIR, fn))
+        )
+    except OSError:
+        approved = []
+    if approved:
+        parts = [_read_file(os.path.join(PORTFOLIO_DIR, fn)) for fn in approved]
+        return "\n\n---\n\n".join(p for p in parts if p), "portfolio/"
+    return _read_file(INBOX_SAMPLE_PATH), "inbox/내가 쓴 글.md"
+
 GENERATE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -134,10 +168,29 @@ def build_prompt(title, tag, meta):
     if meta:
         context_bits.append('현재 클라이언트/에이전시: "%s"' % meta)
     context = "\n".join(context_bits) if context_bits else "(아직 입력된 내용 없음)"
+
+    voice = load_voice_rulebook()
+    examples, examples_source = load_voice_examples()
+
+    voice_block = ""
+    if voice:
+        voice_block = (
+            "\n\n## 문체 규칙 (반드시 지킬 것)\n"
+            "아래는 내 실제 글에서 관찰한 문체 규칙이다. 이 규칙을 예외 없이 따라서 써라:\n\n"
+            + voice + "\n"
+        )
+    examples_block = ""
+    if examples:
+        examples_block = (
+            "\n\n## 문체 예시 (출처: %s — 표현을 그대로 베끼지 말고 톤·구조만 따라할 것)\n\n%s\n"
+            % (examples_source, examples)
+        )
+
     return (
-        "너는 광고 에이전시 아트디렉터의 포트폴리오 사이트에 들어갈 프로젝트 소개 초안을 써주는 카피라이터야.\n"
-        "아래는 지금까지 입력된 정보야:\n" + context + "\n\n"
-        "이 정보를 참고해서 그럴듯한 캠페인 케이스 스터디 초안을 한국어로 작성해줘. "
+        "너는 광고 에이전시 아트디렉터 본인이 되어, 자기 포트폴리오 사이트에 들어갈 프로젝트 소개 초안을 직접 쓰는 사람이야.\n"
+        "아래는 지금까지 입력된 정보야:\n" + context + "\n"
+        + voice_block + examples_block +
+        "\n\n위 문체 규칙과 예시 톤을 그대로 따라서, 이 프로젝트에 대한 그럴듯한 캠페인 케이스 스터디 초안을 한국어로 작성해줘. "
         "실존하는 특정 인물이나 사건을 사실인 것처럼 단정하지 말고, 포트폴리오 초안(플레이스홀더)이라는 톤을 유지해줘.\n"
         "다음 필드를 JSON으로 반환해:\n"
         "- title: 프로젝트명 (기존 값이 이미 괜찮으면 그대로 유지)\n"
