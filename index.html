@@ -359,15 +359,13 @@
   body.info-open{overflow:hidden;}
   #info-view .info-bg{
     position:absolute; inset:0; z-index:0;
-    background:
-      radial-gradient(circle at 78% 16%, rgba(255,255,255,.95), rgba(255,255,255,0) 34%),
-      radial-gradient(circle at 22% 62%, rgba(255,255,255,.75), rgba(255,255,255,0) 42%),
-      radial-gradient(circle at 55% 38%, rgba(255,255,255,.55), rgba(255,255,255,0) 30%),
-      linear-gradient(180deg, #a7cdec 0%, #cfe6f7 55%, #eef6fb 100%);
+    background-image:url("info-bg.jpg");
+    background-size:cover;
+    background-position:center 35%;
   }
   #info-view .info-grain{
     position:absolute; inset:0; z-index:1;
-    opacity:.06;
+    opacity:.09;
     mix-blend-mode:overlay;
     pointer-events:none;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
