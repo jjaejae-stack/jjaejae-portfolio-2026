@@ -49,6 +49,8 @@
 
   /* ---------- sidebar ---------- */
   #sidebar{border-right:1px solid var(--line); overflow-y:auto; padding:18px;}
+  #category-tabs{width:100%; margin-bottom:14px;}
+  #category-tabs button{flex:1;}
   #new-project-btn{
     width:100%; padding:10px; border:1px solid var(--line-strong);
     font-weight:600; margin-bottom:22px; text-align:center;
@@ -197,6 +199,10 @@
 
   <div id="app">
     <aside id="sidebar">
+      <div class="view-toggle" id="category-tabs">
+        <button type="button" data-category="work" class="active">Work</button>
+        <button type="button" data-category="play">Play</button>
+      </div>
       <button id="new-project-btn">+ 새 프로젝트</button>
       <div id="project-list"></div>
     </aside>
@@ -359,11 +365,12 @@
   /* ======================================================================
      2. data model
   ====================================================================== */
-  function newProject(title){
+  function newProject(title, category){
     const t = title || "New Project";
     return {
       id: (slugify(t) || "project") + "-" + uid().slice(0,5),
       title: t,
+      category: category === "play" ? "play" : "work",
       color: "#C4402A",
       textColor: "#fff3ef",
       titleLetterSpacing: -0.02,
@@ -416,6 +423,7 @@
     return {
       id: "sample-ssf-shop",
       title: "SSF SHOP",
+      category: "work",
       color: "#C4402A",
       textColor: "#fff3ef",
       titleLetterSpacing: -0.02,
@@ -555,13 +563,19 @@
      4. sidebar
   ====================================================================== */
   const sidebarList = document.getElementById("project-list");
+  const categoryTabs = document.getElementById("category-tabs");
+  let activeCategory = "work";
+
+  function projectCategory(p){ return p.category === "play" ? "play" : "work"; }
 
   function renderSidebar(){
-    if(!projects.length){
-      sidebarList.innerHTML = '<div id="sidebar-empty">아직 프로젝트가 없습니다.<br>위 버튼으로 새 프로젝트를 시작하세요.</div>';
+    const visible = projects.filter(p => projectCategory(p) === activeCategory);
+    if(!visible.length){
+      sidebarList.innerHTML = '<div id="sidebar-empty">' + (activeCategory === "play" ? "Play" : "Work")
+        + ' 프로젝트가 아직 없습니다.<br>위 버튼으로 새 프로젝트를 시작하세요.</div>';
       return;
     }
-    sidebarList.innerHTML = projects.map(p => {
+    sidebarList.innerHTML = visible.map(p => {
       const active = p.id === currentId ? " active" : "";
       return '<div class="project-item' + active + '" data-project-id="' + p.id + '">'
         + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
@@ -573,6 +587,14 @@
         + '</div>';
     }).join("");
   }
+
+  categoryTabs.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-category]");
+    if(!btn) return;
+    activeCategory = btn.dataset.category;
+    categoryTabs.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+    renderSidebar();
+  });
 
   sidebarList.addEventListener("click", (e) => {
     const delBtn = e.target.closest('[data-action="delete-project"]');
@@ -592,7 +614,7 @@
   document.getElementById("new-project-btn").addEventListener("click", () => {
     const title = prompt("프로젝트 이름을 입력하세요", "New Project");
     if(title === null) return;
-    const p = newProject(title.trim() || "New Project");
+    const p = newProject(title.trim() || "New Project", activeCategory);
     projects.unshift(p);
     dbPut(p);
     selectProject(p.id);
@@ -602,7 +624,10 @@
     allImages(projects.find(p=>p.id===id) || {blocks:[]}).forEach(im => { try{ URL.revokeObjectURL(im.url); }catch(e){} });
     projects = projects.filter(p => p.id !== id);
     await dbDelete(id);
-    if(currentId === id) currentId = projects[0] ? projects[0].id : null;
+    if(currentId === id){
+      const next = projects.find(p => projectCategory(p) === activeCategory);
+      currentId = next ? next.id : null;
+    }
     renderSidebar();
     renderEditor();
     refreshPreview();
@@ -744,6 +769,11 @@
       + '<p id="generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<div class="field-group"><label class="field-label">프로젝트명</label>'
       +   '<input class="field" data-field="title" value="' + escapeHTML(project.title) + '"></div>'
+      + '<div class="field-group"><label class="field-label">섹션 (Work / Play)</label>'
+      +   '<div class="view-toggle" id="project-category-toggle">'
+      +     '<button type="button" data-value="work"' + (projectCategory(project)==="work" ? ' class="active"' : '') + '>Work</button>'
+      +     '<button type="button" data-value="play"' + (projectCategory(project)==="play" ? ' class="active"' : '') + '>Play</button>'
+      +   '</div></div>'
       + '<div class="field-row field-group">'
       +   '<div><label class="field-label">컬러 박스 색상</label>'
       +     '<div class="color-row"><input type="color" data-field="color" value="' + project.color + '">'
@@ -1251,6 +1281,16 @@
     const project = getCurrentProject();
     if(!project) return;
 
+    const categoryBtn = e.target.closest('#project-category-toggle button');
+    if(categoryBtn){
+      snapshot();
+      project.category = categoryBtn.dataset.value === "play" ? "play" : "work";
+      renderEditor();
+      renderSidebar();
+      saveAndRefresh();
+      return;
+    }
+
     const addFolderBtn = e.target.closest('[data-action="add-folder"]');
     if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
 
@@ -1541,6 +1581,7 @@
     L.push("{");
     L.push("  id:" + JSON.stringify(project.id) + ",");
     L.push("  title:" + JSON.stringify(project.title) + ",");
+    L.push("  category:" + JSON.stringify(projectCategory(project)) + ",");
     L.push("  color:" + JSON.stringify(project.color) + ",");
     L.push("  textColor:" + JSON.stringify(project.textColor||"#fff3ef") + ",");
     L.push("  titleLetterSpacing:" + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + ",");
@@ -1647,7 +1688,9 @@
       projects.push(sample);
       try{ await dbPut(sample); }catch(e){ console.error("sample save failed", e); }
     }
-    if(projects.length) currentId = projects[0].id;
+    const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
+    if(firstInTab) currentId = firstInTab.id;
+    else if(projects.length) currentId = projects[0].id;
     renderSidebar();
     renderEditor();
     refreshPreview();

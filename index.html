@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jaehoon Choi — Art Director</title>
+<title>jjaejae — Art Director</title>
 <style>
   :root{
     --bg:#f3f2ee;
@@ -29,21 +29,67 @@
   /* ---------- header ---------- */
   #site-header{
     position:fixed; top:0; left:0; right:0; z-index:500;
-    display:flex; align-items:center; justify-content:space-between;
+    display:flex; align-items:center; justify-content:flex-end;
     padding:22px 28px;
-    font-size:13px; letter-spacing:.02em;
+    font-size:13px; letter-spacing:.02em; font-weight:700;
     mix-blend-mode:difference;
     color:#fff;
     pointer-events:none;
+    opacity:0;
+    transition:opacity .35s ease;
   }
+  /* Work 리스트(마퀴만 지난 상태)에서는 또렷하게, 프로젝트 상세뷰·Info 오버레이(디테일 페이지)에서는
+     배경 위에 자연스럽게 얹히도록 40%로 옅게 — 마우스를 올리면 잠깐 또렷해짐 */
+  body.past-hero #site-header{opacity:1; pointer-events:auto;}
+  body.project-open #site-header, body.info-open #site-header{opacity:.4; pointer-events:auto;}
+  body.project-open #site-header:hover, body.info-open #site-header:hover{opacity:1;}
   #site-header *{pointer-events:auto;}
-  #site-header .brand{font-weight:600; cursor:pointer;}
   #site-header nav{display:flex; gap:22px;}
-  #site-header nav button{opacity:.85;}
+  #site-header nav button{opacity:.85; font-weight:700;}
   #site-header nav button:hover{opacity:1;}
   #project-close{display:none; align-items:center; gap:6px;}
   #project-close.show{display:flex;}
   body.project-open #site-header nav{display:none;}
+
+  /* brand logo: kept out of #site-header on purpose — that header is
+     mix-blend-mode:difference (auto-inverts against any background), but this
+     is a literal black wordmark image, so it renders as flat solid black
+     everywhere instead of blending/inverting. Shares the same show/hide +
+     40%-on-detail-pages rules as the header and the corner frame items. */
+  .brand-logo{
+    position:fixed; top:20px; left:28px; z-index:500;
+    opacity:0;
+    pointer-events:none;
+    cursor:pointer;
+    transition:opacity .35s ease;
+  }
+  .brand-logo img{display:block; height:26px; width:auto;}
+  body.past-hero .brand-logo{opacity:1; pointer-events:auto;}
+  body.project-open .brand-logo, body.info-open .brand-logo{opacity:.4; pointer-events:auto;}
+  body.project-open .brand-logo:hover, body.info-open .brand-logo:hover{opacity:1;}
+
+  /* ---------- corner frame: day / clock / email / ig ----------
+     hidden on the main greeting screen, fades in once you scroll past it
+     (or open a project / the info overlay) — same rule as the header. */
+  .frame-item{
+    position:fixed; z-index:500;
+    font-size:13px; letter-spacing:.02em; font-weight:700;
+    mix-blend-mode:difference;
+    color:#fff;
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .35s ease;
+  }
+  body.past-hero .frame-item{opacity:1; pointer-events:auto;}
+  body.project-open .frame-item, body.info-open .frame-item{opacity:.4; pointer-events:auto;}
+  body.project-open .frame-item:hover, body.info-open .frame-item:hover{opacity:1;}
+  #frame-day{ left:28px; top:50%; transform:translateY(-50%); }
+  #frame-clock{ right:28px; top:50%; transform:translateY(-50%); font-variant-numeric:tabular-nums; }
+  #frame-email{ left:28px; bottom:22px; }
+  #frame-ig{ right:28px; bottom:22px; }
+  @media (max-width:600px){
+    #frame-day, #frame-clock{display:none;}
+  }
 
   /* ---------- intro: language marquee ---------- */
   #intro{
@@ -51,6 +97,7 @@
     display:flex; flex-direction:column;
     position:relative;
     overflow:hidden;
+    cursor:pointer;
   }
   .lang-row{
     flex:1 1 0;
@@ -66,8 +113,9 @@
   }
   .lang-row.reverse .lang-track{animation-direction:reverse;}
   .lang-track span{
-    font-size:clamp(2.2rem, 7vw, 5.6rem);
+    font-size:clamp(2.6rem, 16svh, 9rem);
     font-weight:800;
+    line-height:1;
     letter-spacing:-.01em;
     padding-right:.6em;
   }
@@ -91,62 +139,21 @@
   }
   @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 
-  /* ---------- info (name / bio, follows the marquee) ---------- */
-  #info{
-    min-height:100svh;
-    display:flex; flex-direction:column; justify-content:center;
-    padding:0 6vw;
-  }
-  #info .eyebrow{
-    font-size:12px; letter-spacing:.16em; text-transform:uppercase;
-    color:var(--muted); margin-bottom:18px;
-  }
-  #info h1{
-    font-size:clamp(2.6rem, 9vw, 6.4rem);
-    font-weight:800;
-    letter-spacing:-.02em;
-    line-height:1.02;
-  }
-  #info h1 span{
-    display:block;
-    color:var(--muted);
-    font-weight:500;
-    font-size:.4em;
-    margin-top:.5em;
-    letter-spacing:0;
-  }
-  #info .bio{
-    max-width:640px;
-    margin-top:40px;
-    font-size:clamp(1rem, 1.6vw, 1.2rem);
-    color:#2b2a26;
-    white-space:pre-line;
-  }
-  #info .intro-links{
-    margin-top:36px;
-    display:flex; gap:24px;
-    font-size:14px;
-  }
-  #info .intro-links a{
-    border-bottom:1px solid var(--line-strong);
-    padding-bottom:2px;
-  }
-  #info .intro-links a:hover{border-color:var(--fg);}
-
-  /* ---------- work ---------- */
-  #work{padding:60px 6vw 120px;}
-  #work h2{
+  /* ---------- work / play (same list layout, shared by both sections) ---------- */
+  #work, #play{padding:60px 6vw 120px;}
+  #work h2, #play h2{
     font-size:13px; letter-spacing:.16em; text-transform:uppercase;
     color:var(--muted);
     padding-bottom:18px;
     border-bottom:1px solid var(--line);
     margin-bottom:36px;
   }
-  #work-grid{
+  #work-grid, #play-grid{
     display:grid;
     grid-template-columns:repeat(2, 1fr);
     gap:56px 40px;
   }
+  .play-placeholder{color:var(--muted); font-style:italic; font-size:.95rem;}
   .work-card{cursor:pointer;}
   .work-card .thumb{
     position:relative;
@@ -172,7 +179,7 @@
   .work-card .meta .tag{font-size:12px; color:var(--muted);}
 
   @media (max-width:760px){
-    #work-grid{grid-template-columns:1fr; gap:44px;}
+    #work-grid, #play-grid{grid-template-columns:1fr; gap:44px;}
   }
 
   /* ---------- project view ---------- */
@@ -191,7 +198,6 @@
     overflow:hidden;
     background:#0d0d0d;
     --pmargin:2.2vmin;
-    --pradius:clamp(14px, 1.6vw, 22px);
   }
   .p-hero{
     position:absolute; inset:0; z-index:1;
@@ -218,7 +224,8 @@
     height:clamp(var(--box-h-min, 300px), var(--box-h-vh, 46vh), var(--box-h-max, 620px));
     display:flex; flex-direction:column; justify-content:flex-start;
     padding:56px 48px;
-    border-radius:var(--pradius);
+    border:3px solid #111;
+    box-shadow:10px 10px 0 #111;
     color:#fff3ef;
   }
   .p-colorbox h1{
@@ -232,7 +239,8 @@
     position:absolute; right:var(--pmargin); bottom:var(--pmargin); z-index:20;
     display:flex; flex-direction:column; gap:12px;
     padding:14px;
-    border-radius:var(--pradius);
+    border:3px solid #111;
+    box-shadow:8px 8px 0 #111;
     color:#fff3ef;
   }
   .p-social a{
@@ -243,8 +251,9 @@
   .p-social a:hover{opacity:.6; transform:scale(1.08);}
 
   @media (max-width:760px){
-    .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px;}
+    .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px; border-width:2px; box-shadow:6px 6px 0 #111;}
     .p-colorbox h1{font-size:clamp(1.6rem, 8vw, 2.6rem);}
+    .p-social{border-width:2px; box-shadow:6px 6px 0 #111;}
   }
 
   .p-detail{padding:80px 6vw 40px;}
@@ -335,47 +344,146 @@
     display:flex; justify-content:space-between;
     border-top:1px solid var(--line);
   }
+
+  /* ---------- info overlay ----------
+     the outer box never scrolls (so its opaque background always covers the
+     full viewport, even during elastic/rubber-band overscroll) — only the
+     inner .info-scroll wrapper scrolls, and overscroll-behavior:contain stops
+     that scroll from ever chaining out to the page behind it. */
+  #info-view{
+    display:none;
+    position:fixed; inset:0; z-index:450;
+    overflow:hidden;
+  }
+  #info-view.open{display:block;}
+  body.info-open{overflow:hidden;}
+  #info-view .info-bg{
+    position:absolute; inset:0; z-index:0;
+    background:
+      radial-gradient(circle at 78% 16%, rgba(255,255,255,.95), rgba(255,255,255,0) 34%),
+      radial-gradient(circle at 22% 62%, rgba(255,255,255,.75), rgba(255,255,255,0) 42%),
+      radial-gradient(circle at 55% 38%, rgba(255,255,255,.55), rgba(255,255,255,0) 30%),
+      linear-gradient(180deg, #a7cdec 0%, #cfe6f7 55%, #eef6fb 100%);
+  }
+  #info-view .info-grain{
+    position:absolute; inset:0; z-index:1;
+    opacity:.06;
+    mix-blend-mode:overlay;
+    pointer-events:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  #info-view .info-scroll{
+    position:relative; z-index:2;
+    height:100%;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+  }
+  #info-view .info-inner{
+    min-height:100%;
+    display:flex; align-items:center;
+    padding:150px 6vw 100px;
+  }
+  #info-view .info-content{max-width:760px;}
+  #info-view .info-lead{
+    font-size:clamp(1.4rem, 3.2vw, 2.3rem);
+    font-weight:700;
+    line-height:1.36;
+    color:#15171c;
+  }
+  #info-view .info-body{
+    margin-top:26px;
+    font-size:clamp(1rem, 1.7vw, 1.2rem);
+    font-weight:500;
+    line-height:1.6;
+    color:#2b2f36;
+  }
+  #info-view .info-tagline{
+    margin-top:26px;
+    font-size:clamp(1rem, 1.7vw, 1.2rem);
+    font-weight:800;
+    color:#15171c;
+  }
+  #info-view .links{
+    margin-top:44px;
+    display:flex; gap:26px;
+    font-size:15px; font-weight:700;
+  }
+  #info-view .links a{
+    border-bottom:2px solid rgba(17,17,17,.5);
+    padding-bottom:2px;
+  }
+  #info-view .links a:hover{border-color:#111;}
 </style>
 </head>
 <body>
 
   <header id="site-header">
-    <div class="brand" data-go="home">Jaehoon Choi</div>
     <nav>
       <button data-go="work">Work</button>
+      <button data-go="play">Play</button>
       <button data-go="info">Info</button>
     </nav>
     <button id="project-close">✕ Close</button>
   </header>
 
+  <div class="brand-logo" data-go="home"><img src="jjaejae-wordmark-black.png" alt="jjaejae"></div>
+
+  <div class="frame-item" id="frame-day"></div>
+  <div class="frame-item" id="frame-clock"></div>
+  <a class="frame-item" id="frame-email" href="mailto:hello@jaehoonchoi.com">Email</a>
+  <a class="frame-item" id="frame-ig" href="https://www.instagram.com/jjaejae__/" target="_blank" rel="noopener">IG ↗</a>
+
   <main id="intro" aria-label="Greeting">
     <div class="scroll-cue"><span class="dot"></span>Scroll</div>
   </main>
-
-  <section id="info">
-    <p class="eyebrow">Portfolio — 2026</p>
-    <h1>Jaehoon Choi<span>Art Director</span></h1>
-    <p class="bio">안녕하세요, 아트디렉터 최재훈입니다.
-브랜드가 하고 싶은 이야기를 오래 기억되는 캠페인으로 만듭니다.
-삼성, 나이키 등 다양한 브랜드의 캠페인을 아트디렉팅했습니다.</p>
-    <div class="intro-links">
-      <a href="https://www.instagram.com/jjaejae__/" target="_blank" rel="noopener">Instagram ↗</a>
-      <a href="mailto:hello@jaehoonchoi.com">Email</a>
-    </div>
-  </section>
 
   <section id="work">
     <h2>Work</h2>
     <div id="work-grid"></div>
   </section>
 
+  <section id="play">
+    <h2>Play</h2>
+    <div id="play-grid"><p class="play-placeholder">Coming soon — 개인 작업물이 곧 채워질 예정입니다.</p></div>
+  </section>
+
   <footer>
-    <span>© 2026 Jaehoon Choi</span>
+    <span>© 2026 jjaejae</span>
     <span>Art Director</span>
   </footer>
 
   <div id="project-view">
     <div id="project-scroll"></div>
+  </div>
+
+  <div id="info-view">
+    <div class="info-bg"></div>
+    <div class="info-grain"></div>
+    <div class="info-scroll"><div class="info-inner">
+      <div class="info-content">
+        <p class="info-lead">안녕하세요!<br>아트디렉터 최재훈입니다.</p>
+
+        <p class="info-body">jjaejae(째재)<br>이것은 어릴적 친구들이 내 이름을 부르던 방식입니다.<br>그들은 '최재'라고 부르기 시작해 어느새 '째재'로 불렀습니다.</p>
+
+        <p class="info-tagline">A RAW NAME FOR SHARP IDEAS</p>
+
+        <p class="info-body">이름은 아주 즉흥적이게, 날 것으로 태어났지만<br>정교한 크리에이티브와 결과물을 만든다.</p>
+
+        <p class="info-body">jjae / jae — 비슷한 음절의 반복<br>새로운 크리에이티브는 전에 없던 것이 아니라<br>익숙한 것을 다시 보게 만드는 것이라 믿는다.</p>
+
+        <p class="info-body">그것이 곧 새로운 것이 되고, 보고싶은 콘텐츠가 되며,<br>사람들이 다시 보게 만든다.</p>
+
+        <p class="info-tagline">LOOK AGAIN</p>
+
+        <p class="info-body">사람들이 다시 한번 보게 만드는 아이디어를 낸다.<br>브랜드와 브랜드, 브랜드와 사람 사이를 새로운 관점으로 본다.</p>
+
+        <div class="links">
+          <a href="https://www.instagram.com/jjaejae__/" target="_blank" rel="noopener">Instagram ↗</a>
+          <a href="mailto:hello@jaehoonchoi.com">Email</a>
+        </div>
+      </div>
+    </div></div>
   </div>
 
 <script>
@@ -386,20 +494,23 @@
   const u = (path) => encodeURI(path);
   const ssfSet = (n, count) => Array.from({length:count}, (_, i) => `SSF SHOP/Capture/${n}-${i+1}.jpg`);
 
-  /* ---------------- render: greeting marquee ---------------- */
+  /* ---------------- render: greeting marquee ----------------
+     한국어가 5줄 중 가운데(3번째)에 오도록 순서를 잡고, 방향은 줄 순서에 따라
+     자동으로 교차시킵니다(짝수 줄 → 홀수 줄마다 반대 방향). */
   const GREETINGS = [
-    { text:"안녕하세요! jjaejae의 사이트에 오신 것을 환영합니다.", bg:"#4CAF50", fg:"#123815", duration:64 },
-    { text:"Hello! Welcome to jjaejae's site.",                   bg:"#2b1710", fg:"#f2e9e4", duration:76, reverse:true },
-    { text:"¡Hola! Bienvenido al sitio de jjaejae.",              bg:"#e3e07a", fg:"#2f3421", duration:60 },
-    { text:"Bonjour ! Bienvenue sur le site de jjaejae.",         bg:"#ee6f63", fg:"#fbe4df", duration:72, reverse:true },
-    { text:"こんにちは！jjaejaeのサイトへようこそ。",                  bg:"#3f6fd1", fg:"#0d1b34", duration:58 }
+    { text:"Hello! Welcome to jjaejae's site.",                   bg:"#2b1710", fg:"#f2e9e4", duration:100 },
+    { text:"¡Hola! Bienvenido al sitio de jjaejae.",              bg:"#c62828", fg:"#fbe4df", duration:78 },
+    { text:"안녕하세요! jjaejae의 사이트에 오신 것을 환영합니다.", bg:"#4CAF50", fg:"#123815", duration:84 },
+    { text:"Bonjour ! Bienvenue sur le site de jjaejae.",         bg:"#3f6fd1", fg:"#0d1b34", duration:94 },
+    { text:"こんにちは！jjaejaeのサイトへようこそ。",                  bg:"#e3e07a", fg:"#2f3421", duration:76 }
   ];
   (function renderGreetings(){
     // duplicate each row's content once so a -50% translate loops with no visible seam
-    const rowsHTML = GREETINGS.map(g => {
+    const rowsHTML = GREETINGS.map((g, i) => {
       const reps = Array.from({length:10}, () => `<span>${g.text}</span>`).join("");
+      const reverse = i % 2 === 1;
       return `
-        <div class="lang-row${g.reverse ? " reverse" : ""}" style="background:${g.bg}; color:${g.fg}">
+        <div class="lang-row${reverse ? " reverse" : ""}" style="background:${g.bg}; color:${g.fg}">
           <div class="lang-track" style="animation-duration:${g.duration}s">${reps}${reps}</div>
         </div>`;
     }).join("");
@@ -413,6 +524,7 @@
     {
       id:"ssf-shop",
       title:"SSF SHOP",
+      category:"work",
       color:"#9d4dff",
       textColor:"#f7f0ff",
       titleLetterSpacing:-0.02,
@@ -715,9 +827,12 @@
   ];
   */
 
-  /* ---------------- render: work grid ---------------- */
-  const grid = document.getElementById("work-grid");
-  PROJECTS.forEach(p => {
+  /* ---------------- render: work / play grids ----------------
+     project.category is "work" or "play" — missing/unrecognized values
+     default to "work" so older project entries keep showing up as before. */
+  const workGrid = document.getElementById("work-grid");
+  const playGrid = document.getElementById("play-grid");
+  function projectCard(p){
     const card = document.createElement("div");
     card.className = "work-card";
     card.innerHTML = `
@@ -730,8 +845,15 @@
         <span class="tag">${[p.tag, p.year].filter(Boolean).join(" · ")}</span>
       </div>`;
     card.addEventListener("click", () => openProject(p.id));
-    grid.appendChild(card);
-  });
+    return card;
+  }
+  const workProjects = PROJECTS.filter(p => (p.category || "work") === "work");
+  const playProjects = PROJECTS.filter(p => p.category === "play");
+  workProjects.forEach(p => workGrid.appendChild(projectCard(p)));
+  if(playProjects.length){
+    playGrid.innerHTML = "";
+    playProjects.forEach(p => playGrid.appendChild(projectCard(p)));
+  }
 
   /* ---------------- render: project view ---------------- */
   const viewRoot = document.getElementById("project-view");
@@ -904,17 +1026,52 @@
   }
 
   closeBtn.addEventListener("click", closeProject);
-  document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeProject(); });
+  document.addEventListener("keydown", (e) => { if(e.key === "Escape"){ closeProject(); closeInfo(); } });
+
+  const infoView = document.getElementById("info-view");
+  function openInfo(){
+    infoView.classList.add("open");
+    document.body.classList.add("info-open");
+    document.documentElement.style.overflow = "hidden";
+  }
+  function closeInfo(){
+    infoView.classList.remove("open");
+    document.body.classList.remove("info-open");
+    document.documentElement.style.overflow = "";
+  }
 
   document.querySelectorAll("[data-go]").forEach(el => {
     el.addEventListener("click", () => {
       closeProject();
+      if(el.dataset.go === "info"){ openInfo(); return; }
+      closeInfo();
       const target = el.dataset.go === "work" ? document.getElementById("work")
-        : el.dataset.go === "info" ? document.getElementById("info")
+        : el.dataset.go === "play" ? document.getElementById("play")
         : document.getElementById("intro");
       target.scrollIntoView({behavior:"smooth"});
     });
   });
+
+  /* header stays hidden while the greeting marquee fills the screen,
+     and fades in once the visitor scrolls past it into Work */
+  const introEl = document.getElementById("intro");
+  const workEl = document.getElementById("work");
+  new IntersectionObserver((entries) => {
+    entries.forEach(entry => document.body.classList.toggle("past-hero", !entry.isIntersecting));
+  }, { threshold:0 }).observe(introEl);
+
+  introEl.addEventListener("click", () => workEl.scrollIntoView({behavior:"smooth"}));
+
+  /* corner frame: live day-of-week + clock */
+  const dayEl = document.getElementById("frame-day");
+  const clockEl = document.getElementById("frame-clock");
+  function tickFrameClock(){
+    const now = new Date();
+    dayEl.textContent = now.toLocaleDateString("en-US", { weekday:"long" });
+    clockEl.textContent = now.toLocaleTimeString("en-GB", { hour12:false });
+  }
+  tickFrameClock();
+  setInterval(tickFrameClock, 1000);
 
   if(location.hash){
     const deepLinkId = location.hash.slice(1);
