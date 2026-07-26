@@ -2,6 +2,21 @@
 
 최종 업데이트: 2026-07-26
 
+## 최근 변경 — Publish 버튼 + GitHub/Vercel 배포 연동 (2026-07-26)
+
+builder.html의 각 프로젝트 편집 화면에 **PUBLISH** 버튼을 추가했습니다. 누르면 그 프로젝트 데이터가 실제 `index.html`의 `PROJECTS` 배열에 반영되고, GitHub에 커밋·푸시되어 Vercel이 자동 재배포합니다.
+
+- **GitHub**: public 저장소 `https://github.com/jjaejae-stack/jjaejae-portfolio-2026` — 이 폴더(`2026 PF`) 전체가 git 저장소입니다 (451MB, 이미지/영상 포함해서 그대로 커밋). `gh` CLI로 로그인되어 있고 (`gh auth status`로 확인), `gh auth setup-git`로 git push 인증도 연결해둠.
+- **Vercel**: 프로젝트명 `jjaejae-portfolio-2026`, GitHub 저장소와 연결되어 **push할 때마다 자동으로 프로덕션 배포**됩니다. 라이브 URL: **https://jjaejae-portfolio-2026.vercel.app**
+- **`.vercelignore`**: `builder.html`, `server.py`, `progress.md`, `Ref/`, `TXT/`는 Vercel 배포에서 제외됩니다 (git 저장소에는 포함되지만 공개 사이트에는 안 올라감 — `builder.html`을 라이브 도메인에서 직접 열어도 404).
+- **동작 방식** (`server.py`의 `/publish` 엔드포인트):
+  1. builder.html이 기존 "코드 내보내기"에 쓰던 `exportProjectCode()`로 프로젝트 JS 객체 텍스트를 생성해 서버로 전송
+  2. 서버가 `index.html`을 문자열 단위로 파싱(주석/문자열을 건너뛰는 괄호 매칭)해서, 같은 `id`를 가진 항목이 `PROJECTS` 배열에 이미 있으면 **교체**, 없으면 **배열 끝에 추가**
+  3. `git add -A && git commit && git push` 실행 (변경 없으면 커밋 생략)
+  4. Vercel이 push를 감지해 자동으로 새 배포 생성
+- **주의**: Publish는 **해당 프로젝트만** 반영합니다 (다른 프로젝트는 건드리지 않음). 아직 `REST_OF_PROJECTS`로 주석 처리된 나머지 7개 프로젝트를 builder에서 채워서 Publish하면, 그 프로젝트가 `PROJECTS` 배열에 새로 추가되어 라이브 사이트에 나타납니다.
+- **로컬 서버 필요**: 기존과 마찬가지로 `python3 server.py`가 켜져 있어야 PUBLISH 버튼이 동작합니다. 포트(8420)가 이미 사용 중이면(이전 세션에서 백그라운드로 켜둔 채 남아있는 경우) 새로 띄우기 전에 기존 프로세스를 종료해야 합니다 (`lsof -ti :8420 | xargs kill`).
+
 ## 최근 변경 — index.html 인트로 화면 (2026-07-26)
 
 기존에 이름/소개글이 있던 첫 화면(`#intro`)을 5개 언어 인사말 마퀴 화면으로 교체했습니다.
