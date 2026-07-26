@@ -302,59 +302,6 @@ def publish_project(project_id, code):
     return action
 
 
-ID_RE = re.compile(r'id\s*:\s*"((?:[^"\\]|\\.)*)"')
-TITLE_RE = re.compile(r'title\s*:\s*"((?:[^"\\]|\\.)*)"')
-
-
-def find_project_code(project_id, title=None):
-    """Look up `project_id` inside index.html's PROJECTS array (checked first)
-    or the commented-out REST_OF_PROJECTS draft block, and return (id, code).
-    Builder-created projects get a random id suffix that won't match the site's
-    canonical id, so if the id lookup misses, fall back to a case-insensitive
-    title match — the caller should adopt the returned id so a later Publish
-    updates this same entry instead of creating a duplicate."""
-    with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
-        html = f.read()
-
-    title_lower = (title or "").strip().lower()
-    title_match = None
-    for var_name in ("PROJECTS", "REST_OF_PROJECTS"):
-        marker = "const %s = [" % var_name
-        marker_idx = html.find(marker)
-        if marker_idx == -1:
-            continue
-        open_idx = marker_idx + len(marker) - 1
-        close_idx = _find_matching_bracket(html, open_idx)
-        for (s, e) in _split_top_level_items(html, open_idx + 1, close_idx):
-            id_m = ID_RE.search(html, s, e)
-            if not id_m:
-                continue
-            if id_m.group(1) == project_id:
-                return id_m.group(1), html[s:e]
-            if title_match is None and title_lower:
-                title_m = TITLE_RE.search(html, s, e)
-                if title_m and title_m.group(1).strip().lower() == title_lower:
-                    title_match = (id_m.group(1), html[s:e])
-    if title_match:
-        return title_match
-    return None, None
-
-
-SSF_SET_RE = re.compile(r"ssfSet\(\s*(\d+)\s*,\s*(\d+)\s*\)")
-
-
-def _resolve_ssf_set(code):
-    """index.html's SSF SHOP block uses a local helper `ssfSet(n, count)` to
-    generate its image list. That helper isn't in scope when this object text
-    is evaluated standalone in the browser, so expand any calls to a literal
-    array here (mirrors the JS definition in index.html)."""
-    def expand(m):
-        n, count = int(m.group(1)), int(m.group(2))
-        paths = ["SSF SHOP/Capture/%d-%d.jpg" % (n, i) for i in range(1, count + 1)]
-        return json.dumps(paths, ensure_ascii=False)
-    return SSF_SET_RE.sub(expand, code)
-
-
 def _run_git(args):
     return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True)
 
@@ -414,19 +361,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send_json(200, {"folder": None, "images": []})
                 return
             self._send_json(200, {"folder": folder, "images": list_images(folder)})
-            return
-        if parsed.path == "/site-project":
-            qs = urllib.parse.parse_qs(parsed.query)
-            project_id = (qs.get("id") or [""])[0]
-            title = (qs.get("title") or [""])[0]
-            if not project_id:
-                self._send_json(400, {"error": "id 쿼리 파라미터가 필요합니다."})
-                return
-            found_id, code = find_project_code(project_id, title)
-            if code is None:
-                self._send_json(404, {"error": "index.html에서 이 프로젝트를 찾지 못했습니다 (id \"%s\", 제목 \"%s\")." % (project_id, title)})
-                return
-            self._send_json(200, {"id": found_id, "code": _resolve_ssf_set(code)})
             return
         if parsed.path == "/ping":
             self._send_json(200, {"ok": True})
