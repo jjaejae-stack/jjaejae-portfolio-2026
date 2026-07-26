@@ -158,10 +158,19 @@
   /* ---------- export modal ---------- */
   #export-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
   #export-modal.open{display:flex;}
-  .modal-box{background:var(--surface); color:var(--fg); width:min(760px,92vw); max-height:82vh; border:1px solid var(--line-strong); padding:24px; display:flex; flex-direction:column; box-shadow:var(--card-shadow);}
+  .modal-box{background:var(--surface); color:var(--fg); width:min(760px,92vw); max-height:82vh; border:1px solid var(--line-strong); padding:24px; display:flex; flex-direction:column; box-shadow:var(--card-shadow); overflow-y:auto;}
   .modal-box h3{margin-bottom:6px;}
   .modal-box p.hint{font-size:12px; color:var(--muted); margin-bottom:14px; line-height:1.6;}
   .modal-box textarea{flex:1; min-height:340px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; border:1px solid var(--line); padding:12px; white-space:pre; overflow:auto; background:color-mix(in srgb, var(--fg) 4%, var(--surface)); color:var(--fg);}
+
+  /* ---------- generate direction modal ---------- */
+  #direction-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #direction-modal.open{display:flex;}
+  #direction-modal .modal-box{max-height:88vh;}
+  #direction-modal .view-toggle{flex-wrap:wrap;}
+  #direction-modal .view-toggle button{white-space:nowrap;}
+  #direction-modal textarea.field{min-height:64px;}
+  #short-lines-row input{max-width:100px;}
   .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
 
   @media (max-width:1200px){
@@ -222,6 +231,64 @@
       <div class="modal-actions">
         <button class="btn-sm" id="export-close">닫기</button>
         <button class="btn-primary" id="export-copy">클립보드에 복사</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="direction-modal">
+    <div class="modal-box">
+      <h3>생성 방향 설정</h3>
+      <p class="hint">아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.</p>
+
+      <div class="field-group">
+        <label class="field-label">어투</label>
+        <div class="view-toggle" data-group="tone">
+          <button type="button" data-value="observer">관찰자 (1인칭 건조체)</button>
+          <button type="button" data-value="third-person">3인칭</button>
+          <button type="button" data-value="interview">인터뷰체</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">구조</label>
+        <div class="view-toggle" data-group="structure">
+          <button type="button" data-value="three-act">3막 (맥락→접근→결과)</button>
+          <button type="button" data-value="vignette">비네트 (장면별 단편)</button>
+          <button type="button" data-value="single-flow">단일 흐름</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">길이</label>
+        <div class="view-toggle" data-group="length">
+          <button type="button" data-value="short">짧게</button>
+          <button type="button" data-value="medium">중간</button>
+          <button type="button" data-value="long">길게</button>
+        </div>
+        <div id="short-lines-row" class="field-row field-group" style="display:none; margin-top:8px;">
+          <div><label class="field-label">짧게 = 몇 줄?</label>
+            <input class="field" type="number" id="short-lines-input" min="1" max="20" value="3"></div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">사진 흐름</label>
+        <div class="view-toggle" data-group="photoFlow">
+          <button type="button" data-value="match-text">글에 맞춤</button>
+          <button type="button" data-value="chronological">시간순</button>
+          <button type="button" data-value="detail-to-wide">디테일 → 와이드</button>
+          <button type="button" data-value="wide-to-detail">와이드 → 디테일</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">방향 메모 (이번 글에서 강조할 것)</label>
+        <textarea class="field" id="direction-note" placeholder="예: 팀워크보다는 개인의 관찰력을 강조해줘"></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-sm" id="direction-cancel">취소</button>
+        <button class="btn-primary" id="direction-confirm">생성</button>
       </div>
     </div>
   </div>
@@ -953,19 +1020,77 @@
      from this folder, then click Generate. ---- */
   const GENERATE_SERVER = "http://localhost:8420";
 
+  /* ---- Generate direction panel: shown before every Generate call so tone/
+     structure/length/photo-flow/emphasis can be set. Persisted in localStorage
+     so the last-used settings carry over to the next generation. ---- */
+  const DIRECTION_DEFAULTS = {
+    tone: "observer", structure: "three-act", length: "medium",
+    shortLines: 3, photoFlow: "match-text", note: ""
+  };
+  let directionSettings = loadDirectionSettings();
+
+  function loadDirectionSettings(){
+    try{
+      const saved = JSON.parse(localStorage.getItem("pf-builder-direction") || "{}");
+      return Object.assign({}, DIRECTION_DEFAULTS, saved);
+    }catch(e){ return Object.assign({}, DIRECTION_DEFAULTS); }
+  }
+  function saveDirectionSettings(){
+    localStorage.setItem("pf-builder-direction", JSON.stringify(directionSettings));
+  }
+
+  const directionModal = document.getElementById("direction-modal");
+  const shortLinesRow = document.getElementById("short-lines-row");
+  const shortLinesInput = document.getElementById("short-lines-input");
+  const directionNoteEl = document.getElementById("direction-note");
+
+  function renderDirectionModal(){
+    directionModal.querySelectorAll(".view-toggle").forEach(group => {
+      const key = group.dataset.group;
+      group.querySelectorAll("button").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.value === directionSettings[key]);
+      });
+    });
+    shortLinesRow.style.display = directionSettings.length === "short" ? "block" : "none";
+    shortLinesInput.value = directionSettings.shortLines;
+    directionNoteEl.value = directionSettings.note;
+  }
+  function openDirectionModal(){
+    renderDirectionModal();
+    directionModal.classList.add("open");
+  }
+  directionModal.addEventListener("click", (e) => {
+    const btn = e.target.closest(".view-toggle button");
+    if(btn){
+      const key = btn.closest(".view-toggle").dataset.group;
+      directionSettings[key] = btn.dataset.value;
+      renderDirectionModal();
+      return;
+    }
+    if(e.target.id === "direction-cancel"){ directionModal.classList.remove("open"); return; }
+    if(e.target.id === "direction-confirm"){
+      directionSettings.shortLines = Math.max(1, parseInt(shortLinesInput.value, 10) || DIRECTION_DEFAULTS.shortLines);
+      directionSettings.note = directionNoteEl.value.trim();
+      saveDirectionSettings();
+      directionModal.classList.remove("open");
+      runGenerate();
+      return;
+    }
+  });
+
   async function runGenerate(){
     const project = getCurrentProject();
     if(!project) return;
     const btn = document.getElementById("generate-btn");
     const status = document.getElementById("generate-status");
-    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (최대 1분 정도 걸릴 수 있어요)"; }
+    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
     if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
 
     try{
       const res = await fetch(GENERATE_SERVER + "/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: project.title, tag: project.tag, meta: project.meta })
+        body: JSON.stringify({ title: project.title, tag: project.tag, meta: project.meta, direction: directionSettings })
       });
       if(!res.ok){
         const errBody = await res.json().catch(() => ({}));
@@ -1176,7 +1301,7 @@
       return;
     }
 
-    if(e.target.closest('[data-action="generate"]')){ runGenerate(); return; }
+    if(e.target.closest('[data-action="generate"]')){ openDirectionModal(); return; }
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
     if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
@@ -1220,18 +1345,19 @@
     body{font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic","Helvetica Neue",Arial,sans-serif;color:var(--fg);background:#fff;line-height:1.5;}
     img{display:block;max-width:100%;}
     a{color:inherit;text-decoration:none;}
-    .p-main{height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;--pradius:clamp(14px,1.6vw,22px);}
+    .p-main{height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;}
     .p-hero{position:absolute;inset:0;z-index:1;overflow:hidden;}
     .p-hero img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
     .p-hero-video{position:absolute;inset:0;}
     .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
-    .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border-radius:var(--pradius);color:#fff3ef;}
+    .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border:3px solid #111;box-shadow:10px 10px 0 #111;color:#fff3ef;}
     .p-colorbox h1{font-size:clamp(2.2rem,4.4vw,4.6rem);font-weight:800;letter-spacing:-.02em;line-height:1.02;word-break:keep-all;}
-    .p-social{position:absolute;right:var(--pmargin);bottom:var(--pmargin);z-index:20;display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--pradius);color:#fff3ef;}
+    .p-social{position:absolute;right:var(--pmargin);bottom:var(--pmargin);z-index:20;display:flex;flex-direction:column;gap:12px;padding:14px;border:3px solid #111;box-shadow:8px 8px 0 #111;color:#fff3ef;}
     .p-social a{width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
     @media (max-width:760px){
-      .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px;}
+      .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px; border-width:2px; box-shadow:6px 6px 0 #111;}
       .p-colorbox h1{font-size:clamp(1.6rem, 8vw, 2.6rem);}
+      .p-social{border-width:2px; box-shadow:6px 6px 0 #111;}
     }
     .p-detail{padding:80px 6vw 40px;}
     .p-block{max-width:920px;margin:0 auto 96px;}
@@ -1391,9 +1517,9 @@
     previewFrameWrap.style.height = Math.max(h, 0) + "px";
   }
 
-  document.querySelectorAll(".view-toggle button").forEach(btn => {
+  document.querySelectorAll(".preview-toolbar .view-toggle button").forEach(btn => {
     btn.addEventListener("click", () => {
-      document.querySelectorAll(".view-toggle button").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".preview-toolbar .view-toggle button").forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
       currentView = btn.dataset.view;
       previewStage.classList.toggle("mobile", currentView === "mobile");

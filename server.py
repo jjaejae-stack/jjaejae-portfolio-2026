@@ -27,7 +27,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
-CLAUDE_TIMEOUT_SEC = 90
+CLAUDE_TIMEOUT_SEC = 180
 MAX_BUDGET_USD = "0.50"
 
 VAULT_DIR = "/Users/cheil/Desktop/Portfolio Wiki"
@@ -159,7 +159,56 @@ def run_claude(prompt, schema):
     return structured
 
 
-def build_prompt(title, tag, meta):
+TONE_LABELS = {
+    "observer": "관찰자 — 1인칭이지만 감정을 절제한 건조체로, 현장을 지켜본 사람처럼 서술",
+    "third-person": "3인칭 — 프로젝트/브랜드를 주어로 삼아 관찰 대상처럼 서술",
+    "interview": "인터뷰체 — 질문에 답하듯, 실제로 누가 물어봐서 설명하는 듯한 구어에 가까운 톤",
+}
+STRUCTURE_LABELS = {
+    "three-act": "3막 구조 — 맥락(어떤 상황이었는지) → 접근(어떻게 풀었는지) → 결과(무엇을 만들었는지) 순서로 전개",
+    "vignette": "비네트 — 하나의 이어지는 서사 대신, 장면·순간 단위의 짧은 단편들을 나열하는 방식으로 전개",
+    "single-flow": "단일 흐름 — 막이나 장면 구분 없이 하나의 흐름으로 처음부터 끝까지 이어서 서술",
+}
+PHOTO_FLOW_LABELS = {
+    "match-text": "글에 맞춤 — 사진의 순서를 신경 쓰지 말고, 글의 논리적 전개에 맞춰서만 서술",
+    "chronological": "시간순 — 실제 진행 순서(기획→촬영/제작→결과)를 따라가듯 서술",
+    "detail-to-wide": "디테일 → 와이드 — 작은 디테일/장면에서 시작해 점점 큰 그림으로 확장하듯 서술",
+    "wide-to-detail": "와이드 → 디테일 — 전체 그림을 먼저 보여준 뒤 점점 구체적인 디테일로 좁혀가듯 서술",
+}
+
+
+def build_direction_block(direction):
+    direction = direction or {}
+    tone = TONE_LABELS.get(direction.get("tone"), TONE_LABELS["observer"])
+    structure = STRUCTURE_LABELS.get(direction.get("structure"), STRUCTURE_LABELS["three-act"])
+    photo_flow = PHOTO_FLOW_LABELS.get(direction.get("photoFlow"), PHOTO_FLOW_LABELS["match-text"])
+    length = direction.get("length", "medium")
+
+    if length == "short":
+        try:
+            lines = max(1, int(direction.get("shortLines") or 3))
+        except (TypeError, ValueError):
+            lines = 3
+        length_label = "짧게 — 전체 문단을 합쳐 총 %d줄 내외로, 군더더기 없이 압축해서" % lines
+    elif length == "long":
+        length_label = "길게 — 배경·과정·디테일을 충분히 풀어서, 문단을 아끼지 말고"
+    else:
+        length_label = "중간 — 배경과 결과를 핵심만 짚어서, 너무 짧지도 길지도 않게"
+
+    note = (direction.get("note") or "").strip()
+    note_line = ("- 이번 글에서 특별히 강조할 것: %s\n" % note) if note else ""
+
+    return (
+        "\n\n## 이번 생성 방향 설정 (아래 조건을 모두 지켜서 써라)\n"
+        "- 어투: %s\n"
+        "- 구조: %s\n"
+        "- 길이: %s\n"
+        "- 사진 흐름: %s\n"
+        "%s"
+    ) % (tone, structure, length_label, photo_flow, note_line)
+
+
+def build_prompt(title, tag, meta, direction=None):
     context_bits = []
     if title:
         context_bits.append('현재 프로젝트명: "%s"' % title)
@@ -185,12 +234,13 @@ def build_prompt(title, tag, meta):
             "\n\n## 문체 예시 (출처: %s — 표현을 그대로 베끼지 말고 톤·구조만 따라할 것)\n\n%s\n"
             % (examples_source, examples)
         )
+    direction_block = build_direction_block(direction)
 
     return (
         "너는 광고 에이전시 아트디렉터 본인이 되어, 자기 포트폴리오 사이트에 들어갈 프로젝트 소개 초안을 직접 쓰는 사람이야.\n"
         "아래는 지금까지 입력된 정보야:\n" + context + "\n"
-        + voice_block + examples_block +
-        "\n\n위 문체 규칙과 예시 톤을 그대로 따라서, 이 프로젝트에 대한 그럴듯한 캠페인 케이스 스터디 초안을 한국어로 작성해줘. "
+        + voice_block + examples_block + direction_block +
+        "\n\n위 문체 규칙과 예시 톤, 그리고 이번 생성 방향 설정을 모두 따라서, 이 프로젝트에 대한 그럴듯한 캠페인 케이스 스터디 초안을 한국어로 작성해줘. "
         "실존하는 특정 인물이나 사건을 사실인 것처럼 단정하지 말고, 포트폴리오 초안(플레이스홀더)이라는 톤을 유지해줘.\n"
         "다음 필드를 JSON으로 반환해:\n"
         "- title: 프로젝트명 (기존 값이 이미 괜찮으면 그대로 유지)\n"
@@ -467,8 +517,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             title = (payload.get("title") or "").strip()
             tag = (payload.get("tag") or "").strip()
             meta = (payload.get("meta") or "").strip()
+            direction = payload.get("direction") if isinstance(payload.get("direction"), dict) else None
             try:
-                prompt = build_prompt(title, tag, meta)
+                prompt = build_prompt(title, tag, meta, direction)
                 structured = run_claude(prompt, GENERATE_SCHEMA)
             except subprocess.TimeoutExpired:
                 self._send_json(504, {"error": "claude CLI timed out"})
