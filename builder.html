@@ -64,6 +64,7 @@
   }
   .project-item:hover{background:color-mix(in srgb, var(--fg) 6%, var(--bg));}
   .project-item.active{background:var(--fg); color:var(--bg);}
+  .project-item.dragging{opacity:.35;}
   .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong);}
   .project-item .info{flex:1; min-width:0;}
   .project-item .p-title{font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
@@ -85,6 +86,12 @@
   .field-group{margin-bottom:13px;}
   .field-row{display:flex; gap:12px;}
   .field-row > *{flex:1; min-width:0;}
+  .tag-tabs{display:flex; flex-wrap:wrap; gap:6px;}
+  .tag-tabs button{font-size:11.5px; padding:6px 12px; border:1px solid var(--line-strong); border-radius:14px; background:var(--surface);}
+  .tag-tabs button:hover{border-color:var(--accent);}
+  .tag-tabs button.active{background:var(--fg); color:var(--bg); border-color:var(--fg);}
+  .tag-tabs button.add-tag{border-style:dashed; color:var(--muted);}
+  .tag-tabs button.add-tag:hover{color:var(--accent); border-color:var(--accent);}
   label.field-label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:4px;}
   .field, .field-inline{
     width:100%; border:1px solid var(--line-strong); padding:7px 10px;
@@ -208,7 +215,7 @@
         <button type="button" data-category="play">Play</button>
       </div>
       <button id="new-project-btn">+ 새 프로젝트</button>
-      <div id="project-list"></div>
+      <div id="project-list" data-sort-scope="projects"></div>
     </aside>
 
     <main id="editor">
@@ -573,7 +580,8 @@
   function projectCategory(p){ return p.category === "play" ? "play" : "work"; }
 
   function renderSidebar(){
-    const visible = projects.filter(p => projectCategory(p) === activeCategory);
+    const visible = projects.filter(p => projectCategory(p) === activeCategory)
+      .sort((a,b) => (a.order!=null?a.order:0) - (b.order!=null?b.order:0));
     if(!visible.length){
       sidebarList.innerHTML = '<div id="sidebar-empty">' + (activeCategory === "play" ? "Play" : "Work")
         + ' 프로젝트가 아직 없습니다.<br>위 버튼으로 새 프로젝트를 시작하세요.</div>';
@@ -583,7 +591,8 @@
       const active = p.id === currentId ? " active" : "";
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
-      return '<div class="project-item' + active + '" data-project-id="' + p.id + '">'
+      return '<div class="project-item' + active + '" draggable="true" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
+        + '<span class="drag-handle">⠿</span>'
         + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
         + '<span class="info">'
         +   '<span class="p-title">' + escapeHTML(p.title || "Untitled") + '</span>'
@@ -601,6 +610,34 @@
     activeCategory = btn.dataset.category;
     categoryTabs.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
     renderSidebar();
+  });
+
+  /* project reordering — drag & drop, reuses the same dragItem/getDragAfterElement
+     machinery as blocks/images (defined below in section 5), just scoped to the
+     sidebar list instead of #editor. */
+  sidebarList.addEventListener("dragstart", (e) => {
+    const item = e.target.closest("[data-sort-item]");
+    if(!item) return;
+    dragItem = item;
+    item.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try{ e.dataTransfer.setData("text/plain", ""); }catch(err){}
+  });
+  sidebarList.addEventListener("dragover", (e) => {
+    if(!dragItem) return;
+    const scope = e.target.closest("[data-sort-scope]");
+    if(!scope) return;
+    e.preventDefault();
+    const afterEl = getDragAfterElement(scope, e.clientY);
+    if(afterEl == null) scope.appendChild(dragItem);
+    else scope.insertBefore(dragItem, afterEl);
+  });
+  sidebarList.addEventListener("dragend", () => {
+    if(!dragItem) return;
+    dragItem.classList.remove("dragging");
+    const scope = dragItem.closest("[data-sort-scope]");
+    dragItem = null;
+    if(scope) syncOrderFromDOM(scope);
   });
 
   sidebarList.addEventListener("click", (e) => {
@@ -635,6 +672,9 @@
     const title = prompt("프로젝트 이름을 입력하세요", "New Project");
     if(title === null) return;
     const p = newProject(title.trim() || "New Project", activeCategory);
+    const minOrder = projects.filter(x => projectCategory(x) === activeCategory)
+      .reduce((min, x) => Math.min(min, x.order != null ? x.order : 0), 0);
+    p.order = minOrder - 1;
     projects.unshift(p);
     dbPut(p);
     selectProject(p.id);
@@ -705,6 +745,13 @@
   function syncOrderFromDOM(scope){
     const kind = scope.dataset.sortScope;
     const ids = Array.from(scope.children).filter(el => el.matches("[data-sort-item]")).map(el => el.dataset.itemId);
+    if(kind === "projects"){
+      ids.forEach((id, i) => {
+        const p = projects.find(x => x.id === id);
+        if(p){ p.order = i; dbPut(p).catch(e => console.error("reorder save failed", e)); }
+      });
+      return;
+    }
     const project = getCurrentProject();
     if(!project) return;
     if(kind === "blocks"){
@@ -720,6 +767,31 @@
   /* ======================================================================
      6. editor rendering
   ====================================================================== */
+  /* category ("카테고리" / project.tag) tab picker — options are every tag
+     already used by any project, plus any custom ones added via "+" (kept in
+     localStorage so a newly-added category doesn't disappear if no project
+     currently uses it). */
+  function loadCustomTags(){
+    try{ return JSON.parse(localStorage.getItem("pf-builder-custom-tags") || "[]"); }
+    catch(e){ return []; }
+  }
+  function saveCustomTags(tags){
+    localStorage.setItem("pf-builder-custom-tags", JSON.stringify(tags));
+  }
+  function allKnownTags(){
+    const used = projects.map(p => (p.tag||"").trim()).filter(Boolean);
+    const custom = loadCustomTags();
+    return Array.from(new Set([...used, ...custom])).sort((a,b) => a.localeCompare(b, "ko"));
+  }
+  function tagTabsHTML(project){
+    const current = (project.tag||"").trim();
+    const tags = allKnownTags();
+    if(current && !tags.includes(current)) tags.push(current);
+    return tags.map(t =>
+      '<button type="button" data-tag="' + escapeHTML(t) + '"' + (t === current ? ' class="active"' : '') + '>' + escapeHTML(t) + '</button>'
+    ).join("") + '<button type="button" class="add-tag" data-action="add-tag">+ 새 카테고리</button>';
+  }
+
   function heroSelectOptions(project){
     const imgs = allImages(project);
     if(!imgs.length) return '<option value="">(사진을 먼저 추가하세요)</option>';
@@ -802,12 +874,10 @@
       +     '<div class="color-row"><input type="color" data-field="textColor" value="' + (project.textColor||"#fff3ef") + '">'
       +     '<input class="field-inline" data-field="textColor-hex" value="' + (project.textColor||"#fff3ef") + '"></div></div>'
       + '</div>'
-      + '<div class="field-row field-group">'
-      +   '<div><label class="field-label">카테고리</label>'
-      +     '<input class="field" data-field="tag" value="' + escapeHTML(project.tag||"") + '"></div>'
-      +   '<div><label class="field-label">연도</label>'
-      +     '<input class="field" data-field="year" value="' + escapeHTML(project.year||"") + '"></div>'
-      + '</div>'
+      + '<div class="field-group"><label class="field-label">카테고리</label>'
+      +   '<div class="tag-tabs" id="tag-tabs">' + tagTabsHTML(project) + '</div></div>'
+      + '<div class="field-group"><label class="field-label">연도</label>'
+      +   '<input class="field" data-field="year" style="max-width:140px" value="' + escapeHTML(project.year||"") + '"></div>'
       + '<div class="field-group"><label class="field-label">클라이언트 / 에이전시</label>'
       +   '<input class="field" data-field="meta" placeholder="예: Client — 삼성물산 · Agency — TBWA\\KOREA" value="' + escapeHTML(project.meta||"") + '"></div>'
 
@@ -1311,6 +1381,31 @@
       return;
     }
 
+    const addTagBtn = e.target.closest('[data-action="add-tag"]');
+    if(addTagBtn){
+      const name = prompt("새 카테고리 이름을 입력하세요", "");
+      if(name === null) return;
+      const trimmed = name.trim();
+      if(!trimmed) return;
+      const custom = loadCustomTags();
+      if(!custom.includes(trimmed)){ custom.push(trimmed); saveCustomTags(custom); }
+      snapshot();
+      project.tag = trimmed;
+      renderEditor();
+      renderSidebar();
+      saveAndRefresh();
+      return;
+    }
+    const tagBtn = e.target.closest('#tag-tabs button[data-tag]');
+    if(tagBtn){
+      snapshot();
+      project.tag = tagBtn.dataset.tag;
+      renderEditor();
+      renderSidebar();
+      saveAndRefresh();
+      return;
+    }
+
     const addFolderBtn = e.target.closest('[data-action="add-folder"]');
     if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
 
@@ -1708,6 +1803,16 @@
       projects.push(sample);
       try{ await dbPut(sample); }catch(e){ console.error("sample save failed", e); }
     }
+    /* migrate: projects saved before drag-reordering existed have no `order` —
+       give them one (grouped by category, in whatever order dbGetAll() returned)
+       so they sort consistently instead of jumping around once a peer gets reordered. */
+    ["work","play"].forEach(cat => {
+      let i = 0;
+      projects.filter(p => projectCategory(p) === cat).forEach(p => {
+        if(p.order == null){ p.order = i; dbPut(p).catch(e => console.error("order migration failed", e)); }
+        i = Math.max(i, (p.order||0) + 1);
+      });
+    });
     const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
     if(firstInTab) currentId = firstInTab.id;
     else if(projects.length) currentId = projects[0].id;
