@@ -346,6 +346,16 @@
   @media (max-width:760px){
     .gallery{min-height:0;}
   }
+  .gallery.mode-multi .gallery-frame{display:none; flex:1 1 0; height:100%;}
+  .gallery.mode-multi .gallery-frame.visible{display:block;}
+  .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video{width:100%; height:100%; object-fit:cover;}
+  .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; aspect-ratio:auto;}
+  .gallery.mode-multi .gallery-track{gap:2px;}
+  .gallery.mode-all{height:auto!important; max-height:none!important; min-height:0; cursor:default; overflow:visible; background:none;}
+  .gallery.mode-all .gallery-track{flex-wrap:wrap; height:auto; gap:8px; transform:none!important;}
+  .gallery.mode-all .gallery-frame{flex:1 1 260px; height:280px;}
+  .gallery.mode-all .gallery-frame img, .gallery.mode-all .gallery-frame video{width:100%; height:100%; object-fit:cover; display:block;}
+  .gallery.mode-all .gallery-frame iframe{width:100%; height:auto; aspect-ratio:16/9;}
 
   /* 블록 이름(라벨)·헤딩·본문은 사진 위에 겹치는 게 아니라, 페이지 안에서 사진 "윗부분"(위쪽)에
      일반 텍스트로 먼저 오고 그 아래에 사진이 옴 */
@@ -1136,13 +1146,19 @@
     return `<img src="${u("icons/instagram.png")}" alt="Instagram" style="height:15px; width:auto; display:block;">`;
   }
 
-  function galleryHTML(images, blockId){
+  function galleryHTML(images, blockId, galleryMode){
+    const m = galleryMode || "1";
+    const count = images.length || 1;
+    const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
+    const modeClass = m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "");
     const frames = images.map(mediaFrameHTML).join("");
+    const showChrome = m !== "all";
+    const counterEnd = Math.min(perPage, images.length || 1);
     return `
-      <div class="gallery" data-block="${blockId}" data-index="0" data-count="${images.length}">
+      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}">
         <div class="gallery-track">${frames}</div>
-        <div class="gallery-counter">01 / ${String(images.length).padStart(2,"0")}</div>
-        <div class="gallery-hint">Click for next</div>
+        ${showChrome ? `<div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>` : ""}
+        ${showChrome ? `<div class="gallery-hint">Click for next</div>` : ""}
       </div>`;
   }
 
@@ -1204,7 +1220,7 @@
           </div>
           ${heading}
           ${paras}
-          ${galleryHTML(block.images, blockId)}
+          ${galleryHTML(block.images, blockId, block.galleryMode)}
         </div>`;
     }).join("");
 
@@ -1232,10 +1248,7 @@
         ${PROJECTS.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
       </div>`;
 
-    scrollRoot.querySelectorAll(".gallery").forEach(g => {
-      g.addEventListener("click", () => rollGallery(g));
-      activateGalleryFrame(g, 0);
-    });
+    scrollRoot.querySelectorAll(".gallery").forEach(g => initGallery(g));
     if(PROJECTS.length > 1){
       scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); goProject(prev.id); });
       scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); goProject(next.id); });
@@ -1292,8 +1305,40 @@
     activateGalleryFrame(gallery, index);
   }
 
+  function showGalleryPage(gallery, page){
+    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
+    const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
+    const total = frames.length;
+    gallery.dataset.page = page;
+    frames.forEach((f, i) => f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage));
+    const shown = frames.filter(f => f.classList.contains("visible")).length;
+    const start = page*perPage + 1;
+    const end = page*perPage + shown;
+    const counter = gallery.querySelector(".gallery-counter");
+    if(counter) counter.textContent = `${end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")} / ${String(total).padStart(2,"0")}`;
+  }
+
+  function initGallery(g){
+    const mode = g.dataset.mode || "1";
+    const perPage = parseInt(g.dataset.perPage, 10) || 1;
+    if(mode === "all") return;
+    if(perPage <= 1){
+      g.addEventListener("click", () => rollGallery(g));
+      activateGalleryFrame(g, 0);
+      return;
+    }
+    showGalleryPage(g, 0);
+    g.addEventListener("click", () => {
+      const total = parseInt(g.dataset.count, 10);
+      const pages = Math.ceil(total / perPage);
+      const page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;
+      showGalleryPage(g, page);
+    });
+  }
+
   window.addEventListener("resize", () => {
     scrollRoot.querySelectorAll(".gallery").forEach(g => {
+      if((g.dataset.mode||"1") !== "1") return;
       delete g.dataset.baseHeight;
       g.style.height = "";
       activateGalleryFrame(g, parseInt(g.dataset.index, 10));

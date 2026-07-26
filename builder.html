@@ -499,7 +499,7 @@
     };
   }
   function newBlock(){
-    return { id: uid(), label:"New Block", heading:"", paragraphs:[], images:[] };
+    return { id: uid(), label:"New Block", heading:"", paragraphs:[], images:[], galleryMode:"1" };
   }
   function allImages(project){
     const out = [];
@@ -525,6 +525,22 @@
     if(vimeo) return '<div class="gallery-frame"><iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
     if(yt) return '<div class="gallery-frame"><iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
     return '<div class="gallery-frame"><video src="' + playSrc + '" controls playsinline></video></div>';
+  }
+  /* mode: "1" (default, one at a time — original filmstrip behavior), "2"/"3" (N per page,
+     click advances a page), "all" (every photo shown at once, no click needed). */
+  function galleryBlockHTML(images, blockKey, mode){
+    const m = mode || "1";
+    const count = images.length || 1;
+    const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
+    const modeClass = m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "");
+    const frames = images.map(galleryFrameHTML).join("");
+    const showChrome = m !== "all";
+    const counterEnd = Math.min(perPage, images.length || 1);
+    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '">'
+      + '<div class="gallery-track">' + frames + '</div>'
+      + (showChrome ? '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>' : '')
+      + (showChrome ? '<div class="gallery-hint">Click for next</div>' : '')
+      + '</div>';
   }
   function cloneAsHeroImage(im){
     const clone = { id: uid(), relPath: im.relPath, name: im.name };
@@ -972,6 +988,12 @@
       +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
       + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
       +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
+      + '<div class="field-group"><label class="field-label">사진 레이아웃 — 한 번에 몇 장씩 보여줄지</label>'
+      +   '<div class="view-toggle gallery-mode-toggle" data-block-id="' + block.id + '">'
+      +     ["1","2","3","all"].map(v =>
+              '<button type="button" data-value="' + v + '"' + ((block.galleryMode||"1") === v ? " class=\"active\"" : "") + '>' + (v === "all" ? "한번에 모두" : v + "장씩") + '</button>'
+            ).join("")
+      +   '</div></div>'
       + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경)</label>'
       + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
       + '<div class="block-actions">'
@@ -1953,6 +1975,19 @@
       return;
     }
 
+    const galleryModeBtn = e.target.closest('.gallery-mode-toggle button');
+    if(galleryModeBtn){
+      const blockId = galleryModeBtn.closest('.gallery-mode-toggle').dataset.blockId;
+      const block = project.blocks.find(b => b.id === blockId);
+      if(block){
+        snapshot();
+        block.galleryMode = galleryModeBtn.dataset.value;
+        renderEditor();
+        saveAndRefresh();
+      }
+      return;
+    }
+
     const addFolderBtn = e.target.closest('[data-action="add-folder"]');
     if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
 
@@ -2125,6 +2160,16 @@
     .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
     .gallery:hover .gallery-hint{opacity:1;}
     @media (max-width:760px){ .gallery{min-height:0;} }
+    .gallery.mode-multi .gallery-frame{display:none;flex:1 1 0;height:100%;}
+    .gallery.mode-multi .gallery-frame.visible{display:block;}
+    .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video{width:100%;height:100%;object-fit:cover;}
+    .gallery.mode-multi .gallery-frame iframe{width:100%;height:100%;aspect-ratio:auto;}
+    .gallery.mode-multi .gallery-track{gap:2px;}
+    .gallery.mode-all{height:auto!important;max-height:none!important;min-height:0;cursor:default;overflow:visible;background:none;}
+    .gallery.mode-all .gallery-track{flex-wrap:wrap;height:auto;gap:8px;transform:none!important;}
+    .gallery.mode-all .gallery-frame{flex:1 1 260px;height:280px;}
+    .gallery.mode-all .gallery-frame img,.gallery.mode-all .gallery-frame video{width:100%;height:100%;object-fit:cover;display:block;}
+    .gallery.mode-all .gallery-frame iframe{width:100%;height:auto;aspect-ratio:16/9;}
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
@@ -2174,12 +2219,35 @@
     '  gallery.querySelector(".gallery-counter").textContent = String(index+1).padStart(2,"0") + " / " + String(count).padStart(2,"0");',
     '  activateGalleryFrame(gallery, index);',
     '}',
-    'document.querySelectorAll(".gallery").forEach(function(g){',
-    '  g.addEventListener("click", function(){ rollGallery(g); });',
-    '  activateGalleryFrame(g, 0);',
-    '});',
+    'function showGalleryPage(gallery, page){',
+    '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
+    '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
+    '  var total = frames.length;',
+    '  gallery.dataset.page = page;',
+    '  frames.forEach(function(f, i){ f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage); });',
+    '  var shown = frames.filter(function(f){ return f.classList.contains("visible"); }).length;',
+    '  var start = page*perPage + 1;',
+    '  var end = page*perPage + shown;',
+    '  var counter = gallery.querySelector(".gallery-counter");',
+    '  if(counter) counter.textContent = (end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")) + " / " + String(total).padStart(2,"0");',
+    '}',
+    'function initGallery(g){',
+    '  var mode = g.dataset.mode || "1";',
+    '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
+    '  if(mode === "all") return;',
+    '  if(perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
+    '  showGalleryPage(g, 0);',
+    '  g.addEventListener("click", function(){',
+    '    var total = parseInt(g.dataset.count, 10);',
+    '    var pages = Math.ceil(total / perPage);',
+    '    var page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;',
+    '    showGalleryPage(g, page);',
+    '  });',
+    '}',
+    'document.querySelectorAll(".gallery").forEach(function(g){ initGallery(g); });',
     'window.addEventListener("resize", function(){',
     '  document.querySelectorAll(".gallery").forEach(function(g){',
+    '    if((g.dataset.mode||"1") !== "1") return;',
     '    delete g.dataset.baseHeight;',
     '    g.style.height = "";',
     '    activateGalleryFrame(g, parseInt(g.dataset.index, 10));',
@@ -2195,18 +2263,12 @@
       : (hero ? '<img src="' + hero.url + '" alt="">' : "");
 
     const blocksHTML = project.blocks.map((block, bi) => {
-      const frames = (block.images||[]).map(galleryFrameHTML).join("");
-      const count = (block.images||[]).length || 1;
       const heading = block.heading ? '<div class="p-block-heading">' + escapeHTML(block.heading) + '</div>' : "";
       const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
       return '<div class="p-block">'
         + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
         + heading + paras
-        + '<div class="gallery" data-index="0" data-count="' + count + '">'
-        +   '<div class="gallery-track">' + frames + '</div>'
-        +   '<div class="gallery-counter">01 / ' + String(count).padStart(2,"0") + '</div>'
-        +   '<div class="gallery-hint">Click for next</div>'
-        + '</div>'
+        + galleryBlockHTML(block.images||[], "b" + bi, block.galleryMode)
         + '</div>';
     }).join("");
 
@@ -2333,6 +2395,7 @@
       L.push("    {");
       L.push("      label:" + JSON.stringify(b.label||"") + ",");
       if(b.heading) L.push("      heading:" + JSON.stringify(b.heading) + ",");
+      if(b.galleryMode && b.galleryMode !== "1") L.push("      galleryMode:" + JSON.stringify(b.galleryMode) + ",");
       L.push("      images:[");
       b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
       L.push("      ],");
