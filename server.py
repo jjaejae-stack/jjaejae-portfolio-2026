@@ -21,6 +21,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import unicodedata
 import urllib.parse
 
@@ -143,11 +144,11 @@ def list_images(folder):
     return out
 
 
-def _unique_path(out_dir, name_noext, ext):
-    candidate = name_noext + "-crop" + ext
+def _unique_path(out_dir, name_noext, ext, suffix="-crop"):
+    candidate = name_noext + suffix + ext
     n = 2
     while os.path.exists(os.path.join(out_dir, candidate)):
-        candidate = name_noext + "-crop" + str(n) + ext
+        candidate = name_noext + suffix + str(n) + ext
         n += 1
     return candidate
 
@@ -228,6 +229,73 @@ def crop_image(payload):
         out_w, out_h = cropped.size
 
     return {"relPath": out_rel, "width": out_w, "height": out_h}
+
+
+def _run_ffmpeg(input_source, out_abs):
+    cmd = [
+        "ffmpeg", "-y", "-i", input_source,
+        "-vf", "scale='min(1920,iw)':'-2'",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
+        "-c:a", "aac", "-b:a", "128k",
+        "-movflags", "+faststart",
+        out_abs,
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    if proc.returncode != 0:
+        raise RuntimeError("ffmpeg 인코딩 실패: " + proc.stderr.strip()[-1500:])
+
+
+def optimize_video(payload):
+    """Re-encode a video (uploaded file, or a direct video URL) to a web-friendly
+    H.264/AAC mp4 with faststart, server-side via ffmpeg. Vimeo/YouTube links never
+    reach this function — those platforms already serve optimized video, so
+    builder.html embeds them directly via iframe instead of routing them here."""
+    mode = payload.get("mode") or "upload"
+    folder = (payload.get("folder") or "").strip().strip("/")
+    filename = (payload.get("filename") or "video").strip() or "video"
+    name_noext = os.path.splitext(filename)[0] or "video"
+
+    out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    out_name = _unique_path(out_dir, name_noext, ".mp4", suffix="-web")
+    out_abs = os.path.join(out_dir, out_name)
+    out_rel = (folder + "/" + out_name) if folder else out_name
+
+    if mode == "upload":
+        data_url = payload.get("dataUrl") or ""
+        if "," not in data_url:
+            raise ValueError("dataUrl이 올바르지 않습니다.")
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+        with tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[1] or ".mp4", delete=False) as tmp:
+            tmp.write(raw)
+            tmp_path = tmp.name
+        try:
+            _run_ffmpeg(tmp_path, out_abs)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    else:  # mode == "link": a direct video URL (not Vimeo/YouTube) — ffmpeg reads it over HTTP
+        url = (payload.get("url") or "").strip()
+        if not url:
+            raise ValueError("동영상 링크가 필요합니다.")
+        _run_ffmpeg(url, out_abs)
+
+    width = height = None
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "json", out_abs],
+            capture_output=True, text=True, timeout=30,
+        )
+        streams = json.loads(probe.stdout).get("streams") or []
+        if streams:
+            width, height = streams[0].get("width"), streams[0].get("height")
+    except Exception:
+        pass
+
+    return {"relPath": out_rel, "width": width, "height": height}
 
 
 def run_claude(prompt, schema):
@@ -569,7 +637,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/translate", "/publish", "/crop"):
+        if parsed.path not in ("/generate", "/translate", "/publish", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -588,6 +656,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             except Exception as e:
                 self._send_json(500, {"error": "크롭 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
+            return
+
+        if parsed.path == "/optimize-video":
+            try:
+                result = optimize_video(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "동영상 최적화 실패: %s" % e})
                 return
             self._send_json(200, dict({"ok": True}, **result))
             return
