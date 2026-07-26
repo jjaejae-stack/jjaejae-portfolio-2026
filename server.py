@@ -23,6 +23,7 @@ import urllib.parse
 
 PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_TIMEOUT_SEC = 90
@@ -154,6 +155,182 @@ def build_translate_prompt(direction, data):
     ) % (src_lang, dst_lang, json.dumps(data, ensure_ascii=False))
 
 
+class JSSyntaxError(Exception):
+    pass
+
+
+def _skip_string_or_comment(text, i, n):
+    """If text[i] starts a //, /* */ comment or a quoted string, return the index
+    right after it. Otherwise return None."""
+    c = text[i]
+    if c == "/" and i + 1 < n and text[i + 1] == "/":
+        j = text.find("\n", i)
+        return n if j == -1 else j
+    if c == "/" and i + 1 < n and text[i + 1] == "*":
+        j = text.find("*/", i + 2)
+        return n if j == -1 else j + 2
+    if c in ("'", '"', "`"):
+        quote = c
+        j = i + 1
+        while j < n:
+            if text[j] == "\\":
+                j += 2
+                continue
+            if text[j] == quote:
+                return j + 1
+            j += 1
+        return n
+    return None
+
+
+def _find_matching_bracket(text, open_idx):
+    """Given the index of an opening '{' or '[', return the index of its matching
+    closer, skipping over string/template literals and comments."""
+    n = len(text)
+    depth = 0
+    i = open_idx
+    while i < n:
+        skip_to = _skip_string_or_comment(text, i, n)
+        if skip_to is not None:
+            i = skip_to
+            continue
+        c = text[i]
+        if c in "{[":
+            depth += 1
+        elif c in "}]":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    raise JSSyntaxError("unbalanced brackets starting at %d" % open_idx)
+
+
+def _split_top_level_items(text, start, end):
+    """Return (start, end) spans for each top-level {...} object literal found
+    between text[start:end] (i.e. inside a JS array), ignoring comments."""
+    items = []
+    i = start
+    item_start = None
+    item_content_end = None
+    depth = 0
+    while i < end:
+        skip_to = _skip_string_or_comment(text, i, end)
+        if skip_to is not None:
+            i = skip_to
+            continue
+        c = text[i]
+        if c in "{[":
+            if depth == 0 and item_start is None:
+                item_start = i
+            depth += 1
+            i += 1
+            continue
+        if c in "}]":
+            depth -= 1
+            i += 1
+            if depth == 0 and item_start is not None:
+                item_content_end = i
+            continue
+        if c == "," and depth == 0:
+            if item_start is not None:
+                items.append((item_start, item_content_end if item_content_end is not None else i))
+                item_start = None
+                item_content_end = None
+            i += 1
+            continue
+        i += 1
+    if item_start is not None:
+        items.append((item_start, item_content_end if item_content_end is not None else end))
+    return items
+
+
+def _reindent_for_replace(code, base="    "):
+    """First line keeps no extra indent (the surrounding HTML already supplies
+    the column it sits at); every other line gets `base` prepended."""
+    lines = code.strip("\n").split("\n")
+    out = [lines[0]]
+    for ln in lines[1:]:
+        out.append(base + ln if ln.strip() else ln)
+    return "\n".join(out)
+
+
+def _reindent_for_insert(code, base="    "):
+    lines = code.strip("\n").split("\n")
+    return "\n".join(base + ln if ln.strip() else ln for ln in lines)
+
+
+def publish_project(project_id, code):
+    """Insert or replace `project_id`'s object literal inside index.html's
+    `const PROJECTS = [...]` array with `code` (a JS object literal string, as
+    produced by builder.html's exportProjectCode)."""
+    with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    marker = "const PROJECTS = ["
+    marker_idx = html.find(marker)
+    if marker_idx == -1:
+        raise RuntimeError("index.html에서 'const PROJECTS = [' 를 찾을 수 없습니다.")
+    open_idx = marker_idx + len(marker) - 1
+    close_idx = _find_matching_bracket(html, open_idx)
+
+    items = _split_top_level_items(html, open_idx + 1, close_idx)
+
+    id_re = re.compile(r'id\s*:\s*"((?:[^"\\]|\\.)*)"')
+    target = None
+    for (s, e) in items:
+        m = id_re.search(html, s, e)
+        if m and m.group(1) == project_id:
+            target = (s, e)
+            break
+
+    if target:
+        s, e = target
+        new_html = html[:s] + _reindent_for_replace(code) + html[e:]
+        action = "updated"
+    else:
+        indented = _reindent_for_insert(code)
+        if items:
+            insert_at = items[-1][1]
+            new_html = html[:insert_at] + ",\n" + indented + html[insert_at:]
+        else:
+            insert_at = open_idx + 1
+            new_html = html[:insert_at] + "\n" + indented + "\n  " + html[insert_at:]
+        action = "added"
+
+    with open(INDEX_HTML_PATH, "w", encoding="utf-8") as f:
+        f.write(new_html)
+    return action
+
+
+def _run_git(args):
+    return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True)
+
+
+def git_commit_and_push(title):
+    check = _run_git(["rev-parse", "--is-inside-work-tree"])
+    if check.returncode != 0:
+        raise RuntimeError("아직 git 저장소가 아닙니다. 먼저 GitHub 연동을 완료해주세요.")
+    add = _run_git(["add", "-A"])
+    if add.returncode != 0:
+        raise RuntimeError(add.stderr[:800])
+    status = _run_git(["status", "--porcelain"])
+    if not status.stdout.strip():
+        return {"committed": False, "pushed": False, "note": "변경사항이 없습니다 (이미 최신 상태)."}
+    commit = _run_git(["commit", "-m", "Publish: %s" % title])
+    if commit.returncode != 0:
+        raise RuntimeError(commit.stderr[:800])
+    push = _run_git(["push"])
+    if push.returncode != 0:
+        raise RuntimeError(
+            "커밋은 완료됐지만 push에 실패했습니다: %s" % push.stderr[:800]
+        )
+    return {
+        "committed": True,
+        "pushed": True,
+        "note": "GitHub에 푸시 완료 — Vercel이 자동으로 재배포합니다 (약 1분 소요).",
+    }
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -192,7 +369,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/translate"):
+        if parsed.path not in ("/generate", "/translate", "/publish"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -201,6 +378,30 @@ class Handler(http.server.BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception as e:
             self._send_json(400, {"error": "bad request: %s" % e})
+            return
+
+        if parsed.path == "/publish":
+            project_id = (payload.get("id") or "").strip()
+            code = payload.get("code") or ""
+            title = (payload.get("title") or project_id).strip()
+            if not project_id or not code.strip():
+                self._send_json(400, {"error": "id와 code가 필요합니다."})
+                return
+            try:
+                action = publish_project(project_id, code)
+            except Exception as e:
+                self._send_json(500, {"error": "index.html 업데이트 실패: %s" % e})
+                return
+            try:
+                git_result = git_commit_and_push(title)
+            except Exception as e:
+                self._send_json(500, {
+                    "error": "%s (index.html은 이미 수정되었습니다 — 직접 git commit/push 하거나, 문제를 해결한 뒤 다시 Publish 하세요.)" % e
+                })
+                return
+            result = {"action": action}
+            result.update(git_result)
+            self._send_json(200, result)
             return
 
         if parsed.path == "/generate":
