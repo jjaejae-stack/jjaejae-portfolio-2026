@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jaehoon Choi — Art Director</title>
+<style>
+  :root{
+    --bg:#f3f2ee;
+    --fg:#111111;
+    --muted:#78756c;
+    --line: rgba(17,17,17,.14);
+    --line-strong: rgba(17,17,17,.28);
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html{scroll-behavior:smooth;}
+  body{
+    background:var(--bg);
+    color:var(--fg);
+    font-family:-apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    line-height:1.5;
+  }
+  body.project-open{overflow:hidden;}
+  a{color:inherit; text-decoration:none;}
+  button{font:inherit; color:inherit; background:none; border:none; cursor:pointer;}
+  img{display:block; max-width:100%;}
+
+  /* ---------- header ---------- */
+  #site-header{
+    position:fixed; top:0; left:0; right:0; z-index:500;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 28px;
+    font-size:13px; letter-spacing:.02em;
+    mix-blend-mode:difference;
+    color:#fff;
+    pointer-events:none;
+  }
+  #site-header *{pointer-events:auto;}
+  #site-header .brand{font-weight:600; cursor:pointer;}
+  #site-header nav{display:flex; gap:22px;}
+  #site-header nav button{opacity:.85;}
+  #site-header nav button:hover{opacity:1;}
+  #project-close{display:none; align-items:center; gap:6px;}
+  #project-close.show{display:flex;}
+  body.project-open #site-header nav{display:none;}
+
+  /* ---------- intro: language marquee ---------- */
+  #intro{
+    height:100svh;
+    display:flex; flex-direction:column;
+    position:relative;
+    overflow:hidden;
+  }
+  .lang-row{
+    flex:1 1 0;
+    display:flex; align-items:center;
+    overflow:hidden;
+    white-space:nowrap;
+  }
+  .lang-track{
+    display:inline-flex;
+    white-space:nowrap;
+    animation:marquee linear infinite;
+    will-change:transform;
+  }
+  .lang-row.reverse .lang-track{animation-direction:reverse;}
+  .lang-track span{
+    font-size:clamp(2.2rem, 7vw, 5.6rem);
+    font-weight:800;
+    letter-spacing:-.01em;
+    padding-right:.6em;
+  }
+  @keyframes marquee{
+    from{transform:translateX(0);}
+    to{transform:translateX(-50%);}
+  }
+  .scroll-cue{
+    position:absolute; left:50%; bottom:22px; z-index:5;
+    transform:translateX(-50%);
+    font-size:12px; color:#fff;
+    background:rgba(0,0,0,.4);
+    padding:6px 14px;
+    border-radius:30px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .scroll-cue .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:#fff;
+    animation:bob 1.6s ease-in-out infinite;
+  }
+  @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
+
+  /* ---------- info (name / bio, follows the marquee) ---------- */
+  #info{
+    min-height:100svh;
+    display:flex; flex-direction:column; justify-content:center;
+    padding:0 6vw;
+  }
+  #info .eyebrow{
+    font-size:12px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted); margin-bottom:18px;
+  }
+  #info h1{
+    font-size:clamp(2.6rem, 9vw, 6.4rem);
+    font-weight:800;
+    letter-spacing:-.02em;
+    line-height:1.02;
+  }
+  #info h1 span{
+    display:block;
+    color:var(--muted);
+    font-weight:500;
+    font-size:.4em;
+    margin-top:.5em;
+    letter-spacing:0;
+  }
+  #info .bio{
+    max-width:640px;
+    margin-top:40px;
+    font-size:clamp(1rem, 1.6vw, 1.2rem);
+    color:#2b2a26;
+    white-space:pre-line;
+  }
+  #info .intro-links{
+    margin-top:36px;
+    display:flex; gap:24px;
+    font-size:14px;
+  }
+  #info .intro-links a{
+    border-bottom:1px solid var(--line-strong);
+    padding-bottom:2px;
+  }
+  #info .intro-links a:hover{border-color:var(--fg);}
+
+  /* ---------- work ---------- */
+  #work{padding:60px 6vw 120px;}
+  #work h2{
+    font-size:13px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted);
+    padding-bottom:18px;
+    border-bottom:1px solid var(--line);
+    margin-bottom:36px;
+  }
+  #work-grid{
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:56px 40px;
+  }
+  .work-card{cursor:pointer;}
+  .work-card .thumb{
+    position:relative;
+    aspect-ratio:4/5;
+    overflow:hidden;
+    background:#111;
+  }
+  .work-card .thumb img{
+    width:100%; height:100%; object-fit:cover;
+    transition:transform .7s cubic-bezier(.2,.7,.2,1);
+  }
+  .work-card:hover .thumb img{transform:scale(1.045);}
+  .work-card .accent{
+    position:absolute; left:0; bottom:0; right:0; height:4px;
+  }
+  .work-card .meta{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-top:16px;
+    padding-top:14px;
+    border-top:1px solid var(--line);
+  }
+  .work-card .meta .name{font-size:1.05rem; font-weight:700; letter-spacing:-.01em;}
+  .work-card .meta .tag{font-size:12px; color:var(--muted);}
+
+  @media (max-width:760px){
+    #work-grid{grid-template-columns:1fr; gap:44px;}
+  }
+
+  /* ---------- project view ---------- */
+  #project-view{
+    display:none;
+    position:fixed; inset:0; z-index:400;
+    background:#fff;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  #project-view.open{display:block;}
+
+  .p-main{
+    height:100svh;
+    position:relative;
+    overflow:hidden;
+    background:#0d0d0d;
+    --pmargin:2.2vmin;
+    --pradius:clamp(14px, 1.6vw, 22px);
+  }
+  .p-hero{
+    position:absolute; inset:0; z-index:1;
+    overflow:hidden;
+  }
+  .p-hero img{
+    width:100%; height:100%;
+    object-fit:cover;
+    position:absolute; inset:0;
+  }
+  .p-hero-video{position:absolute; inset:0;}
+  .p-hero-video iframe{
+    position:absolute; top:50%; left:50%;
+    width:100vw; height:56.25vw;
+    min-width:177.78vh; min-height:100vh;
+    transform:translate(-50%,-50%);
+    border:0; pointer-events:none;
+  }
+  .p-colorbox{
+    position:absolute; top:var(--pmargin); left:var(--pmargin); z-index:2;
+    width:fit-content;
+    max-width:min(80vw, var(--box-max-w, 680px));
+    min-width:var(--box-min-w, 240px);
+    height:clamp(var(--box-h-min, 300px), var(--box-h-vh, 46vh), var(--box-h-max, 620px));
+    display:flex; flex-direction:column; justify-content:flex-start;
+    padding:56px 48px;
+    border-radius:var(--pradius);
+    color:#fff3ef;
+  }
+  .p-colorbox h1{
+    font-size:clamp(2.2rem, 4.4vw, 4.6rem);
+    font-weight:800;
+    letter-spacing:-.02em;
+    line-height:1.02;
+    word-break:keep-all;
+  }
+  .p-social{
+    position:absolute; right:var(--pmargin); bottom:var(--pmargin); z-index:20;
+    display:flex; flex-direction:column; gap:12px;
+    padding:14px;
+    border-radius:var(--pradius);
+    color:#fff3ef;
+  }
+  .p-social a{
+    width:22px; height:22px;
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity .2s, transform .2s;
+  }
+  .p-social a:hover{opacity:.6; transform:scale(1.08);}
+
+  @media (max-width:760px){
+    .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px;}
+    .p-colorbox h1{font-size:clamp(1.6rem, 8vw, 2.6rem);}
+  }
+
+  .p-detail{padding:80px 6vw 40px;}
+  .p-block{max-width:920px; margin:0 auto 96px;}
+  .gallery{
+    position:relative;
+    overflow:hidden;
+    height:60vh;
+    max-height:640px;
+    min-height:280px;
+    margin:0 auto;
+    background:#111;
+    cursor:pointer;
+    transition:width .65s cubic-bezier(.65,0,.35,1), height .65s cubic-bezier(.65,0,.35,1);
+  }
+  .gallery-track{
+    display:flex; flex-direction:row; height:100%;
+    transition:transform .65s cubic-bezier(.65,0,.35,1);
+  }
+  .gallery-frame{flex:0 0 auto; height:100%;}
+  .gallery-frame img{height:100%; width:auto; max-width:none; display:block;}
+  .gallery-counter{
+    position:absolute; right:14px; bottom:14px;
+    font-size:11px; color:#fff;
+    background:rgba(0,0,0,.45);
+    padding:4px 8px;
+    letter-spacing:.04em;
+    pointer-events:none;
+  }
+  .gallery-hint{
+    position:absolute; left:14px; bottom:14px;
+    font-size:11px; color:#fff;
+    background:rgba(0,0,0,.45);
+    padding:4px 8px;
+    opacity:0;
+    transition:opacity .2s;
+    pointer-events:none;
+  }
+  .gallery:hover .gallery-hint{opacity:1;}
+
+  .p-caption{
+    display:flex; justify-content:space-between; align-items:baseline;
+    gap:24px;
+    margin-top:22px; padding-top:14px;
+    border-top:1px solid var(--line);
+  }
+  .p-caption .idx{font-size:12px; color:var(--muted); white-space:nowrap;}
+  .p-caption .label{font-size:1rem; font-weight:700;}
+  .p-body{
+    margin-top:18px;
+    font-size:.98rem;
+    color:#2b2a26;
+    white-space:pre-line;
+  }
+  .p-body.muted{color:var(--muted); font-style:italic;}
+
+  .p-credits{max-width:1080px; margin:0 auto 100px; padding-top:8px;}
+  .p-credits h3{
+    font-size:13px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--muted);
+    padding-bottom:18px; margin-bottom:30px;
+    border-bottom:1px solid var(--line);
+  }
+  .credits-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
+    gap:26px 24px;
+  }
+  .credit-item{border-top:1px solid var(--line); padding-top:10px;}
+  .credit-item .label{
+    font-size:11px; text-transform:uppercase; letter-spacing:.06em;
+    color:var(--muted); margin-bottom:6px;
+  }
+  .credit-item .value{font-size:.92rem; line-height:1.55; white-space:pre-line;}
+
+  .p-nav{
+    max-width:920px; margin:0 auto; padding:40px 6vw 90px;
+    display:flex; justify-content:space-between;
+    font-size:13px;
+    border-top:1px solid var(--line);
+  }
+  .p-nav a{color:var(--muted);}
+  .p-nav a:hover{color:var(--fg);}
+
+  footer{
+    padding:26px 6vw;
+    font-size:12px; color:var(--muted);
+    display:flex; justify-content:space-between;
+    border-top:1px solid var(--line);
+  }
+</style>
+</head>
+<body>
+
+  <header id="site-header">
+    <div class="brand" data-go="home">Jaehoon Choi</div>
+    <nav>
+      <button data-go="work">Work</button>
+      <button data-go="info">Info</button>
+    </nav>
+    <button id="project-close">✕ Close</button>
+  </header>
+
+  <main id="intro" aria-label="Greeting">
+    <div class="scroll-cue"><span class="dot"></span>Scroll</div>
+  </main>
+
+  <section id="info">
+    <p class="eyebrow">Portfolio — 2026</p>
+    <h1>Jaehoon Choi<span>Art Director</span></h1>
+    <p class="bio">안녕하세요, 아트디렉터 최재훈입니다.
+브랜드가 하고 싶은 이야기를 오래 기억되는 캠페인으로 만듭니다.
+삼성, 나이키 등 다양한 브랜드의 캠페인을 아트디렉팅했습니다.</p>
+    <div class="intro-links">
+      <a href="https://www.instagram.com/jjaejae__/" target="_blank" rel="noopener">Instagram ↗</a>
+      <a href="mailto:hello@jaehoonchoi.com">Email</a>
+    </div>
+  </section>
+
+  <section id="work">
+    <h2>Work</h2>
+    <div id="work-grid"></div>
+  </section>
+
+  <footer>
+    <span>© 2026 Jaehoon Choi</span>
+    <span>Art Director</span>
+  </footer>
+
+  <div id="project-view">
+    <div id="project-scroll"></div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- helpers ---------------- */
+  const u = (path) => encodeURI(path);
+  const ssfSet = (n, count) => Array.from({length:count}, (_, i) => `SSF SHOP/Capture/${n}-${i+1}.jpg`);
+
+  /* ---------------- render: greeting marquee ---------------- */
+  const GREETINGS = [
+    { text:"안녕하세요! jjaejae의 사이트에 오신 것을 환영합니다.", bg:"#4CAF50", fg:"#123815", duration:64 },
+    { text:"Hello! Welcome to jjaejae's site.",                   bg:"#2b1710", fg:"#f2e9e4", duration:76, reverse:true },
+    { text:"¡Hola! Bienvenido al sitio de jjaejae.",              bg:"#e3e07a", fg:"#2f3421", duration:60 },
+    { text:"Bonjour ! Bienvenue sur le site de jjaejae.",         bg:"#ee6f63", fg:"#fbe4df", duration:72, reverse:true },
+    { text:"こんにちは！jjaejaeのサイトへようこそ。",                  bg:"#3f6fd1", fg:"#0d1b34", duration:58 }
+  ];
+  (function renderGreetings(){
+    // duplicate each row's content once so a -50% translate loops with no visible seam
+    const rowsHTML = GREETINGS.map(g => {
+      const reps = Array.from({length:10}, () => `<span>${g.text}</span>`).join("");
+      return `
+        <div class="lang-row${g.reverse ? " reverse" : ""}" style="background:${g.bg}; color:${g.fg}">
+          <div class="lang-track" style="animation-duration:${g.duration}s">${reps}${reps}</div>
+        </div>`;
+    }).join("");
+    document.getElementById("intro").insertAdjacentHTML("afterbegin", rowsHTML);
+  })();
+
+  /* ---------------- project data ----------------
+     이미지는 실제 폴더의 파일을 그대로 참조합니다.
+     설명(placeholder) 문구는 [ ] 로 표시된 부분만 자유롭게 수정하세요. */
+  const PROJECTS = [
+    {
+      id:"ssf-shop",
+      title:"SSF SHOP",
+      color:"#C4402A",
+      meta:"Client — 삼성물산 · Agency — TBWA\\KOREA",
+      hero:"SSF SHOP/Capture/1-1.jpg",
+      /* heroType: "video"면 아래 heroVideoId(비메오 영상 ID)가 메인 배경에서 자동재생됩니다.
+         "image"로 바꾸면 위 hero 이미지가 표시됩니다 — 프로젝트별로 여기서 지정하세요. */
+      heroType:"video",
+      heroVideoId:"615843658",
+      social:{ youtube:"#", vimeo:"https://vimeo.com/615843658", instagram:"https://www.instagram.com/ssf_shop_official/" },
+      tag:"Brand Campaign",
+      year:"",
+      blocks:[
+        {
+          label:"Brand Film",
+          heading:"Fashion that the world loves.",
+          images: ssfSet(1,13),
+          paragraphs:[
+            "삼성물산의 패션 쇼핑 플랫폼 SSF SHOP의 첫 번째 커뮤니케이션 광고 캠페인입니다. 세계적인 그룹 삼성이 만든 플랫폼이지만 SSF SHOP은 MZ세대에게 인지도가 낮은 플랫폼이었고, 이를 높일 수 있는 캠페인이 필요했습니다.",
+            "'SSF' 삼행시를 활용해 메시지를 무한히 확장할 수 있는 캠페인을 기획했고, 슬로건은 '세상이 사랑하는 패션(Fashion that The World Loves)'입니다.",
+            "한두 명의 빅 모델 대신, 젠더와 나이 구분 없이 MZ세대가 좋아하는 다수의 모델을 캐스팅해 캠페인의 전달력을 높였습니다."
+          ]
+        },
+        {
+          label:"Portfolio Film",
+          images: ssfSet(2,13),
+          paragraphs:[
+            "SSF SHOP에 입점한 브랜드들의 매력을 같은 삼행시 구조로 소개하는 포트폴리오 필름입니다."
+          ]
+        },
+        {
+          label:"Digital Film",
+          images: ssfSet(3,11),
+          paragraphs:[
+            "디지털 매체에서는 SSF SHOP의 인지도를 높이기 위해 끝말잇기를 활용한 송(song) 형태의 영상을 제작했습니다."
+          ]
+        }
+      ],
+      credits:[
+        ["Client","삼성물산 (SSF SHOP)"],
+        ["Agency","TBWA\\KOREA"],
+        ["Creative Director","Seyoon Kim"],
+        ["Copywriter","Eunju Jeong, Seohee Chong, Bokyung Yoon"],
+        ["Art Director","Jaehoon Choi (@jjaejae__)"],
+        ["Account Executive","Yeonhoo Lee, Sungbok Lee, Kyuri Kim, Hyunjin Jeong"],
+        ["Director","Kihwan Hwang"],
+        ["Assistant Director","Solji Choi, Minyoung Cho"],
+        ["Production","element pictures, Bongrey"],
+        ["Executive Producer","Bonghoe Kim"],
+        ["Producer","Hosung Zo, Sangcheol Gong, Minsun Park"],
+        ["Slogan Type Design","Studio Oddhyphen (Bohuy Kim)"],
+        ["D.O.P","Beomsoo Choi"],
+        ["Gaffer","Kihyun Cho"],
+        ["Art Team","Misun Oh"],
+        ["Location","Kwangsoo Choi (Mono Location)"],
+        ["Model Agency","People Agency"],
+        ["Stylist","Yoona Heo / Seokwon Kim (총괄)"],
+        ["Hair & Make-up","Daeun Kim"],
+        ["Model","Seohyung Kim, Juyoung Lee, Dohyun Lee, Rowoon, Irene, Jiseob Lim"],
+        ["D.I","LUCID COLOUR"],
+        ["Edit","Gust&Gale (Heesoo Kim)"],
+        ["2D","RGB (Kiyoung Park)"],
+        ["Sound","DR.HOOK (Bongkwon Jeong)"],
+        ["Audio PD","Yuri Ahn"]
+      ]
+    }
+    /* 다른 프로젝트는 SSF SHOP 포맷이 확정되면 이어서 추가합니다. */
+  ];
+
+  /* ---------------- (보류) 나머지 프로젝트 데이터 — 추후 동일 포맷으로 정리 ----------------
+  const REST_OF_PROJECTS = [
+    {
+      id:"galaxy-tab-s9",
+      title:"Galaxy Tab S9",
+      color:"#16249B",
+      meta:"Client — Samsung Electronics",
+      hero:"Galaxy Tab S9/197abe201750005.669e1b443b7a8.webp",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"",
+      blocks:[{
+        label:"Work",
+        images:[
+          "Galaxy Tab S9/197abe201750005.669e1b443b7a8.webp",
+          "Galaxy Tab S9/310c1a201750005.669e1b443d009.webp",
+          "Galaxy Tab S9/64760a201750005.667a6886923e0.webp",
+          "Galaxy Tab S9/7e1aed201750005.669dfdf114c26.webp",
+          "Galaxy Tab S9/984a43201750005.669e1b443c238.webp",
+          "Galaxy Tab S9/a198de201750005.669e029776253.webp",
+          "Galaxy Tab S9/b2a26e201750005.669e1fff24077.webp",
+          "Galaxy Tab S9/eca6b7201750005.669e1b443bce3.webp",
+          "Galaxy Tab S9/fc9aa0201750005.669e1b443cb47.webp"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"neo-qled-8k",
+      title:"Neo QLED 8K Digital",
+      color:"#123634",
+      meta:"Client — Samsung Electronics",
+      hero:"Neo QLED 8K Digital/093103174932955.64abc945bc7da.webp",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Digital Campaign",
+      year:"",
+      blocks:[{
+        label:"Work",
+        images:[
+          "Neo QLED 8K Digital/093103174932955.64abc945bc7da.webp",
+          "Neo QLED 8K Digital/1dd4f1174932955.64abbc105660a.webp",
+          "Neo QLED 8K Digital/368dbd174932955.64ae3e7d6f9ed.webp",
+          "Neo QLED 8K Digital/47138f174932955.64abbc1053930.webp",
+          "Neo QLED 8K Digital/57e097174932955.64abaaf31c039.webp",
+          "Neo QLED 8K Digital/694f1f174932955.64abc9463529b.webp",
+          "Neo QLED 8K Digital/7aeee0174932955.64abaaf317e8e.webp",
+          "Neo QLED 8K Digital/7d8548174932955.64abc945bb82b.webp",
+          "Neo QLED 8K Digital/8a34bd174932955.64abbc10558a1.webp",
+          "Neo QLED 8K Digital/8b105c174932955.64abd1b63572e.webp",
+          "Neo QLED 8K Digital/8dcb94174932955.64abbc105496d.webp",
+          "Neo QLED 8K Digital/a1b73c174932955.64abc9463434e.webp",
+          "Neo QLED 8K Digital/aacee6174932955.64abaaf316715.webp",
+          "Neo QLED 8K Digital/b519cb174932955.64abd1b63799b.webp",
+          "Neo QLED 8K Digital/b664af174932955.64abcd5ad3bb3.webp",
+          "Neo QLED 8K Digital/b99299174932955.64abaaf31b009.webp",
+          "Neo QLED 8K Digital/c01444174932955.64abbc1057297.webp",
+          "Neo QLED 8K Digital/d5ebc4174932955.64abc945bd76b.webp",
+          "Neo QLED 8K Digital/e6d127174932955.64abaaf318e0c.webp",
+          "Neo QLED 8K Digital/f2035b174932955.64abd1b6369e3.webp",
+          "Neo QLED 8K Digital/f9e40e174932955.64abd1b638eb1.webp"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"nike-2019",
+      title:"NIKE 2019",
+      color:"#15171A",
+      meta:"Client — NIKE",
+      hero:"NIKE 2019/081e1484922005.6152fc93b7abb.jpg",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"2019",
+      blocks:[{
+        label:"Work",
+        images:[
+          "NIKE 2019/081e1484922005.6152fc93b7abb.jpg",
+          "NIKE 2019/08f8ad84922005.5d6cc4070526f.webp",
+          "NIKE 2019/11d22084922005.5d6cc406a1db8.jpg",
+          "NIKE 2019/20b1a484922005.5d6cc40704da6.webp",
+          "NIKE 2019/213cf584922005.5d6cb70e78d9b.webp",
+          "NIKE 2019/35837b84922005.6152fc93b8156.jpg",
+          "NIKE 2019/848a2184922005.Y3JvcCw4MDgsNjMyLDAsMA.jpg",
+          "NIKE 2019/9ae60a84922005.5d6cc406a18d0.jpg",
+          "NIKE 2019/9aea8384922005.5d81fa58afb15.webp",
+          "NIKE 2019/a0f16e84922005.5d6cc406a14d9.jpg",
+          "NIKE 2019/c8de0884922005.6152fc940fe6d.webp",
+          "NIKE 2019/db5d5084922005.5d81fa58af3c5.webp"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"yunjac",
+      title:"YUNJAC",
+      color:"#4A2E82",
+      meta:"",
+      hero:"YUNJAC/3abc6c72846765.5bf563f313be0.jpg",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"",
+      blocks:[{
+        label:"Work",
+        images:[
+          "YUNJAC/3abc6c72846765.5bf563f313be0.jpg",
+          "YUNJAC/582c8b72846765.5bf577648bc20.webp",
+          "YUNJAC/63f92672846765.5d637e770267d.webp",
+          "YUNJAC/b02d1772846765.5c0f74a02515f.jpg",
+          "YUNJAC/de428972846765.5bf6bc2364210.webp",
+          "YUNJAC/e32b7072846765.5bf563f313439.jpg"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"icecream-homerun",
+      title:"아이스크림 홈런",
+      color:"#D9731A",
+      meta:"",
+      hero:"아이스크림 홈런/061a20169739327.6453ce2716146.webp",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"",
+      blocks:[{
+        label:"Work",
+        images:[
+          "아이스크림 홈런/061a20169739327.6453ce2716146.webp",
+          "아이스크림 홈런/062276169739327.6453cbbfade86.webp",
+          "아이스크림 홈런/0937b6169739327.645362b8d97bf.webp",
+          "아이스크림 홈런/0c8903169739327.645362b85df90.webp",
+          "아이스크림 홈런/2f4158169739327.645362b8de829.webp",
+          "아이스크림 홈런/31c854169739327.645362b7dcbd0.webp",
+          "아이스크림 홈런/52ee07169739327.6453cbd096803.webp",
+          "아이스크림 홈런/6fa4bc169739327.6453cbbfaeb89.webp",
+          "아이스크림 홈런/6fdab5169739327.64535079c9124.webp",
+          "아이스크림 홈런/91c92e169739327.6453ce2716ee7.webp",
+          "아이스크림 홈런/93425e169739327.6453cbd0959c7.webp",
+          "아이스크림 홈런/a581b2169739327.645362b85d2f4.webp",
+          "아이스크림 홈런/ac59fa169739327.64537424686f9.webp",
+          "아이스크림 홈런/bb2f50169739327.645362b8ddd40.webp",
+          "아이스크림 홈런/ca2137169739327.6455233994f68.webp",
+          "아이스크림 홈런/d0c729169739327.645362b7dc107.webp",
+          "아이스크림 홈런/e288f2169739327.645362b8db199.webp",
+          "아이스크림 홈런/f2196a169739327.6453cbbe3e3aa.webp",
+          "아이스크림 홈런/f5b038169739327.6453ce2715245.webp",
+          "아이스크림 홈런/fc8e5e169739327.64552275192f7.webp"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"tat",
+      title:"띵크어띵",
+      color:"#8C2A55",
+      meta:"",
+      hero:"띵크어띵/TAT-1.jpg",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"",
+      blocks:[{
+        label:"Work",
+        images:[
+          "띵크어띵/TAT-1.jpg",
+          "띵크어띵/TAT-2.jpg",
+          "띵크어띵/TAT-3.jpg",
+          "띵크어띵/TAT-A_White-f.jpg",
+          "띵크어띵/TAT-B_White.jpg"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    },
+    {
+      id:"hny-2022",
+      title:"HNY 2022",
+      color:"#8A6A1C",
+      meta:"",
+      hero:"HNY 2022/283b72134176963.61d05cbbe5613.webp",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"2022",
+      blocks:[{
+        label:"Work",
+        images:[
+          "HNY 2022/283b72134176963.61d05cbbe5613.webp",
+          "HNY 2022/71be47134176963.61d05cbb957f6.jpg",
+          "HNY 2022/b1645d134176963.61d05cbb95f3b.jpg"
+        ],
+        paragraphs:["Role — Art Direction","[프로젝트 설명을 입력해주세요.]"]
+      }],
+      credits:null
+    }
+  ];
+  */
+
+  /* ---------------- render: work grid ---------------- */
+  const grid = document.getElementById("work-grid");
+  PROJECTS.forEach(p => {
+    const card = document.createElement("div");
+    card.className = "work-card";
+    card.innerHTML = `
+      <div class="thumb">
+        <img src="${u(p.hero)}" loading="lazy" alt="${p.title}">
+        <div class="accent" style="background:${p.color}"></div>
+      </div>
+      <div class="meta">
+        <span class="name">${p.title}</span>
+        <span class="tag">${[p.tag, p.year].filter(Boolean).join(" · ")}</span>
+      </div>`;
+    card.addEventListener("click", () => openProject(p.id));
+    grid.appendChild(card);
+  });
+
+  /* ---------------- render: project view ---------------- */
+  const viewRoot = document.getElementById("project-view");
+  const scrollRoot = document.getElementById("project-scroll");
+  const closeBtn = document.getElementById("project-close");
+
+  function socialIcon(type){
+    if(type==="youtube") return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>`;
+    if(type==="vimeo") return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 6.6c-.1 2.2-1.6 5.2-4.6 9-3.1 4-5.7 5.9-7.8 5.9-1.3 0-2.4-1.2-3.3-3.6C5.8 14.6 5 11.3 3.9 10c-.3-.3-1.1.2-2.5 1.5L.5 10.4c1.6-1.4 3.1-2.8 4.6-4.3 2-1.9 3.6-2.9 4.6-3 2.4-.2 3.9 1.4 4.4 4.9.6 3.7 1 6 1.2 6.9.7 3 1.4 4.5 2.3 4.5.7 0 1.7-1.1 3-3.3 1.3-2.2 2-3.9 2.1-5.1.2-1.9-.6-2.9-2.3-2.9-.8 0-1.6.2-2.5.6 1.7-5.4 4.9-8 9.6-7.9 3.5.1 5.2 2.4 4.9 6.8z"/></svg>`;
+    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .5 1.4 1 .4.4.7.8 1 1.4.2.5.4 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.5 1-1 1.4-.4.4-.8.7-1.4 1-.5.2-1.2.4-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.5-1.4-1-.4-.4-.7-.8-1-1.4-.2-.5-.4-1.2-.4-2.4C2 15.6 2 15.2 2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.5-1 1-1.4.4-.4.8-.7 1.4-1 .5-.2 1.2-.4 2.4-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.8.1-1 .1-1.5.2-1.9.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.1.4-.3.9-.4 1.9-.1 1.3-.1 1.6-.1 4.8s0 3.5.1 4.8c.1 1 .2 1.5.4 1.9.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.1.9.3 1.9.4 1.3.1 1.6.1 4.8.1s3.5 0 4.8-.1c1-.1 1.5-.2 1.9-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.1-.4.3-.9.4-1.9.1-1.3.1-1.6.1-4.8s0-3.5-.1-4.8c-.1-1-.2-1.5-.4-1.9-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.1-.9-.3-1.9-.4-1.3-.1-1.6-.1-4.8-.1zm0 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zm5.7-2a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0z"/></svg>`;
+  }
+
+  function galleryHTML(images, blockId){
+    const frames = images.map(src => `<div class="gallery-frame"><img src="${u(src)}" alt=""></div>`).join("");
+    return `
+      <div class="gallery" data-block="${blockId}" data-index="0" data-count="${images.length}">
+        <div class="gallery-track">${frames}</div>
+        <div class="gallery-counter">01 / ${String(images.length).padStart(2,"0")}</div>
+        <div class="gallery-hint">Click for next</div>
+      </div>`;
+  }
+
+  function creditsHTML(project){
+    if(!project.credits) return "";
+    const items = project.credits.map(([label, value]) => `
+      <div class="credit-item">
+        <div class="label">${label}</div>
+        <div class="value">${value}</div>
+      </div>`).join("");
+    return `
+      <div class="p-credits">
+        <h3>Credits</h3>
+        <div class="credits-grid">${items}</div>
+      </div>`;
+  }
+
+  function renderProject(project){
+    const idx = PROJECTS.findIndex(p => p.id === project.id);
+    const prev = PROJECTS[(idx - 1 + PROJECTS.length) % PROJECTS.length];
+    const next = PROJECTS[(idx + 1) % PROJECTS.length];
+
+    let fontStyleTag = document.getElementById("project-title-font");
+    if(project.titleFontDataUrl){
+      if(!fontStyleTag){
+        fontStyleTag = document.createElement("style");
+        fontStyleTag.id = "project-title-font";
+        document.head.appendChild(fontStyleTag);
+      }
+      fontStyleTag.textContent = `@font-face{font-family:'ProjectTitleFont'; src:url(${project.titleFontDataUrl});}`;
+    }else if(fontStyleTag){
+      fontStyleTag.textContent = "";
+    }
+
+    const blocksHTML = project.blocks.map((block, bi) => {
+      const blockId = `${project.id}-${bi}`;
+      const heading = block.heading ? `<div class="p-body" style="font-weight:700; font-size:1.1rem; margin-top:22px;">${block.heading}</div>` : "";
+      const paras = block.paragraphs.map(t => `<p class="p-body${t.startsWith("[")?" muted":""}">${t}</p>`).join("");
+      return `
+        <div class="p-block">
+          ${galleryHTML(block.images, blockId)}
+          <div class="p-caption">
+            <span class="label">${block.label}</span>
+            <span class="idx">${String(bi+1).padStart(2,"0")}</span>
+          </div>
+          ${heading}
+          ${paras}
+        </div>`;
+    }).join("");
+
+    const heroMedia = project.heroType === "video"
+      ? `<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/${project.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`
+      : `<img src="${u(project.hero)}" alt="${project.title}">`;
+
+    scrollRoot.innerHTML = `
+      <div class="p-main">
+        <div class="p-hero">
+          ${heroMedia}
+        </div>
+        <div class="p-colorbox" style="background:${project.color}; color:${project.textColor || "#fff3ef"}; --box-max-w:${Math.round(680*(project.boxWidthScale!=null?project.boxWidthScale:1))}px; --box-min-w:${Math.round(240*(project.boxWidthScale!=null?project.boxWidthScale:1))}px; --box-h-min:${Math.round(300*(project.boxHeightScale!=null?project.boxHeightScale:1))}px; --box-h-max:${Math.round(620*(project.boxHeightScale!=null?project.boxHeightScale:1))}px; --box-h-vh:${46*(project.boxHeightScale!=null?project.boxHeightScale:1)}vh;">
+          <h1 style="letter-spacing:${project.titleLetterSpacing!=null ? project.titleLetterSpacing : -0.02}em; line-height:${project.titleLineHeight!=null ? project.titleLineHeight : 1.02}; ${project.titleFontDataUrl ? "font-family:'ProjectTitleFont';" : ""}">${project.title}</h1>
+        </div>
+        <div class="p-social" style="background:${project.color}; color:${project.textColor || "#fff3ef"}">
+          <a href="${project.social.youtube}" target="_blank" rel="noopener" title="YouTube">${socialIcon("youtube")}</a>
+          <a href="${project.social.vimeo}" target="_blank" rel="noopener" title="Vimeo">${socialIcon("vimeo")}</a>
+          <a href="${project.social.instagram}" target="_blank" rel="noopener" title="Instagram">${socialIcon("instagram")}</a>
+        </div>
+      </div>
+      <div class="p-detail">
+        ${blocksHTML}
+        ${creditsHTML(project)}
+      </div>
+      <div class="p-nav">
+        ${PROJECTS.length > 1 ? `<a href="#" data-prev>← ${prev.title}</a>` : `<span></span>`}
+        <a href="#" data-allwork>All Work</a>
+        ${PROJECTS.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
+      </div>`;
+
+    scrollRoot.querySelectorAll(".gallery").forEach(g => {
+      g.addEventListener("click", () => rollGallery(g));
+      activateGalleryFrame(g, 0);
+    });
+    if(PROJECTS.length > 1){
+      scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); openProject(prev.id); });
+      scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); openProject(next.id); });
+    }
+    scrollRoot.querySelector("[data-allwork]").addEventListener("click", (e) => { e.preventDefault(); closeProject(); document.getElementById("work").scrollIntoView(); });
+  }
+
+  /* gallery height is a fixed base value (captured once from CSS, cached on the element)
+     so it never compounds. width is derived per-image from that base height × its own
+     natural ratio — and only shrinks the height when a very wide image would otherwise
+     overflow the column, so nothing ever gets cropped. */
+  function activateGalleryFrame(gallery, index){
+    const frames = gallery.querySelectorAll(".gallery-frame");
+    const frame = frames[index];
+    const img = frame && frame.querySelector("img");
+    if(!img) return;
+    const apply = () => {
+      if(!gallery.dataset.baseHeight){
+        gallery.dataset.baseHeight = gallery.clientHeight;
+      }
+      const baseHeight = parseFloat(gallery.dataset.baseHeight);
+      const ratio = img.naturalWidth / img.naturalHeight;
+      const availWidth = gallery.parentElement.clientWidth;
+      let height = baseHeight;
+      let width = height * ratio;
+      if(width > availWidth){
+        width = availWidth;
+        height = width / ratio;
+      }
+      gallery.style.height = height + "px";
+      gallery.style.width = width + "px";
+      gallery.querySelector(".gallery-track").style.transform = `translateX(-${frame.offsetLeft}px)`;
+    };
+    if(img.complete && img.naturalWidth){ apply(); }
+    else{ img.addEventListener("load", apply, {once:true}); }
+  }
+
+  function rollGallery(gallery){
+    const count = parseInt(gallery.dataset.count, 10);
+    let index = parseInt(gallery.dataset.index, 10);
+    index = (index + 1) % count;
+    gallery.dataset.index = index;
+    gallery.querySelector(".gallery-counter").textContent = `${String(index+1).padStart(2,"0")} / ${String(count).padStart(2,"0")}`;
+    activateGalleryFrame(gallery, index);
+  }
+
+  window.addEventListener("resize", () => {
+    scrollRoot.querySelectorAll(".gallery").forEach(g => {
+      delete g.dataset.baseHeight;
+      g.style.height = "";
+      activateGalleryFrame(g, parseInt(g.dataset.index, 10));
+    });
+  });
+
+  function openProject(id){
+    const project = PROJECTS.find(p => p.id === id);
+    if(!project) return;
+    renderProject(project);
+    viewRoot.classList.add("open");
+    viewRoot.scrollTop = 0;
+    document.body.classList.add("project-open");
+    closeBtn.classList.add("show");
+  }
+
+  function closeProject(){
+    viewRoot.classList.remove("open");
+    document.body.classList.remove("project-open");
+    closeBtn.classList.remove("show");
+  }
+
+  closeBtn.addEventListener("click", closeProject);
+  document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeProject(); });
+
+  document.querySelectorAll("[data-go]").forEach(el => {
+    el.addEventListener("click", () => {
+      closeProject();
+      const target = el.dataset.go === "work" ? document.getElementById("work")
+        : el.dataset.go === "info" ? document.getElementById("info")
+        : document.getElementById("intro");
+      target.scrollIntoView({behavior:"smooth"});
+    });
+  });
+
+  if(location.hash){
+    const deepLinkId = location.hash.slice(1);
+    if(PROJECTS.some(p => p.id === deepLinkId)) openProject(deepLinkId);
+  }
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1492 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Builder</title>
+<style>
+  /* ---------- themes ----------
+     default (no data-theme / "mono") = white bg, black text/borders.
+     data-theme="blue"  = soft blue bg, white cards, hard black shadow.
+     data-theme="dark"  = near-black bg, dark gray cards, hard black shadow.
+     All three share the same flat, no-radius "card + offset shadow" look. */
+  :root{
+    --bg:#ffffff; --surface:#ffffff; --fg:#111111; --muted:#666666;
+    --line:rgba(0,0,0,.14); --line-strong:#000000;
+    --accent:#111111; --card-shadow:6px 6px 0 #000000;
+  }
+  body[data-theme="blue"]{
+    --bg:#AEC3F7; --surface:#ffffff; --fg:#111111; --muted:#3d3d3d;
+    --line:rgba(17,17,17,.2); --line-strong:#111111;
+    --accent:#111111; --card-shadow:6px 6px 0 #111111;
+  }
+  body[data-theme="dark"]{
+    --bg:#151515; --surface:#242424; --fg:#f1efe9; --muted:#9c988f;
+    --line:rgba(255,255,255,.12); --line-strong:rgba(255,255,255,.4);
+    --accent:#D9503A; --card-shadow:6px 6px 0 #000000;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    font-family:-apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+    color:var(--fg); background:var(--bg); font-size:14px; -webkit-font-smoothing:antialiased;
+    transition:background .25s, color .25s;
+  }
+  button{font:inherit; cursor:pointer; background:none; border:none; color:inherit;}
+  input,textarea,select{font:inherit; color:inherit;}
+  a{color:inherit;}
+
+  #topbar{
+    height:52px; display:flex; align-items:center; justify-content:space-between;
+    padding:0 20px; border-bottom:1px solid var(--line);
+  }
+  #topbar .brand{font-weight:800; letter-spacing:-.01em;}
+  #topbar .brand span{color:var(--accent);}
+  #topbar a{font-size:12px; color:var(--muted); border-bottom:1px solid var(--line-strong); padding-bottom:2px;}
+  #topbar a:hover{color:var(--fg); border-color:var(--fg);}
+
+  #app{display:grid; grid-template-columns:260px 1fr 1fr; height:calc(100vh - 52px);}
+
+  /* ---------- sidebar ---------- */
+  #sidebar{border-right:1px solid var(--line); overflow-y:auto; padding:18px;}
+  #new-project-btn{
+    width:100%; padding:10px; border:1px solid var(--line-strong);
+    font-weight:600; margin-bottom:22px; text-align:center;
+    background:var(--surface); box-shadow:var(--card-shadow);
+  }
+  #new-project-btn:hover{border-color:var(--accent); color:var(--accent);}
+  .project-item{
+    display:flex; align-items:center; gap:10px; padding:10px 8px;
+    border:1px solid var(--line-strong); background:var(--surface); box-shadow:var(--card-shadow);
+    cursor:pointer; margin-bottom:16px;
+  }
+  .project-item:hover{background:color-mix(in srgb, var(--fg) 6%, var(--bg));}
+  .project-item.active{background:var(--fg); color:var(--bg);}
+  .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong);}
+  .project-item .info{flex:1; min-width:0;}
+  .project-item .p-title{font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .project-item .p-sub{font-size:11px; color:var(--muted);}
+  .project-item.active .p-sub{opacity:.65;}
+  .project-item .del{opacity:0; font-size:12px; color:var(--muted); flex:0 0 auto;}
+  .project-item:hover .del{opacity:1;}
+  .project-item.active .del{opacity:.7;}
+  .project-item .del:hover{color:var(--accent);}
+  #sidebar-empty{font-size:12px; color:var(--muted); padding:8px; line-height:1.6;}
+
+  /* ---------- editor ---------- */
+  #editor{overflow-y:auto; padding:22px 32px 120px; border-right:1px solid var(--line); line-height:1.3;}
+  #editor .empty-state{color:var(--muted); font-size:13px; padding-top:60px; text-align:center; line-height:1.8;}
+  .field-group{margin-bottom:13px;}
+  .field-row{display:flex; gap:12px;}
+  .field-row > *{flex:1; min-width:0;}
+  label.field-label{display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:4px;}
+  .field, .field-inline{
+    width:100%; border:1px solid var(--line-strong); padding:7px 10px;
+    font-size:13.5px; background:var(--surface); color:var(--fg);
+  }
+  .field:focus, .field-inline:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+  textarea.field{resize:vertical; min-height:56px; line-height:1.4; font-family:inherit;}
+  .color-row{display:flex; gap:8px; align-items:center;}
+  .color-row input[type=color]{width:40px; height:32px; border:1px solid var(--line-strong); padding:2px; background:var(--surface);}
+  .radio-row{display:flex; gap:16px; align-items:center; font-size:13px; padding:2px 0;}
+  .radio-row label{display:flex; align-items:center; gap:6px; cursor:pointer;}
+  .slider-value{font-weight:600; color:var(--fg); text-transform:none; letter-spacing:0; font-size:11px;}
+  input[type=range].field{
+    -webkit-appearance:none; appearance:none; width:100%; height:24px; padding:0;
+    background:transparent; border:none;
+  }
+  input[type=range].field::-webkit-slider-runnable-track{height:4px; background:var(--line-strong); border-radius:2px;}
+  input[type=range].field::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none; width:16px; height:16px; border-radius:50%;
+    background:var(--accent); margin-top:-6px; cursor:pointer; border:2px solid var(--surface); box-shadow:0 0 0 1px var(--line-strong);
+  }
+
+  .section{margin-top:18px; padding-top:14px; border-top:1px solid var(--line);}
+  .section-head{display:flex; justify-content:space-between; align-items:center; font-size:13px; font-weight:700; margin-bottom:10px;}
+  .section-head[data-toggle]{cursor:pointer; user-select:none;}
+  .section-head .chevron{display:inline-block; transition:transform .15s; margin-right:4px; color:var(--muted); font-size:11px;}
+  .section.collapsed .chevron{transform:rotate(-90deg);}
+  .section.collapsed .section-body{display:none;}
+  .btn-sm{font-size:12px; border:1px solid var(--line-strong); padding:5px 10px;}
+  .btn-sm:hover{border-color:var(--accent); color:var(--accent);}
+  .btn-primary{background:var(--accent); color:var(--bg); border:1px solid var(--line-strong); padding:8px 12px; font-weight:600; font-size:13px;}
+  .btn-primary:hover{opacity:.88;}
+  .btn-primary:disabled{opacity:.5; cursor:default;}
+  .btn-secondary{background:var(--surface); color:var(--fg); border:1.5px solid var(--fg); padding:8px 12px; font-weight:600; font-size:13px;}
+  .btn-secondary:hover{background:color-mix(in srgb, var(--fg) 8%, transparent);}
+  .btn-row{display:flex; gap:8px; margin-bottom:16px;}
+  .btn-row button{flex:1; padding:9px 8px; font-size:12.5px; white-space:nowrap;}
+
+  .block-card{border:1px solid var(--line-strong); padding:13px; margin-bottom:22px; background:var(--surface); box-shadow:var(--card-shadow);}
+  .block-card.dragging{opacity:.35;}
+  .block-card-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .drag-handle{cursor:grab; color:var(--muted); font-size:15px; user-select:none; flex:0 0 auto;}
+  .block-card-head input{flex:1; font-weight:700;}
+  .icon-btn{font-size:12px; color:var(--muted); padding:4px 6px; flex:0 0 auto;}
+  .icon-btn:hover{color:var(--accent);}
+
+  .image-list{display:flex; flex-direction:column; gap:12px; margin:14px 0;}
+  .image-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line-strong); padding:6px 8px; background:var(--surface); box-shadow:var(--card-shadow); cursor:grab;}
+  .image-row.dragging{opacity:.35;}
+  .image-row .thumb{width:44px; height:44px; object-fit:cover; background:var(--fg); flex:0 0 auto;}
+  .image-row .fname{flex:1; min-width:0; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .fname{font-size:12px; color:var(--fg);}
+  #font-preview-box{transition:border-color .15s, background .15s; background:var(--surface); color:var(--fg); box-shadow:var(--card-shadow);}
+  #font-preview-box.drag-over{border-color:var(--accent) !important; background:color-mix(in srgb, var(--accent) 10%, var(--surface));}
+  .image-row .hero-badge{font-size:10px; padding:2px 7px; border-radius:10px; background:var(--accent); color:var(--bg); flex:0 0 auto;}
+  .image-row .hero-toggle{font-size:11px; color:var(--muted); border:1px solid var(--line-strong); border-radius:10px; padding:2px 8px; flex:0 0 auto;}
+  .image-row .hero-toggle:hover{border-color:var(--accent); color:var(--accent);}
+  .image-list-empty{font-size:12px; color:var(--muted); padding:10px 0;}
+
+  .block-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
+  .credit-row{display:flex; gap:8px; margin-bottom:8px;}
+  .credit-row input{flex:1;}
+  input[type=file]{display:none;}
+
+  /* ---------- preview ---------- */
+  #preview-pane{display:flex; flex-direction:column; overflow:hidden;}
+  .preview-toolbar{height:52px; flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; padding:0 16px; border-bottom:1px solid var(--line);}
+  .view-toggle{display:flex; gap:4px; background:color-mix(in srgb, var(--fg) 8%, var(--bg)); border-radius:8px; padding:3px;}
+  .view-toggle button{padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600;}
+  .view-toggle button.active{background:var(--fg); color:var(--bg);}
+  .preview-stage{flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:28px; background:color-mix(in srgb, var(--fg) 8%, var(--bg));}
+  .preview-frame-wrap{flex:0 0 auto; box-shadow:0 10px 40px rgba(0,0,0,.18); background:#fff;}
+  .preview-stage.mobile .preview-frame-wrap{border-radius:26px; overflow:hidden;}
+  .preview-stage iframe{border:0; background:#fff; display:block; width:100%; height:100%;}
+  .preview-empty{color:var(--muted); font-size:13px; margin-top:60px;}
+
+  /* ---------- export modal ---------- */
+  #export-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #export-modal.open{display:flex;}
+  .modal-box{background:var(--surface); color:var(--fg); width:min(760px,92vw); max-height:82vh; border:1px solid var(--line-strong); padding:24px; display:flex; flex-direction:column; box-shadow:var(--card-shadow);}
+  .modal-box h3{margin-bottom:6px;}
+  .modal-box p.hint{font-size:12px; color:var(--muted); margin-bottom:14px; line-height:1.6;}
+  .modal-box textarea{flex:1; min-height:340px; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; border:1px solid var(--line); padding:12px; white-space:pre; overflow:auto; background:color-mix(in srgb, var(--fg) 4%, var(--surface)); color:var(--fg);}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+
+  @media (max-width:1200px){
+    #app{grid-template-columns:220px 1fr 1fr;}
+  }
+
+  #theme-toggle{
+    position:fixed; left:20px; bottom:20px; z-index:950;
+    width:34px; height:34px; border-radius:50%;
+    border:2px solid var(--line-strong);
+    box-shadow:0 4px 14px rgba(0,0,0,.25);
+    transition:transform .15s, background .2s;
+  }
+  #theme-toggle:hover{transform:scale(1.1);}
+  #theme-toggle:active{transform:scale(.94);}
+</style>
+</head>
+<body>
+
+  <div id="topbar">
+    <div class="brand">Portfolio <span>Builder</span></div>
+    <a href="index.html" target="_blank" rel="noopener">사이트 보기 ↗</a>
+  </div>
+
+  <div id="app">
+    <aside id="sidebar">
+      <button id="new-project-btn">+ 새 프로젝트</button>
+      <div id="project-list"></div>
+    </aside>
+
+    <main id="editor">
+      <div class="empty-state">왼쪽에서 프로젝트를 선택하거나<br>새 프로젝트를 만들어주세요.</div>
+    </main>
+
+    <section id="preview-pane">
+      <div class="preview-toolbar">
+        <div class="view-toggle">
+          <button data-view="pc" class="active">PC</button>
+          <button data-view="mobile">Mobile</button>
+        </div>
+        <button class="btn-primary" id="export-btn">코드 내보내기</button>
+      </div>
+      <div class="preview-stage pc" id="preview-stage">
+        <div class="preview-frame-wrap">
+          <iframe id="preview-frame" title="preview"></iframe>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <button id="theme-toggle" title="테마 전환"></button>
+
+  <div id="export-modal">
+    <div class="modal-box">
+      <h3>프로젝트 코드 내보내기</h3>
+      <p class="hint">이 코드를 index.html의 PROJECTS 배열에 붙여넣으세요. 이미지 경로는 선택하신 폴더 구조를 기준으로 자동 생성됩니다 — 실제 사이트에서 보이려면 같은 폴더 구조로 이미지 파일을 프로젝트 폴더 옆에 두셔야 합니다.</p>
+      <textarea id="export-text" readonly></textarea>
+      <div class="modal-actions">
+        <button class="btn-sm" id="export-close">닫기</button>
+        <button class="btn-primary" id="export-copy">클립보드에 복사</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ======================================================================
+     0. small helpers
+  ====================================================================== */
+  function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+  function slugify(s){
+    return String(s||"").toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+  }
+  function escapeHTML(s){
+    return String(s==null?"":s).replace(/[&<>"']/g, function(c){
+      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+    });
+  }
+  function naturalSort(a,b){ return a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}); }
+  function debounce(fn, ms){
+    let t;
+    return function(){ const args=arguments; clearTimeout(t); t=setTimeout(()=>fn.apply(null,args), ms); };
+  }
+
+  /* ======================================================================
+     1. IndexedDB persistence
+  ====================================================================== */
+  const DB_NAME = "pf-builder-db";
+  const STORE = "projects";
+  function dbOpen(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore(STORE, {keyPath:"id"}); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbPut(project){
+    const db = await dbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(project);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+  async function dbGetAll(){
+    const db = await dbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readonly");
+      const req = tx.objectStore(STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  async function dbDelete(id){
+    const db = await dbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /* ======================================================================
+     2. data model
+  ====================================================================== */
+  function newProject(title){
+    const t = title || "New Project";
+    return {
+      id: (slugify(t) || "project") + "-" + uid().slice(0,5),
+      title: t,
+      color: "#C4402A",
+      textColor: "#fff3ef",
+      titleLetterSpacing: -0.02,
+      titleLineHeight: 1.02,
+      titleFont: { name:"", dataUrl:"" },
+      boxWidthScale: 1,
+      boxHeightScale: 1,
+      tag: "Campaign",
+      year: "",
+      meta: "",
+      heroType: "image",
+      heroVideoId: "",
+      heroImageId: null,
+      social: { youtube:"", vimeo:"", instagram:"" },
+      blocks: [ { id: uid(), label:"Work", heading:"", paragraphs:["Role — Art Direction"], images:[] } ],
+      credits: []
+    };
+  }
+  function newBlock(){
+    return { id: uid(), label:"New Block", heading:"", paragraphs:[], images:[] };
+  }
+  function allImages(project){
+    const out = [];
+    (project.blocks||[]).forEach(b => (b.images||[]).forEach(im => out.push(im)));
+    return out;
+  }
+  function hydrateProject(project){
+    allImages(project).forEach(im => {
+      if(im.file){
+        try{ im.url = URL.createObjectURL(im.file); }catch(e){ im.url = ""; }
+      }
+      /* path-only sample images (no File — just a relative path next to builder.html)
+         already have a usable url and don't need a blob URL. */
+    });
+    return project;
+  }
+
+  /* ---- SSF SHOP sample project — same content as the real detail page, images referenced
+     by relative path (no upload needed) since they already live in "SSF SHOP/Capture/" next
+     to this file. ---- */
+  function ssfPathSet(prefix, count){
+    return Array.from({length:count}, (_, i) => {
+      const name = prefix + "-" + (i+1) + ".jpg";
+      const relPath = "SSF SHOP/Capture/" + name;
+      return { id: uid(), relPath: relPath, name: name, url: relPath };
+    });
+  }
+  function buildSSFSampleProject(){
+    const set1 = ssfPathSet(1, 13), set2 = ssfPathSet(2, 13), set3 = ssfPathSet(3, 11);
+    return {
+      id: "sample-ssf-shop",
+      title: "SSF SHOP",
+      color: "#C4402A",
+      textColor: "#fff3ef",
+      titleLetterSpacing: -0.02,
+      titleLineHeight: 1.02,
+      titleFont: { name:"", dataUrl:"" },
+      boxWidthScale: 1,
+      boxHeightScale: 1,
+      tag: "Brand Campaign",
+      year: "",
+      meta: "Client — 삼성물산 · Agency — TBWA\\KOREA",
+      heroType: "video",
+      heroVideoId: "615843658",
+      heroImageId: set1[0].id,
+      social: { youtube:"", vimeo:"https://vimeo.com/615843658", instagram:"https://www.instagram.com/ssf_shop_official/" },
+      blocks: [
+        { id: uid(), label:"Brand Film", heading:"Fashion that the world loves.", images:set1, paragraphs:[
+          "삼성물산의 패션 쇼핑 플랫폼 SSF SHOP의 첫 번째 커뮤니케이션 광고 캠페인입니다. 세계적인 그룹 삼성이 만든 플랫폼이지만 SSF SHOP은 MZ세대에게 인지도가 낮은 플랫폼이었고, 이를 높일 수 있는 캠페인이 필요했습니다.",
+          "'SSF' 삼행시를 활용해 메시지를 무한히 확장할 수 있는 캠페인을 기획했고, 슬로건은 '세상이 사랑하는 패션(Fashion that The World Loves)'입니다.",
+          "한두 명의 빅 모델 대신, 젠더와 나이 구분 없이 MZ세대가 좋아하는 다수의 모델을 캐스팅해 캠페인의 전달력을 높였습니다."
+        ]},
+        { id: uid(), label:"Portfolio Film", heading:"", images:set2, paragraphs:[
+          "SSF SHOP에 입점한 브랜드들의 매력을 같은 삼행시 구조로 소개하는 포트폴리오 필름입니다."
+        ]},
+        { id: uid(), label:"Digital Film", heading:"", images:set3, paragraphs:[
+          "디지털 매체에서는 SSF SHOP의 인지도를 높이기 위해 끝말잇기를 활용한 송(song) 형태의 영상을 제작했습니다."
+        ]}
+      ],
+      credits: [
+        ["Client","삼성물산 (SSF SHOP)"],
+        ["Agency","TBWA\\KOREA"],
+        ["Creative Director","Seyoon Kim"],
+        ["Copywriter","Eunju Jeong, Seohee Chong, Bokyung Yoon"],
+        ["Art Director","Jaehoon Choi (@jjaejae__)"],
+        ["Account Executive","Yeonhoo Lee, Sungbok Lee, Kyuri Kim, Hyunjin Jeong"],
+        ["Director","Kihwan Hwang"],
+        ["Assistant Director","Solji Choi, Minyoung Cho"],
+        ["Production","element pictures, Bongrey"],
+        ["Executive Producer","Bonghoe Kim"],
+        ["Producer","Hosung Zo, Sangcheol Gong, Minsun Park"],
+        ["Slogan Type Design","Studio Oddhyphen (Bohuy Kim)"],
+        ["D.O.P","Beomsoo Choi"],
+        ["Gaffer","Kihyun Cho"],
+        ["Art Team","Misun Oh"],
+        ["Location","Kwangsoo Choi (Mono Location)"],
+        ["Model Agency","People Agency"],
+        ["Stylist","Yoona Heo / Seokwon Kim (총괄)"],
+        ["Hair & Make-up","Daeun Kim"],
+        ["Model","Seohyung Kim, Juyoung Lee, Dohyun Lee, Rowoon, Irene, Jiseob Lim"],
+        ["D.I","LUCID COLOUR"],
+        ["Edit","Gust&Gale (Heesoo Kim)"],
+        ["2D","RGB (Kiyoung Park)"],
+        ["Sound","DR.HOOK (Bongkwon Jeong)"],
+        ["Audio PD","Yuri Ahn"]
+      ]
+    };
+  }
+
+  /* ======================================================================
+     3. app state
+  ====================================================================== */
+  let projects = [];
+  let currentId = null;
+
+  function getCurrentProject(){ return projects.find(p => p.id === currentId) || null; }
+
+  const scheduleSave = debounce(function(){
+    const p = getCurrentProject();
+    if(p) dbPut(p).catch(e => console.error("save failed", e));
+  }, 400);
+
+  function saveAndRefresh(){
+    scheduleSave();
+    refreshPreview();
+  }
+
+  /* ---- undo / redo ----
+     A snapshot is taken right before a change starts (structural action, or the moment a
+     field gains focus) so Ctrl/Cmd+Z steps back one committed edit at a time. structuredClone
+     preserves File objects correctly (unlike JSON), so image uploads survive undo/redo. */
+  const UNDO_LIMIT = 60;
+  let undoStack = [];
+  let redoStack = [];
+
+  function snapshot(){
+    const p = getCurrentProject();
+    if(!p) return;
+    try{
+      undoStack.push(structuredClone(p));
+      if(undoStack.length > UNDO_LIMIT) undoStack.shift();
+      redoStack = [];
+    }catch(e){ console.error("snapshot failed", e); }
+  }
+
+  function applySnapshot(snap){
+    const idx = projects.findIndex(p => p.id === snap.id);
+    if(idx === -1) return;
+    hydrateProject(snap);
+    projects[idx] = snap;
+    if(currentId !== snap.id) currentId = snap.id;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+    scheduleSave();
+  }
+
+  function undo(){
+    if(!undoStack.length) return;
+    const cur = getCurrentProject();
+    const snap = undoStack.pop();
+    if(cur){
+      try{ redoStack.push(structuredClone(cur)); }catch(e){}
+    }
+    applySnapshot(snap);
+  }
+  function redo(){
+    if(!redoStack.length) return;
+    const cur = getCurrentProject();
+    const snap = redoStack.pop();
+    if(cur){
+      try{ undoStack.push(structuredClone(cur)); }catch(e){}
+    }
+    applySnapshot(snap);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    const key = e.key.toLowerCase();
+    if(!(e.ctrlKey || e.metaKey) || key !== "z") return;
+    const active = document.activeElement;
+    const isTextEditable = active && (active.tagName === "TEXTAREA" ||
+      (active.tagName === "INPUT" && (active.type === "text" || active.type === "")));
+    if(isTextEditable) return; // let the browser's native in-field undo run
+    e.preventDefault();
+    if(e.shiftKey) redo(); else undo();
+  });
+
+  /* ======================================================================
+     4. sidebar
+  ====================================================================== */
+  const sidebarList = document.getElementById("project-list");
+
+  function renderSidebar(){
+    if(!projects.length){
+      sidebarList.innerHTML = '<div id="sidebar-empty">아직 프로젝트가 없습니다.<br>위 버튼으로 새 프로젝트를 시작하세요.</div>';
+      return;
+    }
+    sidebarList.innerHTML = projects.map(p => {
+      const active = p.id === currentId ? " active" : "";
+      return '<div class="project-item' + active + '" data-project-id="' + p.id + '">'
+        + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
+        + '<span class="info">'
+        +   '<span class="p-title">' + escapeHTML(p.title || "Untitled") + '</span>'
+        +   '<span class="p-sub">' + escapeHTML([p.tag, p.year].filter(Boolean).join(" · ") || "—") + '</span>'
+        + '</span>'
+        + '<button class="del" data-action="delete-project" data-project-id="' + p.id + '" title="삭제">✕</button>'
+        + '</div>';
+    }).join("");
+  }
+
+  sidebarList.addEventListener("click", (e) => {
+    const delBtn = e.target.closest('[data-action="delete-project"]');
+    if(delBtn){
+      e.stopPropagation();
+      const id = delBtn.dataset.projectId;
+      const p = projects.find(x => x.id === id);
+      if(p && confirm('"' + p.title + '" 프로젝트를 삭제할까요? 되돌릴 수 없습니다.')){
+        deleteProject(id);
+      }
+      return;
+    }
+    const item = e.target.closest("[data-project-id]");
+    if(item) selectProject(item.dataset.projectId);
+  });
+
+  document.getElementById("new-project-btn").addEventListener("click", () => {
+    const title = prompt("프로젝트 이름을 입력하세요", "New Project");
+    if(title === null) return;
+    const p = newProject(title.trim() || "New Project");
+    projects.unshift(p);
+    dbPut(p);
+    selectProject(p.id);
+  });
+
+  async function deleteProject(id){
+    allImages(projects.find(p=>p.id===id) || {blocks:[]}).forEach(im => { try{ URL.revokeObjectURL(im.url); }catch(e){} });
+    projects = projects.filter(p => p.id !== id);
+    await dbDelete(id);
+    if(currentId === id) currentId = projects[0] ? projects[0].id : null;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+  }
+
+  function selectProject(id){
+    currentId = id;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+  }
+
+  /* ======================================================================
+     5. sortable (drag & drop) — delegated on #editor
+  ====================================================================== */
+  const editorEl = document.getElementById("editor");
+  let dragItem = null;
+
+  function getDragAfterElement(scope, y){
+    const items = Array.from(scope.children).filter(el => el.matches("[data-sort-item]") && el !== dragItem);
+    return items.reduce((closest, child) => {
+      const box = child.getBoundingClientRect();
+      const offset = y - box.top - box.height/2;
+      if(offset < 0 && offset > closest.offset) return {offset, element:child};
+      return closest;
+    }, {offset:-Infinity, element:null}).element;
+  }
+
+  editorEl.addEventListener("dragstart", (e) => {
+    const item = e.target.closest("[data-sort-item]");
+    if(!item) return;
+    snapshot();
+    dragItem = item;
+    item.classList.add("dragging");
+    e.dataTransfer.effectAllowed = "move";
+    try{ e.dataTransfer.setData("text/plain", ""); }catch(err){}
+  });
+  editorEl.addEventListener("dragover", (e) => {
+    if(!dragItem) return;
+    const scope = e.target.closest("[data-sort-scope]");
+    if(!scope) return;
+    e.preventDefault();
+    const afterEl = getDragAfterElement(scope, e.clientY);
+    if(afterEl == null) scope.appendChild(dragItem);
+    else scope.insertBefore(dragItem, afterEl);
+  });
+  editorEl.addEventListener("dragend", () => {
+    if(!dragItem) return;
+    dragItem.classList.remove("dragging");
+    const scope = dragItem.closest("[data-sort-scope]");
+    dragItem = null;
+    if(scope) syncOrderFromDOM(scope);
+  });
+
+  function syncOrderFromDOM(scope){
+    const kind = scope.dataset.sortScope;
+    const ids = Array.from(scope.children).filter(el => el.matches("[data-sort-item]")).map(el => el.dataset.itemId);
+    const project = getCurrentProject();
+    if(!project) return;
+    if(kind === "blocks"){
+      project.blocks = ids.map(id => project.blocks.find(b => b.id === id)).filter(Boolean);
+    } else if(kind.indexOf("images:") === 0){
+      const blockId = kind.slice(7);
+      const block = project.blocks.find(b => b.id === blockId);
+      if(block) block.images = ids.map(id => block.images.find(im => im.id === id)).filter(Boolean);
+    }
+    saveAndRefresh();
+  }
+
+  /* ======================================================================
+     6. editor rendering
+  ====================================================================== */
+  function heroSelectOptions(project){
+    const imgs = allImages(project);
+    if(!imgs.length) return '<option value="">(사진을 먼저 추가하세요)</option>';
+    return imgs.map(im => {
+      const sel = im.id === project.heroImageId ? " selected" : "";
+      return '<option value="' + im.id + '"' + sel + '>' + escapeHTML(im.relPath || im.name) + '</option>';
+    }).join("");
+  }
+
+  function imageRowHTML(im){
+    return '<div class="image-row" draggable="true" data-sort-item data-item-id="' + im.id + '">'
+      + '<span class="drag-handle">⠿</span>'
+      + '<img class="thumb" src="' + im.url + '" alt="">'
+      + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
+      + '<button class="icon-btn" data-action="remove-image" data-image-id="' + im.id + '">삭제</button>'
+      + '</div>';
+  }
+
+  function blockCardHTML(block, project){
+    const rows = (block.images||[]).length
+      ? block.images.map(imageRowHTML).join("")
+      : '<div class="image-list-empty">아직 사진이 없습니다.</div>';
+    return '<div class="block-card" draggable="true" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
+      + '<div class="block-card-head">'
+      +   '<span class="drag-handle">⠿</span>'
+      +   '<input class="field-inline" data-field="label" data-block-id="' + block.id + '" placeholder="블록 이름 (예: Brand Film)" value="' + escapeHTML(block.label||"") + '">'
+      +   '<button class="icon-btn" data-action="remove-block" data-block-id="' + block.id + '">블록 삭제</button>'
+      + '</div>'
+      + '<div class="field-group"><label class="field-label">헤드라인 (선택)</label>'
+      +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
+      + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
+      +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
+      + '<label class="field-label">사진 (드래그로 순서 변경)</label>'
+      + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
+      + '<div class="block-actions">'
+      +   '<button class="btn-sm" data-action="add-folder" data-block-id="' + block.id + '">폴더에서 불러오기</button>'
+      +   '<button class="btn-sm" data-action="add-files" data-block-id="' + block.id + '">사진 추가</button>'
+      + '</div>'
+      + '</div>';
+  }
+
+  function creditsRowHTML(c, i){
+    return '<div class="credit-row" data-credit-index="' + i + '">'
+      + '<input class="field-inline" data-field="credit-label" data-credit-index="' + i + '" placeholder="라벨 (예: Client)" value="' + escapeHTML(c[0]) + '">'
+      + '<input class="field-inline" data-field="credit-value" data-credit-index="' + i + '" placeholder="내용" value="' + escapeHTML(c[1]) + '">'
+      + '<button class="icon-btn" data-action="remove-credit" data-credit-index="' + i + '">✕</button>'
+      + '</div>';
+  }
+
+  function renderEditor(){
+    const project = getCurrentProject();
+    if(!project){
+      editorEl.innerHTML = '<div class="empty-state">왼쪽에서 프로젝트를 선택하거나<br>새 프로젝트를 만들어주세요.</div>';
+      return;
+    }
+    const blocksHTML = project.blocks.map(b => blockCardHTML(b, project)).join("");
+    const creditsHTML = (project.credits||[]).map((c,i) => creditsRowHTML(c,i)).join("");
+
+    editorEl.innerHTML = ''
+      + '<div class="btn-row">'
+      +   '<button class="btn-primary" id="generate-btn" data-action="generate">GENERATE</button>'
+      +   '<button class="btn-secondary" id="save-btn" data-action="save">SAVE</button>'
+      +   '<button class="btn-secondary" id="translate-ko-en-btn" data-action="translate-ko-en">KR → EN</button>'
+      +   '<button class="btn-secondary" id="translate-en-ko-btn" data-action="translate-en-ko">EN → KR</button>'
+      + '</div>'
+      + '<p id="generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
+      + '<div class="field-group"><label class="field-label">프로젝트명</label>'
+      +   '<input class="field" data-field="title" value="' + escapeHTML(project.title) + '"></div>'
+      + '<div class="field-row field-group">'
+      +   '<div><label class="field-label">컬러 박스 색상</label>'
+      +     '<div class="color-row"><input type="color" data-field="color" value="' + project.color + '">'
+      +     '<input class="field-inline" data-field="color-hex" value="' + project.color + '"></div></div>'
+      +   '<div><label class="field-label">박스 텍스트 · 아이콘 색상</label>'
+      +     '<div class="color-row"><input type="color" data-field="textColor" value="' + (project.textColor||"#fff3ef") + '">'
+      +     '<input class="field-inline" data-field="textColor-hex" value="' + (project.textColor||"#fff3ef") + '"></div></div>'
+      + '</div>'
+      + '<div class="field-row field-group">'
+      +   '<div><label class="field-label">카테고리</label>'
+      +     '<input class="field" data-field="tag" value="' + escapeHTML(project.tag||"") + '"></div>'
+      +   '<div><label class="field-label">연도</label>'
+      +     '<input class="field" data-field="year" value="' + escapeHTML(project.year||"") + '"></div>'
+      + '</div>'
+      + '<div class="field-group"><label class="field-label">클라이언트 / 에이전시</label>'
+      +   '<input class="field" data-field="meta" placeholder="예: Client — 삼성물산 · Agency — TBWA\\KOREA" value="' + escapeHTML(project.meta||"") + '"></div>'
+
+      + '<div class="section collapsed" id="typography-section">'
+      +   '<div class="section-head" data-toggle="typography-section"><span><span class="chevron">▾</span>타이틀 타이포그래피</span></div>'
+      +   '<div class="section-body">'
+      +   '<div class="field-group"><label class="field-label">자간 (letter-spacing) <span class="slider-value" data-value-for="titleLetterSpacing">' + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + 'em</span></label>'
+      +     '<input type="range" class="field" data-field="titleLetterSpacing" min="-0.06" max="0.12" step="0.005" value="' + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + '"></div>'
+      +   '<div class="field-group"><label class="field-label">행간 (line-height) <span class="slider-value" data-value-for="titleLineHeight">' + (project.titleLineHeight!=null?project.titleLineHeight:1.02) + '</span></label>'
+      +     '<input type="range" class="field" data-field="titleLineHeight" min="0.8" max="1.5" step="0.01" value="' + (project.titleLineHeight!=null?project.titleLineHeight:1.02) + '"></div>'
+      +   '<div class="field-group"><label class="field-label">타이틀 폰트</label>'
+      +     '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">'
+      +       '<button class="btn-sm" data-action="add-title-font">폰트 파일 첨부</button>'
+      +       (project.titleFont && project.titleFont.name
+                 ? '<span class="fname">' + escapeHTML(project.titleFont.name) + '</span><button class="icon-btn" data-action="remove-title-font">제거</button>'
+                 : '<span class="fname" style="color:var(--muted); font-size:12px;">기본 폰트 사용 중</span>')
+      +     '</div>'
+      +     '<div id="font-preview-box" style="margin-top:14px; padding:20px; border:1px dashed var(--line-strong); font-size:2.2rem; font-weight:800; line-height:1.05; word-break:keep-all; overflow-wrap:break-word;">' + escapeHTML(project.title || "SAMPLE TITLE") + '</div>'
+      +     '<p style="font-size:11px; color:var(--muted); margin-top:6px;">위 미리보기 박스로 폰트 파일(.woff/.woff2/.ttf/.otf)을 직접 드래그해서 놓아도 첨부됩니다.</p>'
+      +   '</div>'
+      +   '</div>'
+      + '</div>'
+
+      + '<div class="section">'
+      +   '<div class="section-head">컬러 박스 크기</div>'
+      +   '<div class="field-group"><label class="field-label">가로 크기 <span class="slider-value" data-value-for="boxWidthScale">' + Math.round((project.boxWidthScale!=null?project.boxWidthScale:1)*100) + '%</span></label>'
+      +     '<input type="range" class="field" data-field="boxWidthScale" min="0.5" max="1.6" step="0.02" value="' + (project.boxWidthScale!=null?project.boxWidthScale:1) + '"></div>'
+      +   '<div class="field-group"><label class="field-label">세로 크기 <span class="slider-value" data-value-for="boxHeightScale">' + Math.round((project.boxHeightScale!=null?project.boxHeightScale:1)*100) + '%</span></label>'
+      +     '<input type="range" class="field" data-field="boxHeightScale" min="0.5" max="1.6" step="0.02" value="' + (project.boxHeightScale!=null?project.boxHeightScale:1) + '"></div>'
+      +   '<p style="font-size:11px; color:var(--muted); line-height:1.6;">모바일 화면에서는 사진을 덜 가리도록 박스가 자동으로 작아집니다 (이 슬라이더는 PC 화면 기준입니다).</p>'
+      + '</div>'
+
+      + '<div class="section">'
+      +   '<div class="section-head">메인 히어로</div>'
+      +   '<div class="radio-row">'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="image"' + (project.heroType!=="video"?" checked":"") + '> 이미지</label>'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="video"' + (project.heroType==="video"?" checked":"") + '> 비메오 영상 자동재생</label>'
+      +   '</div>'
+      +   '<div class="field-group"><label class="field-label">히어로 이미지 (아래 사진 목록 중 선택)</label>'
+      +     '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select></div>'
+      +   '<div class="field-group"><label class="field-label">비메오 영상 ID (예: vimeo.com/615843658 → 615843658)</label>'
+      +     '<input class="field" data-field="heroVideoId" value="' + escapeHTML(project.heroVideoId||"") + '"></div>'
+      + '</div>'
+
+      + '<div class="section">'
+      +   '<div class="section-head">소셜 링크 (우하단 아이콘)</div>'
+      +   '<div class="field-group"><label class="field-label">YouTube</label><input class="field" data-field="social-youtube" value="' + escapeHTML(project.social.youtube||"") + '"></div>'
+      +   '<div class="field-group"><label class="field-label">Vimeo</label><input class="field" data-field="social-vimeo" value="' + escapeHTML(project.social.vimeo||"") + '"></div>'
+      +   '<div class="field-group"><label class="field-label">Instagram</label><input class="field" data-field="social-instagram" value="' + escapeHTML(project.social.instagram||"") + '"></div>'
+      + '</div>'
+
+      + '<div class="section">'
+      +   '<div class="section-head">블록 (사진 세트) <button class="btn-sm" data-action="add-block">+ 블록 추가</button></div>'
+      +   '<div id="blocks-list" data-sort-scope="blocks">' + blocksHTML + '</div>'
+      + '</div>'
+
+      + '<div class="section">'
+      +   '<div class="section-head">크레딧 <button class="btn-sm" data-action="add-credit">+ 추가</button></div>'
+      +   '<div id="credits-list">' + creditsHTML + '</div>'
+      + '</div>';
+    applyTitleFontPreview(project);
+  }
+
+  /* ---- field input/change handling (delegated, no full re-render on typing) ---- */
+  function handleField(el){
+    const project = getCurrentProject();
+    if(!project) return;
+    const field = el.dataset.field;
+    const blockId = el.dataset.blockId;
+    const block = blockId ? project.blocks.find(b => b.id === blockId) : null;
+
+    switch(field){
+      case "title": project.title = el.value; syncSidebarItemText(project); break;
+      case "color":
+        project.color = el.value;
+        document.querySelector('[data-field="color-hex"]').value = el.value;
+        syncSidebarItemText(project);
+        break;
+      case "color-hex":
+        if(/^#[0-9a-fA-F]{6}$/.test(el.value)){
+          project.color = el.value;
+          document.querySelector('input[type=color][data-field="color"]').value = el.value;
+          syncSidebarItemText(project);
+        }
+        break;
+      case "textColor":
+        project.textColor = el.value;
+        document.querySelector('[data-field="textColor-hex"]').value = el.value;
+        break;
+      case "textColor-hex":
+        if(/^#[0-9a-fA-F]{6}$/.test(el.value)){
+          project.textColor = el.value;
+          document.querySelector('input[type=color][data-field="textColor"]').value = el.value;
+        }
+        break;
+      case "titleLetterSpacing": {
+        project.titleLetterSpacing = parseFloat(el.value);
+        const disp = document.querySelector('[data-value-for="titleLetterSpacing"]');
+        if(disp) disp.textContent = project.titleLetterSpacing + "em";
+        break;
+      }
+      case "titleLineHeight": {
+        project.titleLineHeight = parseFloat(el.value);
+        const disp2 = document.querySelector('[data-value-for="titleLineHeight"]');
+        if(disp2) disp2.textContent = project.titleLineHeight;
+        break;
+      }
+      case "boxWidthScale": {
+        project.boxWidthScale = parseFloat(el.value);
+        const disp3 = document.querySelector('[data-value-for="boxWidthScale"]');
+        if(disp3) disp3.textContent = Math.round(project.boxWidthScale*100) + "%";
+        break;
+      }
+      case "boxHeightScale": {
+        project.boxHeightScale = parseFloat(el.value);
+        const disp4 = document.querySelector('[data-value-for="boxHeightScale"]');
+        if(disp4) disp4.textContent = Math.round(project.boxHeightScale*100) + "%";
+        break;
+      }
+      case "tag": project.tag = el.value; syncSidebarItemText(project); break;
+      case "year": project.year = el.value; syncSidebarItemText(project); break;
+      case "meta": project.meta = el.value; break;
+      case "heroType": project.heroType = el.value; break;
+      case "heroImageId": project.heroImageId = el.value || null; break;
+      case "heroVideoId": project.heroVideoId = el.value; break;
+      case "social-youtube": project.social.youtube = el.value; break;
+      case "social-vimeo": project.social.vimeo = el.value; break;
+      case "social-instagram": project.social.instagram = el.value; break;
+      case "label": if(block) block.label = el.value; break;
+      case "heading": if(block) block.heading = el.value; break;
+      case "paragraphs": if(block) block.paragraphs = el.value.split("\n"); break;
+      case "credit-label": {
+        const i = parseInt(el.dataset.creditIndex, 10);
+        if(project.credits[i]) project.credits[i][0] = el.value;
+        break;
+      }
+      case "credit-value": {
+        const i = parseInt(el.dataset.creditIndex, 10);
+        if(project.credits[i]) project.credits[i][1] = el.value;
+        break;
+      }
+    }
+    saveAndRefresh();
+  }
+  function syncSidebarItemText(project){
+    const item = sidebarList.querySelector('[data-project-id="' + project.id + '"]');
+    if(!item) return;
+    item.querySelector(".dot").style.background = project.color;
+    item.querySelector(".p-title").textContent = project.title || "Untitled";
+    item.querySelector(".p-sub").textContent = [project.tag, project.year].filter(Boolean).join(" · ") || "—";
+  }
+
+  editorEl.addEventListener("focusin", (e) => {
+    const el = e.target.closest("[data-field]");
+    if(el) snapshot();
+  });
+  editorEl.addEventListener("input", (e) => {
+    const el = e.target.closest("[data-field]");
+    if(el) handleField(el);
+  });
+  editorEl.addEventListener("change", (e) => {
+    const el = e.target.closest("[data-field]");
+    if(el) handleField(el);
+  });
+
+  /* ---- structural actions (add/remove block, image, credit; file pickers) ---- */
+  let pendingBlockId = null;
+  const folderInput = document.createElement("input");
+  folderInput.type = "file"; folderInput.webkitdirectory = true; folderInput.multiple = true;
+  const filesInput = document.createElement("input");
+  filesInput.type = "file"; filesInput.multiple = true; filesInput.accept = "image/*";
+  document.body.appendChild(folderInput);
+  document.body.appendChild(filesInput);
+
+  function addFilesToBlock(fileList){
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === pendingBlockId);
+    if(!block) return;
+    snapshot();
+    const files = Array.from(fileList).filter(f => f.type.indexOf("image/") === 0);
+    files.sort((a,b) => naturalSort(a.webkitRelativePath || a.name, b.webkitRelativePath || b.name));
+    files.forEach(file => {
+      const im = { id:uid(), file:file, relPath: file.webkitRelativePath || file.name, name:file.name };
+      im.url = URL.createObjectURL(file);
+      block.images.push(im);
+      if(!project.heroImageId) project.heroImageId = im.id;
+    });
+    renderEditor();
+    saveAndRefresh();
+  }
+  folderInput.addEventListener("change", () => { addFilesToBlock(folderInput.files); folderInput.value=""; });
+  filesInput.addEventListener("change", () => { addFilesToBlock(filesInput.files); filesInput.value=""; });
+
+  /* ---- title font: attach via button OR drag-and-drop onto the preview box ---- */
+  const fontInput = document.createElement("input");
+  fontInput.type = "file"; fontInput.accept = ".woff,.woff2,.ttf,.otf,font/*";
+  document.body.appendChild(fontInput);
+
+  function readFileAsDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+  const FONT_EXT_RE = /\.(woff2?|ttf|otf)$/i;
+
+  async function applyTitleFont(file){
+    const project = getCurrentProject();
+    if(!project || !file) return;
+    snapshot();
+    const dataUrl = await readFileAsDataURL(file);
+    project.titleFont = { name: file.name, dataUrl: dataUrl };
+    renderEditor();
+    saveAndRefresh();
+  }
+  fontInput.addEventListener("change", () => {
+    if(fontInput.files[0]) applyTitleFont(fontInput.files[0]);
+    fontInput.value = "";
+  });
+
+  function applyTitleFontPreview(project){
+    const box = document.getElementById("font-preview-box");
+    let styleTag = document.getElementById("title-font-face");
+    if(project && project.titleFont && project.titleFont.dataUrl){
+      if(!styleTag){
+        styleTag = document.createElement("style");
+        styleTag.id = "title-font-face";
+        document.head.appendChild(styleTag);
+      }
+      styleTag.textContent = "@font-face{font-family:'BuilderTitleFont'; src:url(" + project.titleFont.dataUrl + ");}";
+      if(box) box.style.fontFamily = "'BuilderTitleFont'";
+    }else{
+      if(styleTag) styleTag.textContent = "";
+      if(box) box.style.fontFamily = "";
+    }
+  }
+
+  editorEl.addEventListener("dragover", (e) => {
+    const box = e.target.closest("#font-preview-box");
+    if(box){ e.preventDefault(); box.classList.add("drag-over"); }
+  });
+  editorEl.addEventListener("dragleave", (e) => {
+    const box = e.target.closest("#font-preview-box");
+    if(box) box.classList.remove("drag-over");
+  });
+  editorEl.addEventListener("drop", (e) => {
+    const box = e.target.closest("#font-preview-box");
+    if(!box) return;
+    e.preventDefault();
+    box.classList.remove("drag-over");
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(file && FONT_EXT_RE.test(file.name)) applyTitleFont(file);
+    else if(file) alert("폰트 파일(.woff, .woff2, .ttf, .otf)만 지원합니다.");
+  });
+
+  /* ---- Generate: local helper server (server.py) shells out to the `claude` CLI —
+     no API key in the browser, no manual copy/paste. Run `python3 server.py` once
+     from this folder, then click Generate. ---- */
+  const GENERATE_SERVER = "http://localhost:8420";
+
+  async function runGenerate(){
+    const project = getCurrentProject();
+    if(!project) return;
+    const btn = document.getElementById("generate-btn");
+    const status = document.getElementById("generate-status");
+    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (최대 1분 정도 걸릴 수 있어요)"; }
+    if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
+
+    try{
+      const res = await fetch(GENERATE_SERVER + "/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: project.title, tag: project.tag, meta: project.meta })
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+
+      snapshot();
+      if(data.title) project.title = data.title;
+      if(data.tag) project.tag = data.tag;
+      if(data.meta) project.meta = data.meta;
+      if(!project.blocks.length) project.blocks.push(newBlock());
+      const block = project.blocks[0];
+      if(data.heading) block.heading = data.heading;
+      if(Array.isArray(data.paragraphs) && data.paragraphs.length) block.paragraphs = data.paragraphs;
+
+      let addedImages = 0;
+      if(Array.isArray(data.images) && data.images.length){
+        data.images.forEach(relPath => {
+          if(block.images.some(im => im.relPath === relPath)) return;
+          const name = relPath.split("/").pop();
+          block.images.push({ id: uid(), relPath: relPath, name: name, url: relPath });
+          addedImages++;
+        });
+        if(!project.heroImageId && block.images[0]) project.heroImageId = block.images[0].id;
+      }
+
+      if(status){
+        status.textContent = addedImages
+          ? ("완료 — \"" + data.imageFolder + "\" 폴더에서 사진 " + addedImages + "장을 불러왔습니다.")
+          : "완료 — 글은 채웠지만, 이름이 일치하는 사진 폴더를 찾지 못했어요. 사진은 직접 추가해주세요.";
+      }
+      renderEditor();
+      saveAndRefresh();
+    }catch(e){
+      alert(
+        "Generate 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(btn){ btn.disabled = false; btn.textContent = "GENERATE"; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  async function runSave(){
+    const project = getCurrentProject();
+    if(!project) return;
+    const btn = document.getElementById("save-btn");
+    try{
+      await dbPut(project);
+      if(btn){
+        const orig = btn.textContent;
+        btn.textContent = "SAVED ✓";
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      }
+    }catch(e){
+      alert("저장 실패: " + e.message);
+    }
+  }
+
+  /* ---- KR<->EN translate: same local server / claude CLI approach as Generate ---- */
+  async function runTranslate(direction){
+    const project = getCurrentProject();
+    if(!project) return;
+    const btnId = direction === "ko-en" ? "translate-ko-en-btn" : "translate-en-ko-btn";
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById("generate-status");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "로컬 서버에서 번역 중..."; }
+
+    try{
+      const payload = {
+        direction: direction,
+        title: project.title || "",
+        tag: project.tag || "",
+        meta: project.meta || "",
+        blocks: project.blocks.map(b => ({ heading: b.heading || "", paragraphs: b.paragraphs || [] }))
+      };
+      const res = await fetch(GENERATE_SERVER + "/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+
+      snapshot();
+      if(data.title) project.title = data.title;
+      if(data.tag) project.tag = data.tag;
+      if(data.meta) project.meta = data.meta;
+      if(Array.isArray(data.blocks)){
+        data.blocks.forEach((b, i) => {
+          if(!project.blocks[i]) return;
+          if(b.heading != null) project.blocks[i].heading = b.heading;
+          if(Array.isArray(b.paragraphs)) project.blocks[i].paragraphs = b.paragraphs;
+        });
+      }
+      if(status) status.textContent = "완료 — " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      renderEditor();
+      saveAndRefresh();
+    }catch(e){
+      alert(
+        "번역 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py)."
+      );
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  editorEl.addEventListener("click", (e) => {
+    const project = getCurrentProject();
+    if(!project) return;
+
+    const addFolderBtn = e.target.closest('[data-action="add-folder"]');
+    if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
+
+    const addFilesBtn = e.target.closest('[data-action="add-files"]');
+    if(addFilesBtn){ pendingBlockId = addFilesBtn.dataset.blockId; filesInput.click(); return; }
+
+    const removeImageBtn = e.target.closest('[data-action="remove-image"]');
+    if(removeImageBtn){
+      snapshot();
+      const imageId = removeImageBtn.dataset.imageId;
+      project.blocks.forEach(b => {
+        const idx = b.images.findIndex(im => im.id === imageId);
+        if(idx > -1){
+          try{ URL.revokeObjectURL(b.images[idx].url); }catch(err){}
+          b.images.splice(idx, 1);
+        }
+      });
+      if(project.heroImageId === imageId) project.heroImageId = null;
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+
+    const removeBlockBtn = e.target.closest('[data-action="remove-block"]');
+    if(removeBlockBtn){
+      const blockId = removeBlockBtn.dataset.blockId;
+      if(confirm("이 블록을 삭제할까요? 안의 사진 목록도 함께 삭제됩니다.")){
+        snapshot();
+        const block = project.blocks.find(b => b.id === blockId);
+        if(block) block.images.forEach(im => { try{ URL.revokeObjectURL(im.url); }catch(err){} });
+        project.blocks = project.blocks.filter(b => b.id !== blockId);
+        renderEditor(); saveAndRefresh();
+      }
+      return;
+    }
+
+    if(e.target.closest('[data-action="add-block"]')){
+      snapshot();
+      project.blocks.push(newBlock());
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+
+    if(e.target.closest('[data-action="add-title-font"]')){ fontInput.click(); return; }
+    if(e.target.closest('[data-action="remove-title-font"]')){
+      snapshot();
+      project.titleFont = { name:"", dataUrl:"" };
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+
+    if(e.target.closest('[data-action="generate"]')){ runGenerate(); return; }
+    if(e.target.closest('[data-action="save"]')){ runSave(); return; }
+    if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
+    if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
+
+    const toggleHead = e.target.closest('[data-toggle]');
+    if(toggleHead){
+      const section = document.getElementById(toggleHead.dataset.toggle);
+      if(section) section.classList.toggle("collapsed");
+      return;
+    }
+
+    if(e.target.closest('[data-action="add-credit"]')){
+      snapshot();
+      project.credits.push(["", ""]);
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+    const removeCreditBtn = e.target.closest('[data-action="remove-credit"]');
+    if(removeCreditBtn){
+      snapshot();
+      const i = parseInt(removeCreditBtn.dataset.creditIndex, 10);
+      project.credits.splice(i, 1);
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+  });
+
+  /* ======================================================================
+     7. live preview
+  ====================================================================== */
+  const SOCIAL_ICONS = {
+    youtube:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>',
+    vimeo:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 6.6c-.1 2.2-1.6 5.2-4.6 9-3.1 4-5.7 5.9-7.8 5.9-1.3 0-2.4-1.2-3.3-3.6C5.8 14.6 5 11.3 3.9 10c-.3-.3-1.1.2-2.5 1.5L.5 10.4c1.6-1.4 3.1-2.8 4.6-4.3 2-1.9 3.6-2.9 4.6-3 2.4-.2 3.9 1.4 4.4 4.9.6 3.7 1 6 1.2 6.9.7 3 1.4 4.5 2.3 4.5.7 0 1.7-1.1 3-3.3 1.3-2.2 2-3.9 2.1-5.1.2-1.9-.6-2.9-2.3-2.9-.8 0-1.6.2-2.5.6 1.7-5.4 4.9-8 9.6-7.9 3.5.1 5.2 2.4 4.9 6.8z"/></svg>',
+    instagram:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .5 1.4 1 .4.4.7.8 1 1.4.2.5.4 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.5 1-1 1.4-.4.4-.8.7-1.4 1-.5.2-1.2.4-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.5-1.4-1-.4-.4-.7-.8-1-1.4-.2-.5-.4-1.2-.4-2.4C2 15.6 2 15.2 2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.5-1 1-1.4.4-.4.8-.7 1.4-1 .5-.2 1.2-.4 2.4-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.8.1-1 .1-1.5.2-1.9.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.1.4-.3.9-.4 1.9-.1 1.3-.1 1.6-.1 4.8s0 3.5.1 4.8c.1 1 .2 1.5.4 1.9.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.1.9.3 1.9.4 1.3.1 1.6.1 4.8.1s3.5 0 4.8-.1c1-.1 1.5-.2 1.9-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.1-.4.3-.9.4-1.9.1-1.3.1-1.6.1-4.8s0-3.5-.1-4.8c-.1-1-.2-1.5-.4-1.9-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.1-.9-.3-1.9-.4-1.3-.1-1.6-.1-4.8-.1zm0 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zm5.7-2a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0z"/></svg>'
+  };
+
+  const PREVIEW_CSS = `
+    :root{--bg:#f3f2ee;--fg:#111;--muted:#78756c;--line:rgba(17,17,17,.14);}
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic","Helvetica Neue",Arial,sans-serif;color:var(--fg);background:#fff;line-height:1.5;}
+    img{display:block;max-width:100%;}
+    a{color:inherit;text-decoration:none;}
+    .p-main{height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;--pradius:clamp(14px,1.6vw,22px);}
+    .p-hero{position:absolute;inset:0;z-index:1;overflow:hidden;}
+    .p-hero img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
+    .p-hero-video{position:absolute;inset:0;}
+    .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
+    .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border-radius:var(--pradius);color:#fff3ef;}
+    .p-colorbox h1{font-size:clamp(2.2rem,4.4vw,4.6rem);font-weight:800;letter-spacing:-.02em;line-height:1.02;word-break:keep-all;}
+    .p-social{position:absolute;right:var(--pmargin);bottom:var(--pmargin);z-index:20;display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:var(--pradius);color:#fff3ef;}
+    .p-social a{width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+    @media (max-width:760px){
+      .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px;}
+      .p-colorbox h1{font-size:clamp(1.6rem, 8vw, 2.6rem);}
+    }
+    .p-detail{padding:80px 6vw 40px;}
+    .p-block{max-width:920px;margin:0 auto 96px;}
+    .gallery{position:relative;overflow:hidden;height:60vh;max-height:640px;min-height:280px;margin:0 auto;background:#111;cursor:pointer;transition:width .65s cubic-bezier(.65,0,.35,1),height .65s cubic-bezier(.65,0,.35,1);}
+    .gallery-track{display:flex;flex-direction:row;height:100%;transition:transform .65s cubic-bezier(.65,0,.35,1);}
+    .gallery-frame{flex:0 0 auto;height:100%;}
+    .gallery-frame img{height:100%;width:auto;max-width:none;display:block;}
+    .gallery-counter{position:absolute;right:14px;bottom:14px;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
+    .gallery-hint{position:absolute;left:14px;bottom:14px;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
+    .gallery:hover .gallery-hint{opacity:1;}
+    .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;margin-top:22px;padding-top:14px;border-top:1px solid var(--line);}
+    .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
+    .p-caption .label{font-size:1rem;font-weight:700;}
+    .p-body{margin-top:18px;font-size:.98rem;color:#2b2a26;white-space:pre-line;}
+    .p-credits{max-width:1080px;margin:0 auto 100px;padding-top:8px;}
+    .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding-bottom:18px;margin-bottom:30px;border-bottom:1px solid var(--line);}
+    .credits-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:26px 24px;}
+    .credit-item{border-top:1px solid var(--line);padding-top:10px;}
+    .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
+    .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;}
+  `;
+
+  const PREVIEW_RUNTIME_JS = [
+    'function activateGalleryFrame(gallery, index){',
+    '  var frames = gallery.querySelectorAll(".gallery-frame");',
+    '  var frame = frames[index];',
+    '  var img = frame && frame.querySelector("img");',
+    '  if(!img) return;',
+    '  var apply = function(){',
+    '    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight; }',
+    '    var baseHeight = parseFloat(gallery.dataset.baseHeight);',
+    '    var ratio = img.naturalWidth / img.naturalHeight;',
+    '    var availWidth = gallery.parentElement.clientWidth;',
+    '    var height = baseHeight;',
+    '    var width = height * ratio;',
+    '    if(width > availWidth){ width = availWidth; height = width / ratio; }',
+    '    gallery.style.height = height + "px";',
+    '    gallery.style.width = width + "px";',
+    '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + frame.offsetLeft + "px)";',
+    '  };',
+    '  if(img.complete && img.naturalWidth){ apply(); } else { img.addEventListener("load", apply, {once:true}); }',
+    '}',
+    'function rollGallery(gallery){',
+    '  var count = parseInt(gallery.dataset.count, 10);',
+    '  var index = parseInt(gallery.dataset.index, 10);',
+    '  index = (index + 1) % count;',
+    '  gallery.dataset.index = index;',
+    '  gallery.querySelector(".gallery-counter").textContent = String(index+1).padStart(2,"0") + " / " + String(count).padStart(2,"0");',
+    '  activateGalleryFrame(gallery, index);',
+    '}',
+    'document.querySelectorAll(".gallery").forEach(function(g){',
+    '  g.addEventListener("click", function(){ rollGallery(g); });',
+    '  activateGalleryFrame(g, 0);',
+    '});',
+    'window.addEventListener("resize", function(){',
+    '  document.querySelectorAll(".gallery").forEach(function(g){',
+    '    delete g.dataset.baseHeight;',
+    '    g.style.height = "";',
+    '    activateGalleryFrame(g, parseInt(g.dataset.index, 10));',
+    '  });',
+    '});'
+  ].join("\n");
+
+  function buildPreviewBodyHTML(project){
+    const imgs = allImages(project);
+    const hero = imgs.find(im => im.id === project.heroImageId) || imgs[0];
+    const heroMedia = (project.heroType === "video" && project.heroVideoId)
+      ? '<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/' + encodeURIComponent(project.heroVideoId) + '?autoplay=1&loop=1&muted=1&background=1&app_id=122963" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>'
+      : (hero ? '<img src="' + hero.url + '" alt="">' : "");
+
+    const blocksHTML = project.blocks.map((block, bi) => {
+      const frames = (block.images||[]).map(im => '<div class="gallery-frame"><img src="' + im.url + '" alt=""></div>').join("");
+      const count = (block.images||[]).length || 1;
+      const heading = block.heading ? '<div class="p-body" style="font-weight:700;font-size:1.1rem;margin-top:22px;">' + escapeHTML(block.heading) + '</div>' : "";
+      const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-body">' + escapeHTML(t) + '</p>').join("");
+      return '<div class="p-block">'
+        + '<div class="gallery" data-index="0" data-count="' + count + '">'
+        +   '<div class="gallery-track">' + frames + '</div>'
+        +   '<div class="gallery-counter">01 / ' + String(count).padStart(2,"0") + '</div>'
+        +   '<div class="gallery-hint">Click for next</div>'
+        + '</div>'
+        + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
+        + heading + paras
+        + '</div>';
+    }).join("");
+
+    const creditsHTML = (project.credits && project.credits.length)
+      ? '<div class="p-credits"><h3>Credits</h3><div class="credits-grid">' + project.credits.map(c =>
+          '<div class="credit-item"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>'
+        ).join("") + '</div></div>'
+      : "";
+
+    const socialHTML = ["youtube","vimeo","instagram"].map(k => {
+      const href = (project.social && project.social[k]) || "#";
+      return '<a href="' + escapeHTML(href) + '" target="_blank" rel="noopener">' + SOCIAL_ICONS[k] + '</a>';
+    }).join("");
+
+    const textColor = project.textColor || "#fff3ef";
+    const letterSpacing = (project.titleLetterSpacing!=null ? project.titleLetterSpacing : -0.02) + "em";
+    const lineHeight = project.titleLineHeight!=null ? project.titleLineHeight : 1.02;
+    const fontFamily = (project.titleFont && project.titleFont.dataUrl) ? "font-family:'ProjectTitleFont';" : "";
+    const wScale = project.boxWidthScale!=null ? project.boxWidthScale : 1;
+    const hScale = project.boxHeightScale!=null ? project.boxHeightScale : 1;
+    const boxVars = "--box-max-w:" + Math.round(680*wScale) + "px;--box-min-w:" + Math.round(240*wScale) + "px;"
+      + "--box-h-min:" + Math.round(300*hScale) + "px;--box-h-max:" + Math.round(620*hScale) + "px;--box-h-vh:" + (46*hScale) + "vh;";
+
+    return '<div class="p-main">'
+      +   '<div class="p-hero">' + heroMedia + '</div>'
+      +   '<div class="p-colorbox" style="background:' + project.color + ';color:' + textColor + ';' + boxVars + '">'
+      +     '<h1 style="letter-spacing:' + letterSpacing + ';line-height:' + lineHeight + ';' + fontFamily + '">' + escapeHTML(project.title||"Untitled") + '</h1></div>'
+      +   '<div class="p-social" style="background:' + project.color + ';color:' + textColor + '">' + socialHTML + '</div>'
+      + '</div>'
+      + '<div class="p-detail">' + blocksHTML + creditsHTML + '</div>';
+  }
+
+  function buildFontFaceCSS(project){
+    if(!project || !project.titleFont || !project.titleFont.dataUrl) return "";
+    return "@font-face{font-family:'ProjectTitleFont'; src:url(" + project.titleFont.dataUrl + ");}";
+  }
+
+  const previewFrame = document.getElementById("preview-frame");
+  const EMPTY_DOC = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;">프로젝트를 선택하세요</body></html>';
+
+  const refreshPreview = debounce(function(){
+    const project = getCurrentProject();
+    if(!project){ previewFrame.srcdoc = EMPTY_DOC; return; }
+    const doc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
+      + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+      + "<style>" + PREVIEW_CSS + buildFontFaceCSS(project) + "</style></head><body>"
+      + buildPreviewBodyHTML(project)
+      + "<script>" + PREVIEW_RUNTIME_JS + "<" + "/script>"
+      + "</body></html>";
+    previewFrame.srcdoc = doc;
+  }, 120);
+
+  /* ---- PC / Mobile toggle ----
+     The frame's box is sized in JS (not CSS aspect-ratio) so it reliably fits — as large as
+     possible — inside whatever space the 3-column layout leaves, without ever going taller
+     than it is wide for the PC view. */
+  const previewStage = document.getElementById("preview-stage");
+  const previewFrameWrap = document.querySelector(".preview-frame-wrap");
+  let currentView = "pc";
+
+  function sizePreviewStage(){
+    const padding = 28 * 2;
+    const availW = previewStage.clientWidth - padding;
+    const availH = previewStage.clientHeight - padding;
+    if(currentView === "mobile"){
+      previewFrameWrap.style.width = "390px";
+      previewFrameWrap.style.height = "844px";
+      return;
+    }
+    const ratio = 16/9;
+    let w = availW, h = w / ratio;
+    if(h > availH){ h = availH; w = h * ratio; }
+    previewFrameWrap.style.width = Math.max(w, 0) + "px";
+    previewFrameWrap.style.height = Math.max(h, 0) + "px";
+  }
+
+  document.querySelectorAll(".view-toggle button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".view-toggle button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentView = btn.dataset.view;
+      previewStage.classList.toggle("mobile", currentView === "mobile");
+      previewStage.classList.toggle("pc", currentView === "pc");
+      sizePreviewStage();
+    });
+  });
+  window.addEventListener("resize", sizePreviewStage);
+  sizePreviewStage();
+
+  /* ======================================================================
+     8. export
+  ====================================================================== */
+  function exportProjectCode(project){
+    const imgs = allImages(project);
+    const hero = imgs.find(im => im.id === project.heroImageId) || imgs[0];
+    const heroPath = hero ? (hero.relPath || hero.name) : "";
+    const L = [];
+    L.push("{");
+    L.push("  id:" + JSON.stringify(project.id) + ",");
+    L.push("  title:" + JSON.stringify(project.title) + ",");
+    L.push("  color:" + JSON.stringify(project.color) + ",");
+    L.push("  textColor:" + JSON.stringify(project.textColor||"#fff3ef") + ",");
+    L.push("  titleLetterSpacing:" + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + ",");
+    L.push("  titleLineHeight:" + (project.titleLineHeight!=null?project.titleLineHeight:1.02) + ",");
+    L.push("  boxWidthScale:" + (project.boxWidthScale!=null?project.boxWidthScale:1) + ",");
+    L.push("  boxHeightScale:" + (project.boxHeightScale!=null?project.boxHeightScale:1) + ",");
+    if(project.titleFont && project.titleFont.dataUrl){
+      L.push("  titleFontName:" + JSON.stringify(project.titleFont.name) + ",");
+      L.push("  titleFontDataUrl:" + JSON.stringify(project.titleFont.dataUrl) + ", /* base64 폰트 — 파일이 커서 코드가 길어질 수 있어요 */");
+    }
+    L.push("  meta:" + JSON.stringify(project.meta||"") + ",");
+    L.push("  hero:" + JSON.stringify(heroPath) + ",");
+    L.push("  heroType:" + JSON.stringify(project.heroType||"image") + ",");
+    if(project.heroType === "video") L.push("  heroVideoId:" + JSON.stringify(project.heroVideoId||"") + ",");
+    L.push("  social:{ youtube:" + JSON.stringify(project.social.youtube||"#") + ", vimeo:" + JSON.stringify(project.social.vimeo||"#") + ", instagram:" + JSON.stringify(project.social.instagram||"#") + " },");
+    L.push("  tag:" + JSON.stringify(project.tag||"") + ",");
+    L.push("  year:" + JSON.stringify(project.year||"") + ",");
+    L.push("  blocks:[");
+    project.blocks.forEach((b, i) => {
+      L.push("    {");
+      L.push("      label:" + JSON.stringify(b.label||"") + ",");
+      if(b.heading) L.push("      heading:" + JSON.stringify(b.heading) + ",");
+      L.push("      images:[");
+      b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
+      L.push("      ],");
+      L.push("      paragraphs:[" + (b.paragraphs||[]).filter(Boolean).map(p => JSON.stringify(p)).join(", ") + "]");
+      L.push("    }" + (i < project.blocks.length-1 ? "," : ""));
+    });
+    L.push("  ],");
+    if(project.credits && project.credits.length){
+      L.push("  credits:[");
+      project.credits.forEach(c => L.push("    [" + JSON.stringify(c[0]) + ", " + JSON.stringify(c[1]) + "],"));
+      L.push("  ]");
+    } else {
+      L.push("  credits:null");
+    }
+    L.push("}");
+    return L.join("\n");
+  }
+
+  const exportModal = document.getElementById("export-modal");
+  const exportText = document.getElementById("export-text");
+  document.getElementById("export-btn").addEventListener("click", () => {
+    const project = getCurrentProject();
+    if(!project){ alert("먼저 프로젝트를 선택하세요."); return; }
+    exportText.value = exportProjectCode(project);
+    exportModal.classList.add("open");
+  });
+  document.getElementById("export-close").addEventListener("click", () => exportModal.classList.remove("open"));
+  document.getElementById("export-copy").addEventListener("click", () => {
+    exportText.select();
+    navigator.clipboard.writeText(exportText.value).then(() => {
+      const btn = document.getElementById("export-copy");
+      const orig = btn.textContent;
+      btn.textContent = "복사됨 ✓";
+      setTimeout(() => { btn.textContent = orig; }, 1400);
+    }).catch(() => document.execCommand("copy"));
+  });
+
+  /* ======================================================================
+     9. theme toggle — bottom-left circle. Its own color previews the theme
+     it will switch TO; clicking cycles mono → blue → dark → mono.
+  ====================================================================== */
+  const THEMES = [
+    { id: "mono", key: "#ffffff" },
+    { id: "blue", key: "#AEC3F7" },
+    { id: "dark", key: "#000000" }
+  ];
+  let themeIndex = 0;
+  const themeToggleBtn = document.getElementById("theme-toggle");
+
+  function applyTheme(){
+    const theme = THEMES[themeIndex];
+    if(theme.id === "mono") delete document.body.dataset.theme;
+    else document.body.dataset.theme = theme.id;
+    const next = THEMES[(themeIndex + 1) % THEMES.length];
+    themeToggleBtn.style.background = next.key;
+    localStorage.setItem("pf-builder-theme", theme.id);
+  }
+  themeToggleBtn.addEventListener("click", () => {
+    themeIndex = (themeIndex + 1) % THEMES.length;
+    applyTheme();
+  });
+  (function initTheme(){
+    const saved = localStorage.getItem("pf-builder-theme");
+    const idx = THEMES.findIndex(t => t.id === saved);
+    themeIndex = idx > -1 ? idx : 0;
+    applyTheme();
+  })();
+
+  /* ======================================================================
+     10. boot
+  ====================================================================== */
+  async function boot(){
+    try{
+      projects = await dbGetAll();
+    }catch(e){
+      console.error("DB load failed", e);
+      projects = [];
+    }
+    projects.forEach(hydrateProject);
+    if(!projects.length){
+      const sample = buildSSFSampleProject();
+      projects.push(sample);
+      try{ await dbPut(sample); }catch(e){ console.error("sample save failed", e); }
+    }
+    if(projects.length) currentId = projects[0].id;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+  }
+  boot();
+
+})();
+</script>
+</body>
+</html>
