@@ -10,6 +10,12 @@
 - **크레딧 이미지 → 데이터 반영**: Galaxy Tab S9 프로젝트의 실제 크레딧 슬라이드 이미지를 읽어서 크레딧 22개 항목을 builder에 입력함.
 - (참고) 블록을 자유롭게 추가하는 기능은 이미 있었음 — 편집 패널 "블록 (사진 세트)" 섹션 제목 옆 **"+ 블록 추가"** 버튼.
 
+## 최근 변경 — 파비콘 추가 + 오늘 작업 GitHub/Vercel에 직접 push (2026-07-26)
+
+- **파비콘**: `jjaejae.jpg`(검정 배경+흰 워드마크, 로고 이미지화 때 썼던 그 원본)를 32/192/512px로 리사이즈해서 `favicon-32.png`/`favicon-192.png`/`favicon-512.png`로 저장, `<head>`에 `<link rel="icon">` 3개(사이즈별) + `<link rel="apple-touch-icon">` 추가.
+- 이번 대화에서 쌓인 로컬 변경(SUIT 폰트, 블록 캡션 위치, 코너 프레임 Email→Top, 조건부 소셜 박스, Vimeo/Instagram 로고, 파비콘)을 **직접 `git add`+`commit`+`push`**함(평소엔 builder.html의 PUBLISH 버튼이 하는 일이지만, 이번엔 index.html/builder.html을 직접 편집한 내용이라 수동으로 처리). 커밋 `b727792`, `origin/main`에 푸시 완료 → Vercel이 자동 재배포.
+- **확인된 사항**: `vercel domains inspect jjaejae.com` 결과 `jjaejae.com`/`www.jjaejae.com` 도메인이 이 프로젝트(`jjaejae-portfolio-2026`)에 연결은 되어 있으나, **네임서버가 아직 Cloudflare로 되어 있고 Vercel이 요구하는 네임서버(ns1/ns2.vercel-dns.com)로 안 바뀌어 있음**(`✘` 표시). 이 상태면 `jjaejae.com`이 아직 이 배포로 정상적으로 연결 안 됐을 수 있음 — DNS/네임서버 설정은 도메인 등록기관(Cloudflare) 쪽에서 변경해야 하는 부분이라 별도 확인 필요. 우선 기존 라이브 URL(`https://jjaejae-portfolio-2026.vercel.app`)에서는 바로 확인 가능함.
+
 ## 최근 변경 — Vimeo/Instagram 소셜 아이콘을 실제 로고 이미지로 교체 (2026-07-26)
 
 프로젝트 우하단 소셜박스(`.p-social`)의 Vimeo·Instagram 아이콘을 인라인 SVG에서 사용자가 준 실제 로고 이미지로 교체.
