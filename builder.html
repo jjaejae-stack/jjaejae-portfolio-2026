@@ -226,6 +226,19 @@
   #video-modal.open{display:flex;}
   #video-modal .modal-box{width:min(520px,92vw);}
 
+  /* ---------- layout modal ---------- */
+  #layout-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #layout-modal.open{display:flex;}
+  #layout-modal .modal-box{width:min(640px,92vw);}
+  .layout-preview-wrap{background:color-mix(in srgb, var(--fg) 6%, var(--bg)); padding:16px; margin:14px 0;}
+  .layout-preview{position:relative; width:100%; height:300px; background:#111; overflow:hidden; display:flex;}
+  .layout-preview.free-canvas{display:block;}
+  .layout-frame{background:#000; overflow:hidden; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;}
+  .layout-frame img{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block;}
+  .layout-frame .video-icon{display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#fff; font-size:20px; background:#222;}
+  .layout-preview.free-canvas .layout-frame{position:absolute; cursor:move; border:1px solid rgba(255,255,255,.4); box-sizing:border-box;}
+  .layout-frame .resize-handle{position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:#fff; border:1.5px solid var(--accent); border-radius:50%; cursor:nwse-resize; z-index:2;}
+
   @media (max-width:1200px){
     #app{grid-template-columns:220px 1fr 1fr;}
   }
@@ -407,6 +420,33 @@
     </div>
   </div>
 
+  <div id="layout-modal">
+    <div class="modal-box">
+      <h3>사진 레이아웃</h3>
+      <div class="view-toggle" id="layout-mode-toggle">
+        <button type="button" data-value="1">1</button>
+        <button type="button" data-value="2">2</button>
+        <button type="button" data-value="3">3</button>
+        <button type="button" data-value="all">All</button>
+        <button type="button" data-value="free">Free</button>
+      </div>
+      <div class="field-group" id="layout-direction-row" style="display:none;">
+        <div class="view-toggle" id="layout-direction-toggle">
+          <button type="button" data-value="row">옆으로 (가로)</button>
+          <button type="button" data-value="column">위아래로 (세로)</button>
+        </div>
+      </div>
+      <div class="layout-preview-wrap">
+        <div class="layout-preview" id="layout-preview"></div>
+      </div>
+      <p class="hint" id="layout-hint">Free 모드에서는 사진을 드래그해서 위치를, 우하단 모서리를 드래그해서 크기를 자유롭게 조절할 수 있습니다.</p>
+      <div class="modal-actions">
+        <button class="btn-sm" id="layout-cancel">Cancel</button>
+        <button class="btn-primary" id="layout-confirm">완료</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function(){
   "use strict";
@@ -499,7 +539,7 @@
     };
   }
   function newBlock(){
-    return { id: uid(), label:"New Block", heading:"", paragraphs:[], images:[], galleryMode:"1" };
+    return { id: uid(), label:"New Block", heading:"", paragraphs:[], images:[], galleryMode:"1", galleryDirection:"row" };
   }
   function allImages(project){
     const out = [];
@@ -516,27 +556,57 @@
   }
   /* im.url may be a blob: URL with no extension (freshly uploaded video), so video detection
      always runs against relPath/name — the url is only ever used as the actual playback src. */
-  function galleryFrameHTML(im){
+  function galleryFrameInner(im){
     const detectSrc = im.relPath || im.name || im.url;
     const playSrc = im.url;
-    if(!isVideoPath(detectSrc)) return '<div class="gallery-frame"><img src="' + playSrc + '" alt=""></div>';
+    if(!isVideoPath(detectSrc)) return '<img src="' + playSrc + '" alt="">';
     const vimeo = detectSrc.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     const yt = detectSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-    if(vimeo) return '<div class="gallery-frame"><iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
-    if(yt) return '<div class="gallery-frame"><iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
-    return '<div class="gallery-frame"><video src="' + playSrc + '" controls playsinline></video></div>';
+    if(vimeo) return '<iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+    if(yt) return '<iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+    return '<video src="' + playSrc + '" controls playsinline></video>';
+  }
+  function galleryFrameHTML(im){
+    return '<div class="gallery-frame">' + galleryFrameInner(im) + '</div>';
+  }
+  /* even-grid fallback position (percent) for a free-layout photo that has no saved position yet */
+  function defaultFreePos(i, total){
+    const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
+    const rows = Math.max(1, Math.ceil(total / cols));
+    const w = 100 / cols, h = 100 / rows;
+    const col = i % cols, row = Math.floor(i / cols);
+    return { x: col * w, y: row * h, w: w, h: h };
+  }
+  function layoutSummaryText(block){
+    const mode = block.galleryMode || "1";
+    if(mode === "free") return "Free (자유 배치)";
+    const dirLabel = (block.galleryDirection === "column") ? "세로" : "가로";
+    if(mode === "1") return "1장씩";
+    if(mode === "all") return "한번에 모두 · " + dirLabel;
+    return mode + "장씩 · " + dirLabel;
   }
   /* mode: "1" (default, one at a time — original filmstrip behavior), "2"/"3" (N per page,
-     click advances a page), "all" (every photo shown at once, no click needed). */
-  function galleryBlockHTML(images, blockKey, mode){
+     click advances a page), "all" (every photo shown at once, no click needed), "free"
+     (each photo freely positioned/sized via freeLayout, index-aligned with images). */
+  function galleryBlockHTML(images, blockKey, mode, direction, freeLayout){
     const m = mode || "1";
+    const dir = direction === "column" ? "column" : "row";
     const count = images.length || 1;
+    if(m === "free"){
+      const frames = images.map((im, i) => {
+        const pos = (freeLayout && freeLayout[i]) || defaultFreePos(i, images.length);
+        return '<div class="gallery-frame" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;">' + galleryFrameInner(im) + '</div>';
+      }).join("");
+      return '<div class="gallery mode-free" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
+        + '<div class="gallery-track">' + frames + '</div>'
+        + '</div>';
+    }
     const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
-    const modeClass = m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "");
+    const modeClass = (m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "")) + (dir === "column" && perPage > 1 ? " direction-column" : "");
     const frames = images.map(galleryFrameHTML).join("");
     const showChrome = m !== "all";
     const counterEnd = Math.min(perPage, images.length || 1);
-    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '">'
+    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '">'
       + '<div class="gallery-track">' + frames + '</div>'
       + (showChrome ? '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>' : '')
       + (showChrome ? '<div class="gallery-hint">Click for next</div>' : '')
@@ -909,9 +979,19 @@
     if(kind === "blocks"){
       project.blocks = ids.map(id => project.blocks.find(b => b.id === id)).filter(Boolean);
     } else if(kind.indexOf("images:") === 0){
+      /* dragging a photo/video into a *different* block's list is allowed — look the
+         item up across every block (not just this one) so a cross-block drag moves it
+         instead of losing it, then strip it out of whichever block it used to belong to. */
       const blockId = kind.slice(7);
       const block = project.blocks.find(b => b.id === blockId);
-      if(block) block.images = ids.map(id => block.images.find(im => im.id === id)).filter(Boolean);
+      if(block){
+        const pool = allImages(project);
+        block.images = ids.map(id => pool.find(im => im.id === id)).filter(Boolean);
+        project.blocks.forEach(b => {
+          if(b.id === blockId) return;
+          b.images = b.images.filter(im => ids.indexOf(im.id) === -1);
+        });
+      }
     }
     saveAndRefresh();
   }
@@ -988,12 +1068,9 @@
       +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
       + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
       +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
-      + '<div class="field-group"><label class="field-label">사진 레이아웃 — 한 번에 몇 장씩 보여줄지</label>'
-      +   '<div class="view-toggle gallery-mode-toggle" data-block-id="' + block.id + '">'
-      +     ["1","2","3","all"].map(v =>
-              '<button type="button" data-value="' + v + '"' + ((block.galleryMode||"1") === v ? " class=\"active\"" : "") + '>' + (v === "all" ? "한번에 모두" : v + "장씩") + '</button>'
-            ).join("")
-      +   '</div></div>'
+      + '<div class="field-group"><label class="field-label">사진 레이아웃</label>'
+      +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">사진 레이아웃 — ' + layoutSummaryText(block) + '</button>'
+      + '</div>'
       + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경)</label>'
       + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
       + '<div class="block-actions">'
@@ -1750,6 +1827,154 @@
     closeVideoModal();
   });
 
+  /* ---- layout modal ----
+     Mode/direction/free-positions are staged in layoutDraft while the modal is open and
+     only written back to the real block on "완료" — Cancel just closes without side effects. */
+  const layoutModal = document.getElementById("layout-modal");
+  const layoutModeToggle = document.getElementById("layout-mode-toggle");
+  const layoutDirectionRow = document.getElementById("layout-direction-row");
+  const layoutDirectionToggle = document.getElementById("layout-direction-toggle");
+  const layoutPreviewEl = document.getElementById("layout-preview");
+  const layoutHint = document.getElementById("layout-hint");
+
+  let layoutTargetBlockId = null;
+  let layoutDraft = null; // { mode, direction, free: {imageId: {x,y,w,h}} }
+  let layoutDrag = null;  // { imageId, mode:"move"|"resize", startX, startY, startPos, canvasRect }
+
+  function layoutPreviewThumb(im){
+    const isVideo = isVideoPath(im.relPath || im.name);
+    return isVideo ? '<div class="video-icon">🎬</div>' : '<img src="' + im.url + '" alt="">';
+  }
+
+  function openLayoutModal(blockId){
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === blockId);
+    if(!block) return;
+    layoutTargetBlockId = blockId;
+    const free = {};
+    (block.images||[]).forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, block.images.length); });
+    layoutDraft = { mode: block.galleryMode || "1", direction: block.galleryDirection || "row", free: free };
+    renderLayoutModal();
+    layoutModal.classList.add("open");
+  }
+  function closeLayoutModal(){
+    layoutModal.classList.remove("open");
+    layoutTargetBlockId = null;
+    layoutDraft = null;
+  }
+  function renderLayoutModal(){
+    layoutModeToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.value === layoutDraft.mode));
+    layoutDirectionToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.value === layoutDraft.direction));
+    const showDirection = layoutDraft.mode !== "1" && layoutDraft.mode !== "free";
+    layoutDirectionRow.style.display = showDirection ? "block" : "none";
+    layoutHint.style.display = layoutDraft.mode === "free" ? "block" : "none";
+    renderLayoutPreview();
+  }
+  function renderLayoutPreview(){
+    const project = getCurrentProject();
+    const block = project.blocks.find(b => b.id === layoutTargetBlockId);
+    const images = block.images || [];
+    layoutPreviewEl.className = "layout-preview";
+    layoutPreviewEl.style.flexDirection = "";
+    layoutPreviewEl.style.flexWrap = "";
+    if(!images.length){
+      layoutPreviewEl.innerHTML = '<div style="color:#888;font-size:12px;display:flex;align-items:center;justify-content:center;width:100%;">사진을 먼저 추가하세요</div>';
+      return;
+    }
+    if(layoutDraft.mode === "free"){
+      layoutPreviewEl.classList.add("free-canvas");
+      layoutPreviewEl.innerHTML = images.map((im, i) => {
+        const pos = layoutDraft.free[im.id] || defaultFreePos(i, images.length);
+        layoutDraft.free[im.id] = pos;
+        return '<div class="layout-frame" data-image-id="' + im.id + '" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;">'
+          + layoutPreviewThumb(im)
+          + '<div class="resize-handle"></div>'
+          + '</div>';
+      }).join("");
+      return;
+    }
+    const mode = layoutDraft.mode;
+    const perPage = mode === "all" ? images.length : parseInt(mode, 10);
+    const shown = images.slice(0, perPage);
+    const direction = layoutDraft.direction;
+    layoutPreviewEl.style.flexDirection = direction === "column" ? "column" : "row";
+    layoutPreviewEl.style.flexWrap = mode === "all" ? "wrap" : "nowrap";
+    layoutPreviewEl.innerHTML = shown.map(im => {
+      const style = mode === "all"
+        ? ("flex:1 1 " + (direction === "column" ? "100%" : "120px") + ";" + (direction === "column" ? "height:90px;" : "height:100%;"))
+        : ("flex:1 1 0;" + (direction === "column" ? "width:100%;" : "height:100%;"));
+      return '<div class="layout-frame" style="' + style + '">' + layoutPreviewThumb(im) + '</div>';
+    }).join("");
+  }
+
+  layoutModeToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if(!btn) return;
+    layoutDraft.mode = btn.dataset.value;
+    renderLayoutModal();
+  });
+  layoutDirectionToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if(!btn) return;
+    layoutDraft.direction = btn.dataset.value;
+    renderLayoutModal();
+  });
+  document.getElementById("layout-cancel").addEventListener("click", closeLayoutModal);
+  document.getElementById("layout-confirm").addEventListener("click", () => {
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === layoutTargetBlockId);
+    if(!block){ closeLayoutModal(); return; }
+    snapshot();
+    block.galleryMode = layoutDraft.mode;
+    block.galleryDirection = layoutDraft.direction;
+    if(layoutDraft.mode === "free"){
+      (block.images||[]).forEach(im => {
+        if(layoutDraft.free[im.id]) im.free = layoutDraft.free[im.id];
+      });
+    }
+    renderEditor();
+    saveAndRefresh();
+    closeLayoutModal();
+  });
+
+  layoutPreviewEl.addEventListener("mousedown", (e) => {
+    if(!layoutDraft || layoutDraft.mode !== "free") return;
+    const frame = e.target.closest(".layout-frame");
+    if(!frame) return;
+    const imageId = frame.dataset.imageId;
+    const isResize = !!e.target.closest(".resize-handle");
+    layoutDrag = {
+      imageId: imageId,
+      mode: isResize ? "resize" : "move",
+      startX: e.clientX,
+      startY: e.clientY,
+      startPos: Object.assign({}, layoutDraft.free[imageId]),
+      canvasRect: layoutPreviewEl.getBoundingClientRect()
+    };
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", (e) => {
+    if(!layoutDrag) return;
+    const dxPct = (e.clientX - layoutDrag.startX) / layoutDrag.canvasRect.width * 100;
+    const dyPct = (e.clientY - layoutDrag.startY) / layoutDrag.canvasRect.height * 100;
+    const pos = layoutDraft.free[layoutDrag.imageId];
+    if(layoutDrag.mode === "move"){
+      pos.x = Math.max(0, Math.min(100 - pos.w, layoutDrag.startPos.x + dxPct));
+      pos.y = Math.max(0, Math.min(100 - pos.h, layoutDrag.startPos.y + dyPct));
+    } else {
+      pos.w = Math.max(8, Math.min(100 - pos.x, layoutDrag.startPos.w + dxPct));
+      pos.h = Math.max(8, Math.min(100 - pos.y, layoutDrag.startPos.h + dyPct));
+    }
+    const frameEl = layoutPreviewEl.querySelector('.layout-frame[data-image-id="' + layoutDrag.imageId + '"]');
+    if(frameEl){
+      frameEl.style.left = pos.x + "%";
+      frameEl.style.top = pos.y + "%";
+      frameEl.style.width = pos.w + "%";
+      frameEl.style.height = pos.h + "%";
+    }
+  });
+  document.addEventListener("mouseup", () => { layoutDrag = null; });
+
   async function runGenerate(){
     const project = getCurrentProject();
     if(!project) return;
@@ -1975,18 +2200,8 @@
       return;
     }
 
-    const galleryModeBtn = e.target.closest('.gallery-mode-toggle button');
-    if(galleryModeBtn){
-      const blockId = galleryModeBtn.closest('.gallery-mode-toggle').dataset.blockId;
-      const block = project.blocks.find(b => b.id === blockId);
-      if(block){
-        snapshot();
-        block.galleryMode = galleryModeBtn.dataset.value;
-        renderEditor();
-        saveAndRefresh();
-      }
-      return;
-    }
+    const openLayoutBtn = e.target.closest('[data-action="open-layout"]');
+    if(openLayoutBtn){ openLayoutModal(openLayoutBtn.dataset.blockId); return; }
 
     const addFolderBtn = e.target.closest('[data-action="add-folder"]');
     if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
@@ -2115,10 +2330,16 @@
   /* ======================================================================
      7. live preview
   ====================================================================== */
+  /* colorable icons: the shape comes from a white PNG used as a CSS mask, so the
+     rendered color follows currentColor (project text color) instead of being baked
+     into the image — same technique as index.html's socialIcon(). */
+  function socialIconMask(file){
+    return '<span class="social-icon-mask" style="-webkit-mask-image:url(icons/' + file + ');mask-image:url(icons/' + file + ');"></span>';
+  }
   const SOCIAL_ICONS = {
-    youtube:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>',
-    vimeo:'<img src="icons/vimeo.png" alt="Vimeo" style="height:14px;width:auto;display:block;">',
-    instagram:'<img src="icons/instagram.png" alt="Instagram" style="height:15px;width:auto;display:block;">'
+    youtube: socialIconMask("youtube.png"),
+    vimeo: socialIconMask("vimeo.png"),
+    instagram: socialIconMask("instagram.png")
   };
 
   const PREVIEW_CSS = `
@@ -2143,6 +2364,7 @@
     .p-colorbox h1{font-size:clamp(2.2rem,4.4vw,4.6rem);font-weight:800;letter-spacing:-.02em;line-height:1.02;word-break:keep-all;}
     .p-social{position:absolute;right:var(--pmargin);bottom:var(--pmargin);z-index:20;display:flex;flex-direction:column;gap:12px;padding:14px;border:3px solid #111;box-shadow:8px 8px 0 #111;color:#fff3ef;}
     .p-social a{width:22px;height:22px;display:flex;align-items:center;justify-content:center;}
+    .social-icon-mask{display:inline-block;width:17px;height:15px;background-color:currentColor;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-position:center;mask-position:center;-webkit-mask-size:contain;mask-size:contain;}
     @media (max-width:760px){
       .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px; border-width:2px; box-shadow:6px 6px 0 #111;}
       .p-colorbox h1{font-size:clamp(1.6rem, 8vw, 2.6rem);}
@@ -2161,15 +2383,26 @@
     .gallery:hover .gallery-hint{opacity:1;}
     @media (max-width:760px){ .gallery{min-height:0;} }
     .gallery.mode-multi .gallery-frame{display:none;flex:1 1 0;height:100%;}
-    .gallery.mode-multi .gallery-frame.visible{display:block;}
-    .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video{width:100%;height:100%;object-fit:cover;}
+    .gallery.mode-multi .gallery-frame.visible{display:flex;align-items:center;justify-content:center;background:#000;}
+    .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
     .gallery.mode-multi .gallery-frame iframe{width:100%;height:100%;aspect-ratio:auto;}
     .gallery.mode-multi .gallery-track{gap:2px;}
     .gallery.mode-all{height:auto!important;max-height:none!important;min-height:0;cursor:default;overflow:visible;background:none;}
     .gallery.mode-all .gallery-track{flex-wrap:wrap;height:auto;gap:8px;transform:none!important;}
-    .gallery.mode-all .gallery-frame{flex:1 1 260px;height:280px;}
-    .gallery.mode-all .gallery-frame img,.gallery.mode-all .gallery-frame video{width:100%;height:100%;object-fit:cover;display:block;}
+    .gallery.mode-all .gallery-frame{flex:1 1 260px;height:280px;display:flex;align-items:center;justify-content:center;background:#000;}
+    .gallery.mode-all .gallery-frame img,.gallery.mode-all .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
     .gallery.mode-all .gallery-frame iframe{width:100%;height:auto;aspect-ratio:16/9;}
+    .gallery.direction-column .gallery-track{flex-direction:column;}
+    .gallery.mode-multi.direction-column{height:auto!important;max-height:none!important;min-height:0;}
+    .gallery.mode-multi.direction-column .gallery-track{height:auto;}
+    .gallery.mode-multi.direction-column .gallery-frame.visible{width:100%;height:340px;flex:none;}
+    .gallery.mode-all.direction-column .gallery-track{flex-direction:column;flex-wrap:nowrap;}
+    .gallery.mode-all.direction-column .gallery-frame{flex:none;width:100%;height:340px;}
+    .gallery.mode-free{position:relative;height:60vh;max-height:640px;min-height:280px;cursor:default;background:#111;}
+    .gallery.mode-free .gallery-track{position:relative;height:100%;display:block;}
+    .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
+    .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
+    .gallery.mode-free .gallery-frame iframe{width:100%;height:100%;border:0;}
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
@@ -2234,7 +2467,7 @@
     'function initGallery(g){',
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
-    '  if(mode === "all") return;',
+    '  if(mode === "all" || mode === "free") return;',
     '  if(perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
     '  showGalleryPage(g, 0);',
     '  g.addEventListener("click", function(){',
@@ -2268,7 +2501,7 @@
       return '<div class="p-block">'
         + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
         + heading + paras
-        + galleryBlockHTML(block.images||[], "b" + bi, block.galleryMode)
+        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.images.map(im => im.free)) : "")
         + '</div>';
     }).join("");
 
@@ -2396,9 +2629,18 @@
       L.push("      label:" + JSON.stringify(b.label||"") + ",");
       if(b.heading) L.push("      heading:" + JSON.stringify(b.heading) + ",");
       if(b.galleryMode && b.galleryMode !== "1") L.push("      galleryMode:" + JSON.stringify(b.galleryMode) + ",");
+      if(b.galleryDirection === "column") L.push("      galleryDirection:" + JSON.stringify(b.galleryDirection) + ",");
       L.push("      images:[");
       b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
       L.push("      ],");
+      if(b.galleryMode === "free"){
+        L.push("      freeLayout:[");
+        b.images.forEach((im, i) => {
+          const pos = im.free || defaultFreePos(i, b.images.length);
+          L.push("        {x:" + pos.x.toFixed(2) + ",y:" + pos.y.toFixed(2) + ",w:" + pos.w.toFixed(2) + ",h:" + pos.h.toFixed(2) + "},");
+        });
+        L.push("      ],");
+      }
       L.push("      paragraphs:[" + (b.paragraphs||[]).filter(Boolean).map(p => JSON.stringify(p)).join(", ") + "]");
       L.push("    }" + (i < project.blocks.length-1 ? "," : ""));
     });

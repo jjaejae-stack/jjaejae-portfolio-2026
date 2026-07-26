@@ -293,6 +293,15 @@
     transition:opacity .2s, transform .2s;
   }
   .p-social a:hover{opacity:.6; transform:scale(1.08);}
+  /* icon artwork comes from a white PNG mask so the shape stays pixel-accurate to the
+     real brand logo, while the fill color still follows currentColor (project color). */
+  .social-icon-mask{
+    display:inline-block; width:17px; height:15px;
+    background-color:currentColor;
+    -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+    -webkit-mask-position:center; mask-position:center;
+    -webkit-mask-size:contain; mask-size:contain;
+  }
 
   @media (max-width:760px){
     .p-colorbox{width:min(62%, 280px); max-width:min(62%, 280px); height:auto; min-height:0; padding:36px 22px 22px; border-width:2px; box-shadow:6px 6px 0 #111;}
@@ -347,15 +356,26 @@
     .gallery{min-height:0;}
   }
   .gallery.mode-multi .gallery-frame{display:none; flex:1 1 0; height:100%;}
-  .gallery.mode-multi .gallery-frame.visible{display:block;}
-  .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video{width:100%; height:100%; object-fit:cover;}
+  .gallery.mode-multi .gallery-frame.visible{display:flex;align-items:center;justify-content:center;background:#000;}
+  .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; margin:auto; display:block;}
   .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; aspect-ratio:auto;}
   .gallery.mode-multi .gallery-track{gap:2px;}
   .gallery.mode-all{height:auto!important; max-height:none!important; min-height:0; cursor:default; overflow:visible; background:none;}
   .gallery.mode-all .gallery-track{flex-wrap:wrap; height:auto; gap:8px; transform:none!important;}
-  .gallery.mode-all .gallery-frame{flex:1 1 260px; height:280px;}
-  .gallery.mode-all .gallery-frame img, .gallery.mode-all .gallery-frame video{width:100%; height:100%; object-fit:cover; display:block;}
+  .gallery.mode-all .gallery-frame{flex:1 1 260px; height:280px; display:flex; align-items:center; justify-content:center; background:#000;}
+  .gallery.mode-all .gallery-frame img, .gallery.mode-all .gallery-frame video{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; margin:auto; display:block;}
   .gallery.mode-all .gallery-frame iframe{width:100%; height:auto; aspect-ratio:16/9;}
+  .gallery.direction-column .gallery-track{flex-direction:column;}
+  .gallery.mode-multi.direction-column{height:auto!important; max-height:none!important; min-height:0;}
+  .gallery.mode-multi.direction-column .gallery-track{height:auto;}
+  .gallery.mode-multi.direction-column .gallery-frame.visible{width:100%; height:340px; flex:none;}
+  .gallery.mode-all.direction-column .gallery-track{flex-direction:column; flex-wrap:nowrap;}
+  .gallery.mode-all.direction-column .gallery-frame{flex:none; width:100%; height:340px;}
+  .gallery.mode-free{position:relative; height:60vh; max-height:640px; min-height:280px; cursor:default; background:#111;}
+  .gallery.mode-free .gallery-track{position:relative; height:100%; display:block;}
+  .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
+  .gallery.mode-free .gallery-frame img, .gallery.mode-free .gallery-frame video{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; margin:auto; display:block;}
+  .gallery.mode-free .gallery-frame iframe{width:100%; height:100%; border:0;}
 
   /* 블록 이름(라벨)·헤딩·본문은 사진 위에 겹치는 게 아니라, 페이지 안에서 사진 "윗부분"(위쪽)에
      일반 텍스트로 먼저 오고 그 아래에 사진이 옴 */
@@ -572,13 +592,23 @@
     if(/^https?:\/\//i.test(src)) return true;
     return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(src);
   }
-  function mediaFrameHTML(src){
-    if(!isVideoSrc(src)) return `<div class="gallery-frame"><img src="${u(src)}" alt=""></div>`;
+  function mediaFrameInner(src){
+    if(!isVideoSrc(src)) return `<img src="${u(src)}" alt="">`;
     const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
-    if(vimeo) return `<div class="gallery-frame"><iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
-    if(yt) return `<div class="gallery-frame"><iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
-    return `<div class="gallery-frame"><video src="${u(src)}" controls playsinline></video></div>`;
+    if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+    if(yt) return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+    return `<video src="${u(src)}" controls playsinline></video>`;
+  }
+  function mediaFrameHTML(src){
+    return `<div class="gallery-frame">${mediaFrameInner(src)}</div>`;
+  }
+  function defaultFreePos(i, total){
+    const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
+    const rows = Math.max(1, Math.ceil(total / cols));
+    const w = 100 / cols, h = 100 / rows;
+    const col = i % cols, row = Math.floor(i / cols);
+    return { x: col * w, y: row * h, w: w, h: h };
   }
 
   /* ---------------- render: greeting marquee ----------------
@@ -800,6 +830,7 @@
       blocks:[
         {
           label:"Campaign",
+          galleryDirection:"column",
           images:[
             "Galaxy Tab S9/64760a201750005.667a6886923e0.webp",
             "Galaxy Tab S9/1882951300-f8c19dea896595a368f64ccf173e4ae9d7b082a51b3b8c9fb54a865976821525-d.avif",
@@ -815,6 +846,7 @@
         },
         {
           label:"Key Visual",
+          galleryMode:"2",
           images:[
             "Galaxy Tab S9/a03fd8201750005.669e0c6bc0408.gif",
             "Galaxy Tab S9/988f44201750005.669e15c5e1059.gif",
@@ -1140,22 +1172,36 @@
   const scrollRoot = document.getElementById("project-scroll");
   const closeBtn = document.getElementById("project-close");
 
+  /* colorable icons: the shape comes from a white PNG used as a CSS mask, so the
+     actual rendered color is whatever `currentColor` resolves to (the .p-social
+     box's text color) — this keeps the exact logo artwork instead of a hand-drawn
+     SVG path, while still letting the project's color settings tint it. */
   function socialIcon(type){
-    if(type==="youtube") return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>`;
-    if(type==="vimeo") return `<img src="${u("icons/vimeo.png")}" alt="Vimeo" style="height:14px; width:auto; display:block;">`;
-    return `<img src="${u("icons/instagram.png")}" alt="Instagram" style="height:15px; width:auto; display:block;">`;
+    const file = type === "youtube" ? "youtube.png" : type === "vimeo" ? "vimeo.png" : "instagram.png";
+    return `<span class="social-icon-mask" style="-webkit-mask-image:url(${u("icons/"+file)});mask-image:url(${u("icons/"+file)});"></span>`;
   }
 
-  function galleryHTML(images, blockId, galleryMode){
+  function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout){
     const m = galleryMode || "1";
+    const dir = galleryDirection === "column" ? "column" : "row";
     const count = images.length || 1;
+    if(m === "free"){
+      const frames = images.map((src, i) => {
+        const pos = (freeLayout && freeLayout[i]) || defaultFreePos(i, images.length);
+        return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;">${mediaFrameInner(src)}</div>`;
+      }).join("");
+      return `
+      <div class="gallery mode-free" data-block="${blockId}" data-count="${count}" data-mode="free">
+        <div class="gallery-track">${frames}</div>
+      </div>`;
+    }
     const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
-    const modeClass = m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "");
+    const modeClass = (m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "")) + (dir === "column" && perPage > 1 ? " direction-column" : "");
     const frames = images.map(mediaFrameHTML).join("");
     const showChrome = m !== "all";
     const counterEnd = Math.min(perPage, images.length || 1);
     return `
-      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}">
+      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}">
         <div class="gallery-track">${frames}</div>
         ${showChrome ? `<div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>` : ""}
         ${showChrome ? `<div class="gallery-hint">Click for next</div>` : ""}
@@ -1220,7 +1266,7 @@
           </div>
           ${heading}
           ${paras}
-          ${galleryHTML(block.images, blockId, block.galleryMode)}
+          ${block.images && block.images.length ? galleryHTML(block.images, blockId, block.galleryMode, block.galleryDirection, block.freeLayout) : ""}
         </div>`;
     }).join("");
 
@@ -1321,7 +1367,7 @@
   function initGallery(g){
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
-    if(mode === "all") return;
+    if(mode === "all" || mode === "free") return;
     if(perPage <= 1){
       g.addEventListener("click", () => rollGallery(g));
       activateGalleryFrame(g, 0);
