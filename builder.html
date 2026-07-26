@@ -672,6 +672,7 @@
       +   '<button class="btn-secondary" id="save-btn" data-action="save">SAVE</button>'
       +   '<button class="btn-secondary" id="translate-ko-en-btn" data-action="translate-ko-en">KR → EN</button>'
       +   '<button class="btn-secondary" id="translate-en-ko-btn" data-action="translate-en-ko">EN → KR</button>'
+      +   '<button class="btn-secondary" id="import-btn" data-action="import">사이트에서 가져오기</button>'
       +   '<button class="btn-primary" id="publish-btn" data-action="publish">PUBLISH</button>'
       + '</div>'
       + '<p id="generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
@@ -1028,6 +1029,92 @@
     }
   }
 
+  /* ---- Import from site: the reverse of Publish. Pulls this project's id out of
+     index.html (live PROJECTS, or the commented-out REST_OF_PROJECTS draft block)
+     via server.py, and overwrites the current builder project with it. ---- */
+  function applySiteDataToProject(project, obj){
+    project.title = obj.title || project.title;
+    project.color = obj.color || project.color;
+    project.textColor = obj.textColor || project.textColor;
+    if(obj.titleLetterSpacing != null) project.titleLetterSpacing = obj.titleLetterSpacing;
+    if(obj.titleLineHeight != null) project.titleLineHeight = obj.titleLineHeight;
+    if(obj.boxWidthScale != null) project.boxWidthScale = obj.boxWidthScale;
+    if(obj.boxHeightScale != null) project.boxHeightScale = obj.boxHeightScale;
+    if(obj.titleFontName && obj.titleFontDataUrl){
+      project.titleFont = { name: obj.titleFontName, dataUrl: obj.titleFontDataUrl };
+    }
+    project.meta = obj.meta || "";
+    project.heroType = obj.heroType || "image";
+    project.heroVideoId = obj.heroVideoId || "";
+    project.social = {
+      youtube: (obj.social && obj.social.youtube) || "",
+      vimeo: (obj.social && obj.social.vimeo) || "",
+      instagram: (obj.social && obj.social.instagram) || ""
+    };
+    project.tag = obj.tag || "";
+    project.year = obj.year || "";
+    project.blocks = (obj.blocks || []).map(b => ({
+      id: uid(),
+      label: b.label || "",
+      heading: b.heading || "",
+      paragraphs: b.paragraphs || [],
+      images: (b.images || []).map(relPath => ({ id: uid(), relPath: relPath, name: relPath.split("/").pop(), url: relPath }))
+    }));
+    if(!project.blocks.length) project.blocks.push(newBlock());
+    project.credits = (obj.credits || []).map(c => [c[0], c[1]]);
+    const heroImg = allImages(project).find(im => im.relPath === obj.hero);
+    project.heroImageId = heroImg ? heroImg.id : (allImages(project)[0] ? allImages(project)[0].id : null);
+  }
+
+  async function runImportFromSite(){
+    const project = getCurrentProject();
+    if(!project) return;
+    if(!confirm('"' + (project.title || "Untitled") + '" 프로젝트 내용을 index.html(실제 사이트)에서 가져올까요?\n\n지금 builder에 입력된 내용은 덮어씌워집니다.')) return;
+
+    const btn = document.getElementById("import-btn");
+    const status = document.getElementById("generate-status");
+    if(btn){ btn.disabled = true; btn.textContent = "가져오는 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "index.html에서 데이터를 가져오는 중..."; }
+
+    try{
+      const url = GENERATE_SERVER + "/site-project?id=" + encodeURIComponent(project.id) + "&title=" + encodeURIComponent(project.title || "");
+      const res = await fetch(url);
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      const obj = (new Function("return (" + data.code + ")"))();
+      snapshot();
+      applySiteDataToProject(project, obj);
+
+      /* Builder-created ids have a random suffix and won't always match the site's
+         canonical id — if the server matched by title instead, adopt that id so a
+         later Publish updates this same live entry instead of creating a duplicate. */
+      if(data.id && data.id !== project.id){
+        const oldId = project.id;
+        project.id = data.id;
+        currentId = data.id;
+        dbDelete(oldId).catch(() => {});
+      }
+
+      renderSidebar();
+      renderEditor();
+      saveAndRefresh();
+
+      if(status) status.textContent = "완료 — 사이트 데이터를 불러왔습니다.";
+      if(btn) btn.textContent = "가져옴 ✓";
+    }catch(e){
+      alert(
+        "가져오기 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지, index.html에 이 프로젝트 id가 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(status) status.style.display = "none";
+    }finally{
+      setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "사이트에서 가져오기"; } }, 1800);
+    }
+  }
+
   /* ---- Publish: sends this project's exported code to server.py, which writes it
      into index.html's live PROJECTS array and git push's it — Vercel then auto-deploys
      from the GitHub repo. Requires server.py running AND GitHub remote configured. ---- */
@@ -1180,6 +1267,7 @@
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
     if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
+    if(e.target.closest('[data-action="import"]')){ runImportFromSite(); return; }
     if(e.target.closest('[data-action="publish"]')){ runPublish(); return; }
 
     const toggleHead = e.target.closest('[data-toggle]');
