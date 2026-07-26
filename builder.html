@@ -160,6 +160,13 @@
   .image-row .hero-toggle:hover{border-color:var(--accent); color:var(--accent);}
   .image-list-empty{font-size:12px; color:var(--muted); padding:10px 0;}
 
+  .hero-image-row{display:flex; gap:12px; align-items:flex-start;}
+  .hero-thumb{width:96px; height:96px; object-fit:cover; flex:0 0 auto; background:var(--fg); border:1px solid var(--line-strong);}
+  .hero-thumb-empty{display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--muted); background:color-mix(in srgb, var(--fg) 6%, var(--bg));}
+  .hero-image-controls{flex:1; min-width:0; display:flex; flex-direction:column; gap:8px;}
+
+  .video-thumb{display:flex; align-items:center; justify-content:center; font-size:18px;}
+
   .block-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .credit-row{display:flex; gap:8px; margin-bottom:8px;}
   .credit-row input{flex:1;}
@@ -213,6 +220,11 @@
   #crop-size-hint{text-align:center; font-size:12px; color:var(--muted); margin-top:-4px;}
   .icon-btn.crop-btn{flex:0 0 auto;}
   .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
+
+  /* ---------- video-add modal ---------- */
+  #video-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #video-modal.open{display:flex;}
+  #video-modal .modal-box{width:min(520px,92vw);}
 
   @media (max-width:1200px){
     #app{grid-template-columns:220px 1fr 1fr;}
@@ -368,6 +380,32 @@
     </div>
   </div>
 
+  <div id="video-modal">
+    <div class="modal-box">
+      <h3>동영상 추가</h3>
+      <div class="view-toggle" id="video-tab-toggle">
+        <button type="button" data-tab="file">파일 첨부</button>
+        <button type="button" data-tab="link">링크 첨부</button>
+      </div>
+      <div class="field-group" id="video-file-panel">
+        <label class="field-label">동영상 파일 (mp4, webm 등)</label>
+        <div class="field-row" style="align-items:center;">
+          <button type="button" class="btn-sm" id="video-file-pick">파일 선택</button>
+          <span class="fname" id="video-file-name">선택된 파일 없음</span>
+        </div>
+        <p class="hint">퍼블리시하려면 이 파일을 실제로 프로젝트 폴더 안에 넣어주셔야 사이트에서 재생됩니다 (사진 업로드와 동일).</p>
+      </div>
+      <div class="field-group" id="video-link-panel" style="display:none;">
+        <label class="field-label">동영상 링크 (Vimeo, YouTube, 또는 직접 mp4 링크)</label>
+        <input class="field" id="video-link-input" placeholder="https://vimeo.com/... 또는 https://youtube.com/watch?v=...">
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="video-cancel">Cancel</button>
+        <button class="btn-primary" id="video-confirm">추가</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function(){
   "use strict";
@@ -453,6 +491,7 @@
       heroType: "image",
       heroVideoId: "",
       heroImageId: null,
+      heroImage: null,
       social: { youtube:"", vimeo:"", instagram:"" },
       blocks: [ { id: uid(), label:"Work", heading:"", paragraphs:["Role — Art Direction"], images:[] } ],
       credits: []
@@ -466,6 +505,36 @@
     (project.blocks||[]).forEach(b => (b.images||[]).forEach(im => out.push(im)));
     return out;
   }
+  /* A block "image" entry is treated as video if its path is an http(s) link (Vimeo/YouTube/
+     direct video URL) or ends in a common video extension — no separate type field needed,
+     the exported code (and index.html's PROJECTS array) only ever stores plain path strings. */
+  function isVideoPath(src){
+    if(!src) return false;
+    if(/^https?:\/\//i.test(src)) return true;
+    return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(src);
+  }
+  /* im.url may be a blob: URL with no extension (freshly uploaded video), so video detection
+     always runs against relPath/name — the url is only ever used as the actual playback src. */
+  function galleryFrameHTML(im){
+    const detectSrc = im.relPath || im.name || im.url;
+    const playSrc = im.url;
+    if(!isVideoPath(detectSrc)) return '<div class="gallery-frame"><img src="' + playSrc + '" alt=""></div>';
+    const vimeo = detectSrc.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    const yt = detectSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    if(vimeo) return '<div class="gallery-frame"><iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
+    if(yt) return '<div class="gallery-frame"><iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>';
+    return '<div class="gallery-frame"><video src="' + playSrc + '" controls playsinline></video></div>';
+  }
+  function cloneAsHeroImage(im){
+    const clone = { id: uid(), relPath: im.relPath, name: im.name };
+    if(im.file){
+      clone.file = im.file;
+      try{ clone.url = URL.createObjectURL(im.file); }catch(e){ clone.url = ""; }
+    } else {
+      clone.url = im.url;
+    }
+    return clone;
+  }
   function hydrateProject(project){
     allImages(project).forEach(im => {
       if(im.file){
@@ -474,6 +543,9 @@
       /* path-only sample images (no File — just a relative path next to builder.html)
          already have a usable url and don't need a blob URL. */
     });
+    if(project.heroImage && project.heroImage.file){
+      try{ project.heroImage.url = URL.createObjectURL(project.heroImage.file); }catch(e){ project.heroImage.url = ""; }
+    }
     return project;
   }
 
@@ -506,6 +578,7 @@
       heroType: "video",
       heroVideoId: "615843658",
       heroImageId: set1[0].id,
+      heroImage: cloneAsHeroImage(set1[0]),
       social: { youtube:"", vimeo:"https://vimeo.com/615843658", instagram:"https://www.instagram.com/ssf_shop_official/" },
       blocks: [
         { id: uid(), label:"Brand Film", heading:"Fashion that the world loves.", images:set1, paragraphs:[
@@ -858,20 +931,26 @@
   }
 
   function heroSelectOptions(project){
-    const imgs = allImages(project);
-    if(!imgs.length) return '<option value="">(사진을 먼저 추가하세요)</option>';
-    return imgs.map(im => {
-      const sel = im.id === project.heroImageId ? " selected" : "";
-      return '<option value="' + im.id + '"' + sel + '>' + escapeHTML(im.relPath || im.name) + '</option>';
-    }).join("");
+    const imgs = allImages(project).filter(im => !isVideoPath(im.relPath || im.name));
+    const empty = '<option value="">(사진을 먼저 추가하세요)</option>';
+    const placeholder = '<option value="">— 사진 목록에서 골라 히어로로 복사 —</option>';
+    if(!imgs.length) return empty;
+    return placeholder + imgs.map(im =>
+      '<option value="' + im.id + '">' + escapeHTML(im.relPath || im.name) + '</option>'
+    ).join("");
   }
 
   function imageRowHTML(im){
+    const isVideo = isVideoPath(im.relPath || im.name);
+    const thumb = isVideo
+      ? '<div class="thumb video-thumb">🎬</div>'
+      : '<img class="thumb" src="' + im.url + '" alt="">';
+    const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
     return '<div class="image-row" draggable="true" data-sort-item data-item-id="' + im.id + '">'
       + '<span class="drag-handle">⠿</span>'
-      + '<img class="thumb" src="' + im.url + '" alt="">'
+      + thumb
       + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
-      + '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>'
+      + cropBtn
       + '<button class="icon-btn" data-action="remove-image" data-image-id="' + im.id + '">삭제</button>'
       + '</div>';
   }
@@ -890,11 +969,12 @@
       +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
       + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
       +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
-      + '<label class="field-label">사진 (드래그로 순서 변경)</label>'
+      + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경)</label>'
       + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
       + '<div class="block-actions">'
       +   '<button class="btn-sm" data-action="add-folder" data-block-id="' + block.id + '">폴더에서 불러오기</button>'
       +   '<button class="btn-sm" data-action="add-files" data-block-id="' + block.id + '">사진 추가</button>'
+      +   '<button class="btn-sm" data-action="add-video" data-block-id="' + block.id + '">동영상 추가</button>'
       + '</div>'
       + '</div>';
   }
@@ -982,10 +1062,19 @@
       +     '<label><input type="radio" name="heroType" data-field="heroType" value="image"' + (project.heroType!=="video"?" checked":"") + '> 이미지</label>'
       +     '<label><input type="radio" name="heroType" data-field="heroType" value="video"' + (project.heroType==="video"?" checked":"") + '> 비메오 영상 자동재생</label>'
       +   '</div>'
-      +   '<div class="field-group"><label class="field-label">히어로 이미지 (아래 사진 목록 중 선택)</label>'
-      +     '<div class="field-row" style="align-items:center;">'
-      +       '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select>'
-      +       (project.heroImageId ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImageId + '">크롭</button>' : '')
+      +   '<div class="field-group"><label class="field-label">히어로 이미지 — 다른 사진에는 영향 없이 이 이미지만 따로 크롭됩니다</label>'
+      +     '<div class="hero-image-row">'
+      +       (project.heroImage
+                ? '<img class="hero-thumb" src="' + project.heroImage.url + '" alt="">'
+                : '<div class="hero-thumb hero-thumb-empty">없음</div>')
+      +       '<div class="hero-image-controls">'
+      +         '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select>'
+      +         '<div class="field-row">'
+      +           '<button type="button" class="btn-sm" data-action="hero-upload">새 이미지 첨부</button>'
+      +           (project.heroImage ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImage.id + '">크롭</button>' : '')
+      +           (project.heroImage ? '<button type="button" class="icon-btn" data-action="remove-hero-image">제거</button>' : '')
+      +         '</div>'
+      +       '</div>'
       +     '</div></div>'
       +   '<div class="field-group"><label class="field-label">비메오 영상 ID (예: vimeo.com/615843658 → 615843658)</label>'
       +     '<input class="field" data-field="heroVideoId" value="' + escapeHTML(project.heroVideoId||"") + '"></div>'
@@ -1070,7 +1159,12 @@
       case "year": project.year = el.value; syncSidebarItemText(project); break;
       case "meta": project.meta = el.value; break;
       case "heroType": project.heroType = el.value; break;
-      case "heroImageId": project.heroImageId = el.value || null; break;
+      case "heroImageId": {
+        const chosen = allImages(project).find(im => im.id === el.value);
+        project.heroImage = chosen ? cloneAsHeroImage(chosen) : project.heroImage;
+        renderEditor();
+        break;
+      }
       case "heroVideoId": project.heroVideoId = el.value; break;
       case "social-youtube": project.social.youtube = el.value; break;
       case "social-vimeo": project.social.vimeo = el.value; break;
@@ -1132,13 +1226,27 @@
       const im = { id:uid(), file:file, relPath: file.webkitRelativePath || file.name, name:file.name };
       im.url = URL.createObjectURL(file);
       block.images.push(im);
-      if(!project.heroImageId) project.heroImageId = im.id;
+      if(!project.heroImage) project.heroImage = cloneAsHeroImage(im);
     });
     renderEditor();
     saveAndRefresh();
   }
   folderInput.addEventListener("change", () => { addFilesToBlock(folderInput.files); folderInput.value=""; });
   filesInput.addEventListener("change", () => { addFilesToBlock(filesInput.files); filesInput.value=""; });
+
+  const heroFileInput = document.createElement("input");
+  heroFileInput.type = "file"; heroFileInput.accept = "image/*";
+  document.body.appendChild(heroFileInput);
+  heroFileInput.addEventListener("change", () => {
+    const project = getCurrentProject();
+    const file = heroFileInput.files && heroFileInput.files[0];
+    heroFileInput.value = "";
+    if(!project || !file) return;
+    snapshot();
+    project.heroImage = { id: uid(), file: file, relPath: file.name, name: file.name, url: URL.createObjectURL(file) };
+    renderEditor();
+    saveAndRefresh();
+  });
 
   /* ---- title font: attach via button OR drag-and-drop onto the preview box ---- */
   const fontInput = document.createElement("input");
@@ -1283,25 +1391,31 @@
   const cropSizeHint = document.getElementById("crop-size-hint");
   const cropConfirmBtn = document.getElementById("crop-confirm");
 
-  let cropTarget = null;       // { blockId, imageId }
+  let cropTarget = null;       // { imageId }
   let cropScale = 1;           // display px per natural px
   let cropNatural = { w: 0, h: 0 };
   let cropBox = { x: 0, y: 0, w: 0, h: 0 }; // display px, relative to stage
   let cropAspect = null;       // null = free, else w/h ratio
   let cropDrag = null;         // { mode:"move"|"resize", handle, startX, startY, startBox }
 
-  function findImage(project, blockId, imageId){
-    const block = project.blocks.find(b => b.id === blockId);
-    const im = block && block.images.find(i => i.id === imageId);
-    return block && im ? { block, im } : null;
+  /* The hero image is its own standalone slot (project.heroImage), decoupled from block
+     images, so cropping it never touches a block image that happens to share the same
+     source photo — check it first, then fall back to searching the blocks. */
+  function findImage(project, imageId){
+    if(project.heroImage && project.heroImage.id === imageId) return { im: project.heroImage, isHero: true };
+    for(const block of project.blocks){
+      const im = block.images.find(i => i.id === imageId);
+      if(im) return { block, im, isHero: false };
+    }
+    return null;
   }
 
-  function openCropModal(blockId, imageId){
+  function openCropModal(imageId){
     const project = getCurrentProject();
     if(!project) return;
-    const found = findImage(project, blockId, imageId);
+    const found = findImage(project, imageId);
     if(!found) return;
-    cropTarget = { blockId, imageId };
+    cropTarget = { imageId };
     cropAspect = null;
     cropAspectToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
     cropImgEl.onload = function(){
@@ -1428,7 +1542,7 @@
   cropConfirmBtn.addEventListener("click", async () => {
     if(!cropTarget) return;
     const project = getCurrentProject();
-    const found = project && findImage(project, cropTarget.blockId, cropTarget.imageId);
+    const found = project && findImage(project, cropTarget.imageId);
     if(!found) { closeCropModal(); return; }
     const im = found.im;
 
@@ -1468,9 +1582,6 @@
       im.name = data.relPath.split("/").pop();
       im.url = data.relPath;
       delete im.file;
-      if(project.heroImageId === cropTarget.imageId){
-        // hero stays pointed at the same image id; only its stored path changed.
-      }
       renderEditor();
       saveAndRefresh();
       closeCropModal();
@@ -1480,6 +1591,79 @@
       cropConfirmBtn.disabled = false;
       cropConfirmBtn.textContent = "Crop";
     }
+  });
+
+  /* ---- video-add modal ----
+     A video is stored in block.images just like a photo — isVideoPath() tells the renderers
+     apart by extension/URL, so no schema change was needed elsewhere. */
+  const videoModal = document.getElementById("video-modal");
+  const videoTabToggle = document.getElementById("video-tab-toggle");
+  const videoFilePanel = document.getElementById("video-file-panel");
+  const videoLinkPanel = document.getElementById("video-link-panel");
+  const videoFilePick = document.getElementById("video-file-pick");
+  const videoFileName = document.getElementById("video-file-name");
+  const videoLinkInput = document.getElementById("video-link-input");
+  const videoConfirmBtn = document.getElementById("video-confirm");
+
+  const videoFileInput = document.createElement("input");
+  videoFileInput.type = "file"; videoFileInput.accept = "video/*";
+  document.body.appendChild(videoFileInput);
+
+  let videoTargetBlockId = null;
+  let videoTab = "file";
+  let videoPendingFile = null;
+
+  function renderVideoTabs(){
+    videoTabToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.tab === videoTab));
+    videoFilePanel.style.display = videoTab === "file" ? "block" : "none";
+    videoLinkPanel.style.display = videoTab === "link" ? "block" : "none";
+  }
+  function openVideoModal(blockId){
+    videoTargetBlockId = blockId;
+    videoTab = "file";
+    videoPendingFile = null;
+    videoFileName.textContent = "선택된 파일 없음";
+    videoLinkInput.value = "";
+    renderVideoTabs();
+    videoModal.classList.add("open");
+  }
+  function closeVideoModal(){
+    videoModal.classList.remove("open");
+    videoTargetBlockId = null;
+  }
+
+  videoTabToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if(!btn) return;
+    videoTab = btn.dataset.tab;
+    renderVideoTabs();
+  });
+  videoFilePick.addEventListener("click", () => videoFileInput.click());
+  videoFileInput.addEventListener("change", () => {
+    const file = videoFileInput.files && videoFileInput.files[0];
+    videoFileInput.value = "";
+    if(!file) return;
+    videoPendingFile = file;
+    videoFileName.textContent = file.name;
+  });
+  document.getElementById("video-cancel").addEventListener("click", closeVideoModal);
+  videoConfirmBtn.addEventListener("click", () => {
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === videoTargetBlockId);
+    if(!block){ closeVideoModal(); return; }
+    if(videoTab === "file"){
+      if(!videoPendingFile){ alert("동영상 파일을 선택하세요."); return; }
+      snapshot();
+      block.images.push({ id: uid(), file: videoPendingFile, relPath: videoPendingFile.name, name: videoPendingFile.name, url: URL.createObjectURL(videoPendingFile) });
+    } else {
+      const url = videoLinkInput.value.trim();
+      if(!url){ alert("동영상 링크를 입력하세요."); return; }
+      snapshot();
+      block.images.push({ id: uid(), relPath: url, name: url, url: url });
+    }
+    renderEditor();
+    saveAndRefresh();
+    closeVideoModal();
   });
 
   async function runGenerate(){
@@ -1519,7 +1703,7 @@
           block.images.push({ id: uid(), relPath: relPath, name: name, url: relPath });
           addedImages++;
         });
-        if(!project.heroImageId && block.images[0]) project.heroImageId = block.images[0].id;
+        if(!project.heroImage && block.images[0]) project.heroImage = cloneAsHeroImage(block.images[0]);
       }
 
       if(status){
@@ -1713,9 +1897,12 @@
     const addFilesBtn = e.target.closest('[data-action="add-files"]');
     if(addFilesBtn){ pendingBlockId = addFilesBtn.dataset.blockId; filesInput.click(); return; }
 
+    const addVideoBtn = e.target.closest('[data-action="add-video"]');
+    if(addVideoBtn){ openVideoModal(addVideoBtn.dataset.blockId); return; }
+
     const cropImageBtn = e.target.closest('[data-action="crop-image"]');
     if(cropImageBtn){
-      openCropModal(cropImageBtn.dataset.blockId, cropImageBtn.dataset.imageId);
+      openCropModal(cropImageBtn.dataset.imageId);
       return;
     }
 
@@ -1730,7 +1917,17 @@
           b.images.splice(idx, 1);
         }
       });
-      if(project.heroImageId === imageId) project.heroImageId = null;
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+
+    if(e.target.closest('[data-action="hero-upload"]')){ heroFileInput.click(); return; }
+
+    const removeHeroBtn = e.target.closest('[data-action="remove-hero-image"]');
+    if(removeHeroBtn){
+      snapshot();
+      try{ if(project.heroImage && project.heroImage.file) URL.revokeObjectURL(project.heroImage.url); }catch(err){}
+      project.heroImage = null;
       renderEditor(); saveAndRefresh();
       return;
     }
@@ -1799,8 +1996,8 @@
   ====================================================================== */
   const SOCIAL_ICONS = {
     youtube:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>',
-    vimeo:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 6.6c-.1 2.2-1.6 5.2-4.6 9-3.1 4-5.7 5.9-7.8 5.9-1.3 0-2.4-1.2-3.3-3.6C5.8 14.6 5 11.3 3.9 10c-.3-.3-1.1.2-2.5 1.5L.5 10.4c1.6-1.4 3.1-2.8 4.6-4.3 2-1.9 3.6-2.9 4.6-3 2.4-.2 3.9 1.4 4.4 4.9.6 3.7 1 6 1.2 6.9.7 3 1.4 4.5 2.3 4.5.7 0 1.7-1.1 3-3.3 1.3-2.2 2-3.9 2.1-5.1.2-1.9-.6-2.9-2.3-2.9-.8 0-1.6.2-2.5.6 1.7-5.4 4.9-8 9.6-7.9 3.5.1 5.2 2.4 4.9 6.8z"/></svg>',
-    instagram:'<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .5 1.4 1 .4.4.7.8 1 1.4.2.5.4 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.5 1-1 1.4-.4.4-.8.7-1.4 1-.5.2-1.2.4-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.5-1.4-1-.4-.4-.7-.8-1-1.4-.2-.5-.4-1.2-.4-2.4C2 15.6 2 15.2 2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.5-1 1-1.4.4-.4.8-.7 1.4-1 .5-.2 1.2-.4 2.4-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.8.1-1 .1-1.5.2-1.9.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.1.4-.3.9-.4 1.9-.1 1.3-.1 1.6-.1 4.8s0 3.5.1 4.8c.1 1 .2 1.5.4 1.9.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.1.9.3 1.9.4 1.3.1 1.6.1 4.8.1s3.5 0 4.8-.1c1-.1 1.5-.2 1.9-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.1-.4.3-.9.4-1.9.1-1.3.1-1.6.1-4.8s0-3.5-.1-4.8c-.1-1-.2-1.5-.4-1.9-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.1-.9-.3-1.9-.4-1.3-.1-1.6-.1-4.8-.1zm0 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zm5.7-2a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0z"/></svg>'
+    vimeo:'<img src="icons/vimeo.png" alt="Vimeo" style="height:14px;width:auto;display:block;">',
+    instagram:'<img src="icons/instagram.png" alt="Instagram" style="height:15px;width:auto;display:block;">'
   };
 
   const PREVIEW_CSS = `
@@ -1836,6 +2033,8 @@
     .gallery-track{display:flex;flex-direction:row;height:100%;transition:transform .65s cubic-bezier(.65,0,.35,1);}
     .gallery-frame{flex:0 0 auto;height:100%;}
     .gallery-frame img{height:100%;width:auto;max-width:none;display:block;}
+    .gallery-frame video{height:100%;width:auto;max-width:none;display:block;background:#000;}
+    .gallery-frame iframe{height:100%;width:auto;aspect-ratio:16/9;max-width:none;display:block;border:0;background:#000;}
     .gallery-counter{position:absolute;right:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
     .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
     .gallery:hover .gallery-hint{opacity:1;}
@@ -1843,7 +2042,7 @@
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
     .p-block-heading{margin-top:18px;font-size:1.1rem;font-family:var(--font-bold);}
-    .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;}
+    .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;font-family:var(--font-medium);}
     .p-block .gallery{margin-top:26px;}
     .p-credits{max-width:1080px;margin:0 auto 100px;padding-top:8px;}
     .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding-bottom:18px;margin-bottom:30px;border-bottom:1px solid var(--line);}
@@ -1857,12 +2056,15 @@
     'function activateGalleryFrame(gallery, index){',
     '  var frames = gallery.querySelectorAll(".gallery-frame");',
     '  var frame = frames[index];',
-    '  var img = frame && frame.querySelector("img");',
-    '  if(!img) return;',
+    '  var media = frame && frame.querySelector("img, video, iframe");',
+    '  if(!media) return;',
     '  var apply = function(){',
     '    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight; }',
     '    var baseHeight = parseFloat(gallery.dataset.baseHeight);',
-    '    var ratio = img.naturalWidth / img.naturalHeight;',
+    '    var ratio;',
+    '    if(media.tagName === "IMG") ratio = media.naturalWidth / media.naturalHeight;',
+    '    else if(media.tagName === "VIDEO") ratio = (media.videoWidth && media.videoHeight) ? media.videoWidth / media.videoHeight : 16/9;',
+    '    else ratio = 16/9;',
     '    var availWidth = gallery.parentElement.clientWidth;',
     '    var height = baseHeight;',
     '    var width = height * ratio;',
@@ -1871,7 +2073,11 @@
     '    gallery.style.width = width + "px";',
     '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + frame.offsetLeft + "px)";',
     '  };',
-    '  if(img.complete && img.naturalWidth){ apply(); } else { img.addEventListener("load", apply, {once:true}); }',
+    '  if(media.tagName === "IMG"){',
+    '    if(media.complete && media.naturalWidth){ apply(); } else { media.addEventListener("load", apply, {once:true}); }',
+    '  } else if(media.tagName === "VIDEO"){',
+    '    if(media.readyState >= 1 && media.videoWidth){ apply(); } else { media.addEventListener("loadedmetadata", apply, {once:true}); }',
+    '  } else { apply(); }',
     '}',
     'function rollGallery(gallery){',
     '  var count = parseInt(gallery.dataset.count, 10);',
@@ -1896,13 +2102,13 @@
 
   function buildPreviewBodyHTML(project){
     const imgs = allImages(project);
-    const hero = imgs.find(im => im.id === project.heroImageId) || imgs[0];
+    const hero = project.heroImage || imgs[0];
     const heroMedia = (project.heroType === "video" && project.heroVideoId)
       ? '<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/' + encodeURIComponent(project.heroVideoId) + '?autoplay=1&loop=1&muted=1&background=1&app_id=122963" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>'
       : (hero ? '<img src="' + hero.url + '" alt="">' : "");
 
     const blocksHTML = project.blocks.map((block, bi) => {
-      const frames = (block.images||[]).map(im => '<div class="gallery-frame"><img src="' + im.url + '" alt=""></div>').join("");
+      const frames = (block.images||[]).map(galleryFrameHTML).join("");
       const count = (block.images||[]).length || 1;
       const heading = block.heading ? '<div class="p-block-heading">' + escapeHTML(block.heading) + '</div>' : "";
       const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
@@ -2011,7 +2217,7 @@
   ====================================================================== */
   function exportProjectCode(project){
     const imgs = allImages(project);
-    const hero = imgs.find(im => im.id === project.heroImageId) || imgs[0];
+    const hero = project.heroImage || imgs[0];
     const heroPath = hero ? (hero.relPath || hero.name) : "";
     const L = [];
     L.push("{");
@@ -2119,6 +2325,20 @@
       projects = [];
     }
     projects.forEach(hydrateProject);
+    /* migrate: hero used to be a plain reference (heroImageId) into a block's image list, so
+       cropping that image would also change it everywhere else it was used. Give every project
+       a standalone heroImage (a clone, once) so hero crops never touch the shared block image. */
+    projects.forEach(p => {
+      if(p.heroImage === undefined){
+        if(p.heroImageId){
+          const found = allImages(p).find(im => im.id === p.heroImageId);
+          p.heroImage = found ? cloneAsHeroImage(found) : null;
+        } else {
+          p.heroImage = null;
+        }
+        dbPut(p).catch(e => console.error("heroImage migration failed", e));
+      }
+    });
     if(!projects.length){
       const sample = buildSSFSampleProject();
       projects.push(sample);

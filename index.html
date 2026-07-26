@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>jjaejae — Art Director</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
+<link rel="apple-touch-icon" href="favicon-192.png">
 <style>
   @font-face{
     font-family:'SUIT-ExtraBold';
@@ -315,6 +319,8 @@
   }
   .gallery-frame{flex:0 0 auto; height:100%;}
   .gallery-frame img{height:100%; width:auto; max-width:none; display:block;}
+  .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000;}
+  .gallery-frame iframe{height:100%; width:auto; aspect-ratio:16/9; max-width:none; display:block; border:0; background:#000;}
   .gallery-counter{
     position:absolute; right:14px; bottom:14px; z-index:6;
     font-size:11px; color:#fff;
@@ -355,6 +361,7 @@
     line-height:1.6;
     color:#2b2a26;
     white-space:pre-line;
+    font-family:var(--font-medium);
   }
   .p-block-body.muted{color:var(--muted); font-style:italic;}
   .p-block .gallery{margin-top:26px;}
@@ -540,6 +547,22 @@
   /* ---------------- helpers ---------------- */
   const u = (path) => encodeURI(path);
   const ssfSet = (n, count) => Array.from({length:count}, (_, i) => `SSF SHOP/Capture/${n}-${i+1}.jpg`);
+
+  /* a block "image" entry is a video if it's an http(s) link (Vimeo/YouTube/direct video URL)
+     or ends in a common video extension — builder.html uses the same rule when exporting. */
+  function isVideoSrc(src){
+    if(!src) return false;
+    if(/^https?:\/\//i.test(src)) return true;
+    return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(src);
+  }
+  function mediaFrameHTML(src){
+    if(!isVideoSrc(src)) return `<div class="gallery-frame"><img src="${u(src)}" alt=""></div>`;
+    const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+    const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    if(vimeo) return `<div class="gallery-frame"><iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
+    if(yt) return `<div class="gallery-frame"><iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
+    return `<div class="gallery-frame"><video src="${u(src)}" controls playsinline></video></div>`;
+  }
 
   /* ---------------- render: greeting marquee ----------------
      줄 순서: 일본어 → 영어 → 한국어(가운데) → 프랑스어 → 스페인어.
@@ -1098,12 +1121,12 @@
 
   function socialIcon(type){
     if(type==="youtube") return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M23.5 6.2s-.23-1.64-.94-2.36c-.9-.95-1.9-.95-2.36-1C16.9 2.5 12 2.5 12 2.5h-.01s-4.9 0-8.2.34c-.46.05-1.46.05-2.36 1C.72 4.56.5 6.2.5 6.2S.25 8.13.25 10.05v1.9c0 1.92.25 3.85.25 3.85s.23 1.64.93 2.36c.9.95 2.08.92 2.6 1.02 1.9.18 8.02.34 8.02.34s4.9-.01 8.2-.35c.46-.05 1.46-.05 2.36-1 .71-.72.94-2.36.94-2.36s.25-1.93.25-3.85v-1.9c0-1.92-.25-3.85-.25-3.85zM9.7 14.3V7.7l6.4 3.3-6.4 3.3z"/></svg>`;
-    if(type==="vimeo") return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M22.4 6.6c-.1 2.2-1.6 5.2-4.6 9-3.1 4-5.7 5.9-7.8 5.9-1.3 0-2.4-1.2-3.3-3.6C5.8 14.6 5 11.3 3.9 10c-.3-.3-1.1.2-2.5 1.5L.5 10.4c1.6-1.4 3.1-2.8 4.6-4.3 2-1.9 3.6-2.9 4.6-3 2.4-.2 3.9 1.4 4.4 4.9.6 3.7 1 6 1.2 6.9.7 3 1.4 4.5 2.3 4.5.7 0 1.7-1.1 3-3.3 1.3-2.2 2-3.9 2.1-5.1.2-1.9-.6-2.9-2.3-2.9-.8 0-1.6.2-2.5.6 1.7-5.4 4.9-8 9.6-7.9 3.5.1 5.2 2.4 4.9 6.8z"/></svg>`;
-    return `<svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.2 2.4.4.6.2 1 .5 1.4 1 .4.4.7.8 1 1.4.2.5.4 1.2.4 2.4.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.2 1.9-.4 2.4-.2.6-.5 1-1 1.4-.4.4-.8.7-1.4 1-.5.2-1.2.4-2.4.4-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.2-2.4-.4-.6-.2-1-.5-1.4-1-.4-.4-.7-.8-1-1.4-.2-.5-.4-1.2-.4-2.4C2 15.6 2 15.2 2 12s0-3.6.1-4.9c.1-1.2.2-1.9.4-2.4.2-.6.5-1 1-1.4.4-.4.8-.7 1.4-1 .5-.2 1.2-.4 2.4-.4C8.4 2.2 8.8 2.2 12 2.2zm0 1.8c-3.1 0-3.5 0-4.8.1-1 .1-1.5.2-1.9.4-.5.2-.8.4-1.1.7-.3.3-.5.6-.7 1.1-.1.4-.3.9-.4 1.9-.1 1.3-.1 1.6-.1 4.8s0 3.5.1 4.8c.1 1 .2 1.5.4 1.9.2.5.4.8.7 1.1.3.3.6.5 1.1.7.4.1.9.3 1.9.4 1.3.1 1.6.1 4.8.1s3.5 0 4.8-.1c1-.1 1.5-.2 1.9-.4.5-.2.8-.4 1.1-.7.3-.3.5-.6.7-1.1.1-.4.3-.9.4-1.9.1-1.3.1-1.6.1-4.8s0-3.5-.1-4.8c-.1-1-.2-1.5-.4-1.9-.2-.5-.4-.8-.7-1.1-.3-.3-.6-.5-1.1-.7-.4-.1-.9-.3-1.9-.4-1.3-.1-1.6-.1-4.8-.1zm0 3.5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4zm5.7-2a1 1 0 1 1-2.1 0 1 1 0 0 1 2.1 0z"/></svg>`;
+    if(type==="vimeo") return `<img src="${u("icons/vimeo.png")}" alt="Vimeo" style="height:14px; width:auto; display:block;">`;
+    return `<img src="${u("icons/instagram.png")}" alt="Instagram" style="height:15px; width:auto; display:block;">`;
   }
 
   function galleryHTML(images, blockId){
-    const frames = images.map(src => `<div class="gallery-frame"><img src="${u(src)}" alt=""></div>`).join("");
+    const frames = images.map(mediaFrameHTML).join("");
     return `
       <div class="gallery" data-block="${blockId}" data-index="0" data-count="${images.length}">
         <div class="gallery-track">${frames}</div>
@@ -1216,14 +1239,17 @@
   function activateGalleryFrame(gallery, index){
     const frames = gallery.querySelectorAll(".gallery-frame");
     const frame = frames[index];
-    const img = frame && frame.querySelector("img");
-    if(!img) return;
+    const media = frame && frame.querySelector("img, video, iframe");
+    if(!media) return;
     const apply = () => {
       if(!gallery.dataset.baseHeight){
         gallery.dataset.baseHeight = gallery.clientHeight;
       }
       const baseHeight = parseFloat(gallery.dataset.baseHeight);
-      const ratio = img.naturalWidth / img.naturalHeight;
+      let ratio;
+      if(media.tagName === "IMG") ratio = media.naturalWidth / media.naturalHeight;
+      else if(media.tagName === "VIDEO") ratio = (media.videoWidth && media.videoHeight) ? media.videoWidth / media.videoHeight : 16/9;
+      else ratio = 16/9;
       const availWidth = gallery.parentElement.clientWidth;
       let height = baseHeight;
       let width = height * ratio;
@@ -1235,8 +1261,15 @@
       gallery.style.width = width + "px";
       gallery.querySelector(".gallery-track").style.transform = `translateX(-${frame.offsetLeft}px)`;
     };
-    if(img.complete && img.naturalWidth){ apply(); }
-    else{ img.addEventListener("load", apply, {once:true}); }
+    if(media.tagName === "IMG"){
+      if(media.complete && media.naturalWidth){ apply(); }
+      else{ media.addEventListener("load", apply, {once:true}); }
+    } else if(media.tagName === "VIDEO"){
+      if(media.readyState >= 1 && media.videoWidth){ apply(); }
+      else{ media.addEventListener("loadedmetadata", apply, {once:true}); }
+    } else {
+      apply();
+    }
   }
 
   function rollGallery(gallery){
