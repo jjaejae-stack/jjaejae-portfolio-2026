@@ -14,13 +14,17 @@ Usage:  python3 server.py   (then click "Generate" in the builder — no
 API key needed, it shells out to the `claude` CLI using your existing
 Claude Code login.)
 """
+import base64
 import http.server
+import io
 import json
 import os
 import re
 import subprocess
 import unicodedata
 import urllib.parse
+
+from PIL import Image, ImageSequence
 
 PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -137,6 +141,93 @@ def list_images(folder):
                 out.append(rel.replace(os.sep, "/"))
     out.sort(key=natural_key)
     return out
+
+
+def _unique_path(out_dir, name_noext, ext):
+    candidate = name_noext + "-crop" + ext
+    n = 2
+    while os.path.exists(os.path.join(out_dir, candidate)):
+        candidate = name_noext + "-crop" + str(n) + ext
+        n += 1
+    return candidate
+
+
+def crop_image(payload):
+    """Crop an image on disk (or freshly-uploaded bytes) and save the result
+    as a new file next to the source, so the original is never overwritten.
+    Runs entirely server-side because cropping via <canvas> in the browser
+    fails with a "tainted canvas" SecurityError for file:// images."""
+    x = int(round(payload.get("x", 0)))
+    y = int(round(payload.get("y", 0)))
+    w = int(round(payload.get("width", 0)))
+    h = int(round(payload.get("height", 0)))
+    if w <= 0 or h <= 0:
+        raise ValueError("잘라낼 영역 크기가 올바르지 않습니다.")
+
+    mode = payload.get("mode") or "relPath"
+    if mode == "relPath":
+        rel_path = (payload.get("relPath") or "").strip()
+        if not rel_path:
+            raise ValueError("relPath가 필요합니다.")
+        abs_path = os.path.normpath(os.path.join(BASE_DIR, rel_path))
+        if not (abs_path + os.sep).startswith(BASE_DIR + os.sep):
+            raise ValueError("허용되지 않는 경로입니다.")
+        if not os.path.isfile(abs_path):
+            raise ValueError("원본 파일을 찾을 수 없습니다: %s" % rel_path)
+        folder = os.path.dirname(rel_path)
+        base_name = os.path.basename(rel_path)
+        img = Image.open(abs_path)
+    else:
+        data_url = payload.get("dataUrl") or ""
+        if "," not in data_url:
+            raise ValueError("dataUrl이 올바르지 않습니다.")
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+        img = Image.open(io.BytesIO(raw))
+        folder = (payload.get("folder") or "").strip().strip("/")
+        base_name = (payload.get("filename") or "cropped.png").strip() or "cropped.png"
+
+    name_noext, ext = os.path.splitext(base_name)
+    if not ext:
+        ext = ".jpg"
+
+    img_w, img_h = img.size
+    x = max(0, min(x, img_w - 1))
+    y = max(0, min(y, img_h - 1))
+    w = max(1, min(w, img_w - x))
+    h = max(1, min(h, img_h - y))
+    box = (x, y, x + w, y + h)
+
+    out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    out_name = _unique_path(out_dir, name_noext, ext)
+    out_abs = os.path.join(out_dir, out_name)
+    out_rel = (folder + "/" + out_name) if folder else out_name
+
+    is_animated_gif = img.format == "GIF" and getattr(img, "is_animated", False)
+    if is_animated_gif:
+        frames = []
+        durations = []
+        for frame in ImageSequence.Iterator(img):
+            frames.append(frame.convert("RGBA").crop(box))
+            durations.append(frame.info.get("duration", 100))
+        frames[0].save(
+            out_abs, save_all=True, append_images=frames[1:],
+            loop=img.info.get("loop", 0), duration=durations, disposal=2,
+        )
+        out_w, out_h = frames[0].size
+    else:
+        cropped = img.crop(box)
+        save_kwargs = {}
+        if ext.lower() in (".jpg", ".jpeg"):
+            if cropped.mode not in ("RGB", "L"):
+                cropped = cropped.convert("RGB")
+            save_kwargs["quality"] = 92
+        elif ext.lower() == ".webp":
+            save_kwargs["quality"] = 92
+        cropped.save(out_abs, **save_kwargs)
+        out_w, out_h = cropped.size
+
+    return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
 def run_claude(prompt, schema):
@@ -478,7 +569,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/translate", "/publish"):
+        if parsed.path not in ("/generate", "/translate", "/publish", "/crop"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -487,6 +578,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             payload = json.loads(raw or b"{}")
         except Exception as e:
             self._send_json(400, {"error": "bad request: %s" % e})
+            return
+
+        if parsed.path == "/crop":
+            try:
+                result = crop_image(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "크롭 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
             return
 
         if parsed.path == "/publish":

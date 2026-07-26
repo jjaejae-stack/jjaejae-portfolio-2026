@@ -10,6 +10,31 @@
 - **크레딧 이미지 → 데이터 반영**: Galaxy Tab S9 프로젝트의 실제 크레딧 슬라이드 이미지를 읽어서 크레딧 22개 항목을 builder에 입력함.
 - (참고) 블록을 자유롭게 추가하는 기능은 이미 있었음 — 편집 패널 "블록 (사진 세트)" 섹션 제목 옆 **"+ 블록 추가"** 버튼.
 
+## 최근 변경 — 블록 캡션 위치 정정 + 크레딧 이름 폰트 (2026-07-26)
+
+바로 아래 항목("블록 캡션 이미지 오버레이")에서 "사진 위로"를 사진에 겹치는 오버레이로 잘못 이해해서 구현했었음 — 사용자가 정정: 사진 위에 **겹치는 레이어가 아니라, 페이지 안에서 사진보다 위쪽(먼저)에 일반 텍스트로 배치**해달라는 의미였음.
+- `.p-block-overlay`(절대위치+그라데이션 스크림)를 제거하고, 캡션/헤딩/본문을 다시 **일반 문서 흐름**으로 되돌림 — 순서는 `.p-caption`(라벨+번호, 하단 보더) → `.p-block-heading`(볼드) → `.p-block-body`(문단, 어두운 텍스트) → `.gallery`(사진, `margin-top:26px`). 흰 글자/그라데이션 스타일은 필요 없어져서 제거, 클래스명도 `.p-overlay-*`에서 `.p-block-heading`/`.p-block-body`로 정리.
+- `index.html`과 `builder.html` 미리보기 양쪽 다 되돌림.
+- **크레딧 이름 폰트**: `/Users/cheil/Library/Fonts/SUIT-Medium.otf`를 WOFF2로 변환(`fonts/SUIT-Medium.woff2`, 197KB) 후 `--font-medium` 변수로 등록, `.credit-item .value`(크레딧의 이름/값 부분, 예: "Seyoon Kim")에 적용. 라벨("Creative Director" 등)은 기존 스타일 유지.
+- **TODO**: 우하단 프로젝트 소셜 박스의 Vimeo/Instagram 아이콘을 "첨부된 로고 형태"로 바꿔달라는 요청이 있었는데, 실제로 이미지가 첨부되지 않아 보류 중 — 다음 세션에서 이미지 확인 후 처리.
+
+## 최근 변경 — 블록 캡션 이미지 오버레이 + SUIT 폰트 적용 (2026-07-26)
+
+- **프로젝트 상세뷰 블록 캡션을 이미지 위로**: 각 블록(사진 세트)의 라벨(`Brand Film` 등)·헤딩·본문이 기존엔 사진 **아래**에 별도 텍스트로 있었는데, 이제 사진(`.gallery`) **위에 얹히는 오버레이**로 바뀜. `.p-block-overlay`가 `.gallery` 안에 절대 위치로 들어가고, 하단에서 위로 어두워지는 그라데이션(`linear-gradient(...rgba(0,0,0,.82) 100%)`)을 깔아 흰 글자가 사진 위에서도 읽히게 함. 오버레이는 `pointer-events:none`이라 클릭은 그대로 사진(`rollGallery`)에 전달됨. 기존 `.p-body`/아래-배치 관련 CSS는 `.p-overlay-heading`/`.p-overlay-body`(흰 글자용)로 교체. `galleryHTML()`에 `overlayHTML` 파라미터 추가, `renderProject()`의 블록 렌더 로직도 그에 맞게 정리. **builder.html의 미리보기(`buildPreviewBodyHTML`)와 PREVIEW_CSS도 동일하게 반영**.
+- **SUIT 폰트 적용**: 사용자가 준 `SUIT-ExtraBold.otf`/`SUIT-ExtraLight.otf`(`~/Library/Fonts/`)를 Pillow 대신 **fontTools로 WOFF2 변환**해서 `2026 PF/fonts/SUIT-ExtraBold.woff2`(201KB), `SUIT-ExtraLight.woff2`(191KB)로 저장(원본 OTF 358KB/353KB보다 가벼움). `.vercelignore`에 안 걸리는 위치라 배포에도 포함됨.
+  - `--font-bold`/`--font-thin` CSS 변수로 두 폰트 지정. `body` 기본값은 `--font-thin`(얇은 서체).
+  - **굵은 서체 적용 대상**: `h1,h2,h3`(Work/Play 섹션 헤더, 프로젝트 타이틀 등), 마퀴 텍스트(`.lang-track span`), 사방 탭(`#site-header`, `.frame-item`), Work/Play 카드 이름(`.work-card .meta .name`), 블록 라벨(`.p-caption .label`), Info 태그라인(`.info-tagline`).
+  - 그 외 본문/문단/메타 텍스트는 전부 `body`의 얇은 서체 그대로.
+  - **builder.html 미리보기(iframe, `PREVIEW_CSS`)에도 동일한 @font-face + 굵은 서체 셀렉터를 반영**해서 실제 사이트와 어긋나지 않게 함(빌더 자체 UI 폰트는 그대로 둠 — 이건 도구 UI지 홈페이지가 아니라서 안 건드림).
+
+## 최근 변경 — 코너 프레임 Email→Top 교체 + 프로젝트 소셜 아이콘 조건부 표시 (2026-07-26)
+
+- **코너 프레임(사방 탭) 개편** — 사이트 전역에 적용(Work/Play 리스트, 프로젝트 상세뷰, Info 오버레이 등 프레임이 뜨는 모든 곳):
+  - 좌하단이었던 `#frame-email`을 제거하고 그 자리에 **`#frame-ig`(IG 링크)**를 이동.
+  - 우하단은 이제 **`#frame-top`("Top ↑" 버튼)** — 클릭하면 현재 활성 화면 기준으로 맨 위로 스크롤: 프로젝트 상세뷰가 열려있으면 `#project-view` 내부를, Info 오버레이가 열려있으면 `.info-scroll` 내부를, 그 외엔 `window`를 스크롤.
+  - 프로젝트 상세뷰 첫 화면(`.p-main`)에서 숨기는 대상도 기존 브랜드로고/Email/IG에서 **브랜드로고/IG/Top**으로 갱신(자리가 바뀌었으므로).
+- **프로젝트 자체의 소셜 아이콘(`.p-social`, 우하단 유튜브/비메오/인스타)**: 이제 `project.social`에 실제 URL이 채워진 것만 아이콘으로 렌더링하고(`"#"`나 빈 값은 제외), **하나도 없으면 `.p-social` 박스 자체를 렌더링하지 않음**. `index.html`에 `socialHTML(project)` 헬퍼 추가, `builder.html`의 실시간 미리보기(`buildPreviewBodyHTML`)도 동일한 필터링 로직으로 맞춤 — 빌더에서 채운 값이 없으면 미리보기에서도 그 아이콘/박스가 안 보임.
+
 ## 최근 변경 — 프로젝트 상세뷰 첫 화면에서 브랜드 로고/Email/IG 숨김 (2026-07-26)
 
 프로젝트 상세뷰를 열면 첫 화면(`.p-main`)에 이미 자체 좌상단 컬러박스(제목)와 우하단 소셜 아이콘 박스가 있어서, 같은 위치에 뜨는 사이트 공용 `.brand-logo`(좌상단)·`#frame-email`(좌하단)·`#frame-ig`(우하단)이 겹쳐 보이던 걸 정리함.

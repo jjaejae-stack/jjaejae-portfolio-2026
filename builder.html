@@ -193,6 +193,25 @@
   #direction-modal .view-toggle button{white-space:nowrap;}
   #direction-modal textarea.field{min-height:64px;}
   #short-lines-row input{max-width:100px;}
+
+  /* ---------- crop modal ---------- */
+  #crop-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #crop-modal.open{display:flex;}
+  #crop-modal .modal-box{width:min(720px,92vw); max-height:90vh;}
+  #crop-modal .view-toggle{flex-wrap:wrap;}
+  #crop-modal .view-toggle button{white-space:nowrap;}
+  .crop-stage-wrap{display:flex; align-items:center; justify-content:center; background:color-mix(in srgb, var(--fg) 6%, var(--bg)); padding:20px; margin:14px 0; min-height:200px;}
+  .crop-stage{position:relative; overflow:hidden; user-select:none; touch-action:none;}
+  .crop-stage img{display:block; width:100%; height:100%; pointer-events:none;}
+  .crop-box{position:absolute; border:1.5px solid #fff; box-shadow:0 0 0 2000px rgba(0,0,0,.55); cursor:move;}
+  .crop-box::before{content:""; position:absolute; inset:0; background-image:linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px); background-size:33.33% 33.33%; pointer-events:none;}
+  .crop-handle{position:absolute; width:12px; height:12px; background:#fff; border:1.5px solid var(--accent); border-radius:50%; z-index:2;}
+  .crop-handle[data-handle="nw"]{left:-6px; top:-6px; cursor:nwse-resize;}
+  .crop-handle[data-handle="ne"]{right:-6px; top:-6px; cursor:nesw-resize;}
+  .crop-handle[data-handle="sw"]{left:-6px; bottom:-6px; cursor:nesw-resize;}
+  .crop-handle[data-handle="se"]{right:-6px; bottom:-6px; cursor:nwse-resize;}
+  #crop-size-hint{text-align:center; font-size:12px; color:var(--muted); margin-top:-4px;}
+  .icon-btn.crop-btn{flex:0 0 auto;}
   .modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px;}
 
   @media (max-width:1200px){
@@ -315,6 +334,36 @@
       <div class="modal-actions">
         <button class="btn-sm" id="direction-cancel">취소</button>
         <button class="btn-primary" id="direction-confirm">생성</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="crop-modal">
+    <div class="modal-box">
+      <h3>사진 크롭</h3>
+      <div class="view-toggle" id="crop-aspect-toggle">
+        <button type="button" data-ratio="free">Free</button>
+        <button type="button" data-ratio="1:1">1:1</button>
+        <button type="button" data-ratio="4:5">4:5</button>
+        <button type="button" data-ratio="9:16">9:16</button>
+        <button type="button" data-ratio="4:3">4:3</button>
+        <button type="button" data-ratio="16:9">16:9</button>
+      </div>
+      <div class="crop-stage-wrap">
+        <div class="crop-stage" id="crop-stage">
+          <img id="crop-img" src="" alt="">
+          <div class="crop-box" id="crop-box">
+            <div class="crop-handle" data-handle="nw"></div>
+            <div class="crop-handle" data-handle="ne"></div>
+            <div class="crop-handle" data-handle="sw"></div>
+            <div class="crop-handle" data-handle="se"></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="crop-size-hint">0 x 0px로 잘려요</p>
+      <div class="modal-actions">
+        <button class="btn-sm" id="crop-cancel">Cancel</button>
+        <button class="btn-primary" id="crop-confirm">Crop</button>
       </div>
     </div>
   </div>
@@ -822,6 +871,7 @@
       + '<span class="drag-handle">⠿</span>'
       + '<img class="thumb" src="' + im.url + '" alt="">'
       + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
+      + '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>'
       + '<button class="icon-btn" data-action="remove-image" data-image-id="' + im.id + '">삭제</button>'
       + '</div>';
   }
@@ -933,7 +983,10 @@
       +     '<label><input type="radio" name="heroType" data-field="heroType" value="video"' + (project.heroType==="video"?" checked":"") + '> 비메오 영상 자동재생</label>'
       +   '</div>'
       +   '<div class="field-group"><label class="field-label">히어로 이미지 (아래 사진 목록 중 선택)</label>'
-      +     '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select></div>'
+      +     '<div class="field-row" style="align-items:center;">'
+      +       '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select>'
+      +       (project.heroImageId ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImageId + '">크롭</button>' : '')
+      +     '</div></div>'
       +   '<div class="field-group"><label class="field-label">비메오 영상 ID (예: vimeo.com/615843658 → 615843658)</label>'
       +     '<input class="field" data-field="heroVideoId" value="' + escapeHTML(project.heroVideoId||"") + '"></div>'
       + '</div>'
@@ -1214,6 +1267,221 @@
     }
   });
 
+  /* ---- crop modal ----
+     Cropping happens server-side (POST /crop, Pillow) because drawing a
+     file:// image onto a <canvas> throws a "tainted canvas" SecurityError
+     in Chrome, so we can't read cropped pixels back out in the browser. */
+  const CROP_RATIOS = { "free": null, "1:1": 1, "4:5": 4/5, "9:16": 9/16, "4:3": 4/3, "16:9": 16/9 };
+  const CROP_STAGE_MAX_W = 640;
+  const CROP_STAGE_MAX_H = 460;
+
+  const cropModal = document.getElementById("crop-modal");
+  const cropAspectToggle = document.getElementById("crop-aspect-toggle");
+  const cropStage = document.getElementById("crop-stage");
+  const cropImgEl = document.getElementById("crop-img");
+  const cropBoxEl = document.getElementById("crop-box");
+  const cropSizeHint = document.getElementById("crop-size-hint");
+  const cropConfirmBtn = document.getElementById("crop-confirm");
+
+  let cropTarget = null;       // { blockId, imageId }
+  let cropScale = 1;           // display px per natural px
+  let cropNatural = { w: 0, h: 0 };
+  let cropBox = { x: 0, y: 0, w: 0, h: 0 }; // display px, relative to stage
+  let cropAspect = null;       // null = free, else w/h ratio
+  let cropDrag = null;         // { mode:"move"|"resize", handle, startX, startY, startBox }
+
+  function findImage(project, blockId, imageId){
+    const block = project.blocks.find(b => b.id === blockId);
+    const im = block && block.images.find(i => i.id === imageId);
+    return block && im ? { block, im } : null;
+  }
+
+  function openCropModal(blockId, imageId){
+    const project = getCurrentProject();
+    if(!project) return;
+    const found = findImage(project, blockId, imageId);
+    if(!found) return;
+    cropTarget = { blockId, imageId };
+    cropAspect = null;
+    cropAspectToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.ratio === "free"));
+    cropImgEl.onload = function(){
+      cropNatural.w = cropImgEl.naturalWidth;
+      cropNatural.h = cropImgEl.naturalHeight;
+      cropScale = Math.min(CROP_STAGE_MAX_W / cropNatural.w, CROP_STAGE_MAX_H / cropNatural.h);
+      if(cropScale > 1) cropScale = Math.min(cropScale, 2);
+      cropStage.style.width = (cropNatural.w * cropScale) + "px";
+      cropStage.style.height = (cropNatural.h * cropScale) + "px";
+      resetCropBox();
+    };
+    cropImgEl.src = found.im.url;
+    cropModal.classList.add("open");
+  }
+
+  function closeCropModal(){
+    cropModal.classList.remove("open");
+    cropImgEl.onload = null;
+    cropImgEl.src = "";
+    cropTarget = null;
+  }
+
+  function resetCropBox(){
+    const stageW = cropNatural.w * cropScale;
+    const stageH = cropNatural.h * cropScale;
+    let w, h;
+    if(cropAspect){
+      if(stageW / stageH > cropAspect){ h = stageH * 0.86; w = h * cropAspect; }
+      else { w = stageW * 0.86; h = w / cropAspect; }
+    } else {
+      w = stageW * 0.86; h = stageH * 0.86;
+    }
+    cropBox = { x: (stageW - w) / 2, y: (stageH - h) / 2, w: w, h: h };
+    renderCropBox();
+  }
+
+  function renderCropBox(){
+    cropBoxEl.style.left = cropBox.x + "px";
+    cropBoxEl.style.top = cropBox.y + "px";
+    cropBoxEl.style.width = cropBox.w + "px";
+    cropBoxEl.style.height = cropBox.h + "px";
+    const nw = Math.round(cropBox.w / cropScale);
+    const nh = Math.round(cropBox.h / cropScale);
+    cropSizeHint.textContent = nw.toLocaleString() + " x " + nh.toLocaleString() + "px로 잘려요";
+  }
+
+  function clampCropBox(){
+    const stageW = cropNatural.w * cropScale;
+    const stageH = cropNatural.h * cropScale;
+    cropBox.w = Math.min(cropBox.w, stageW);
+    cropBox.h = Math.min(cropBox.h, stageH);
+    cropBox.x = Math.max(0, Math.min(cropBox.x, stageW - cropBox.w));
+    cropBox.y = Math.max(0, Math.min(cropBox.y, stageH - cropBox.h));
+  }
+
+  cropAspectToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if(!btn) return;
+    cropAspectToggle.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    cropAspect = CROP_RATIOS[btn.dataset.ratio];
+    resetCropBox();
+  });
+
+  document.getElementById("crop-cancel").addEventListener("click", closeCropModal);
+
+  cropStage.addEventListener("mousedown", (e) => {
+    const handle = e.target.closest(".crop-handle");
+    const stageRect = cropStage.getBoundingClientRect();
+    if(handle){
+      cropDrag = { mode: "resize", handle: handle.dataset.handle, startX: e.clientX, startY: e.clientY, startBox: Object.assign({}, cropBox), stageRect: stageRect };
+    } else if(e.target.closest(".crop-box")){
+      cropDrag = { mode: "move", startX: e.clientX, startY: e.clientY, startBox: Object.assign({}, cropBox), stageRect: stageRect };
+    } else {
+      return;
+    }
+    e.preventDefault();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if(!cropDrag) return;
+    const dx = e.clientX - cropDrag.startX;
+    const dy = e.clientY - cropDrag.startY;
+    const stageW = cropNatural.w * cropScale;
+    const stageH = cropNatural.h * cropScale;
+    if(cropDrag.mode === "move"){
+      cropBox.x = cropDrag.startBox.x + dx;
+      cropBox.y = cropDrag.startBox.y + dy;
+      clampCropBox();
+      renderCropBox();
+      return;
+    }
+    // resize
+    const start = cropDrag.startBox;
+    let x = start.x, y = start.y, w = start.w, h = start.h;
+    const left = start.x, top = start.y, right = start.x + start.w, bottom = start.y + start.h;
+    if(cropDrag.handle === "se"){ w = start.w + dx; h = cropAspect ? w / cropAspect : start.h + dy; }
+    else if(cropDrag.handle === "nw"){ w = start.w - dx; h = cropAspect ? w / cropAspect : start.h - dy; x = right - w; y = bottom - h; }
+    else if(cropDrag.handle === "ne"){ w = start.w + dx; h = cropAspect ? w / cropAspect : start.h - dy; y = bottom - h; }
+    else if(cropDrag.handle === "sw"){ w = start.w - dx; h = cropAspect ? w / cropAspect : start.h + dy; x = right - w; }
+    w = Math.max(24, w);
+    h = Math.max(24, h);
+    // re-anchor from the fixed opposite corner after clamping the min size
+    if(cropDrag.handle === "nw"){ x = right - w; y = bottom - h; }
+    else if(cropDrag.handle === "ne"){ x = left; y = bottom - h; }
+    else if(cropDrag.handle === "sw"){ x = right - w; y = top; }
+    else { x = left; y = top; }
+    x = Math.max(0, x); y = Math.max(0, y);
+    w = Math.min(w, stageW - x);
+    h = Math.min(h, stageH - y);
+    if(cropAspect){
+      // re-derive from whichever dimension the clamp shrank, keeping aspect
+      if(w / h > cropAspect) w = h * cropAspect; else h = w / cropAspect;
+      if(cropDrag.handle === "nw"){ x = right - w; y = bottom - h; }
+      else if(cropDrag.handle === "ne"){ y = bottom - h; }
+      else if(cropDrag.handle === "sw"){ x = right - w; }
+    }
+    cropBox = { x: x, y: y, w: w, h: h };
+    renderCropBox();
+  });
+
+  document.addEventListener("mouseup", () => { cropDrag = null; });
+
+  cropConfirmBtn.addEventListener("click", async () => {
+    if(!cropTarget) return;
+    const project = getCurrentProject();
+    const found = project && findImage(project, cropTarget.blockId, cropTarget.imageId);
+    if(!found) { closeCropModal(); return; }
+    const im = found.im;
+
+    const natX = Math.round(cropBox.x / cropScale);
+    const natY = Math.round(cropBox.y / cropScale);
+    const natW = Math.round(cropBox.w / cropScale);
+    const natH = Math.round(cropBox.h / cropScale);
+
+    cropConfirmBtn.disabled = true;
+    cropConfirmBtn.textContent = "자르는 중...";
+    try{
+      let body;
+      if(im.relPath && im.relPath.includes("/") && !im.file){
+        body = { mode: "relPath", relPath: im.relPath, x: natX, y: natY, width: natW, height: natH };
+      } else {
+        const sourceBlob = im.file || await (await fetch(im.url)).blob();
+        const dataUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(sourceBlob);
+        });
+        const folder = (im.relPath || "").includes("/") ? im.relPath.split("/").slice(0, -1).join("/") : "";
+        body = { mode: "upload", dataUrl: dataUrl, folder: folder, filename: im.name || "cropped.jpg", x: natX, y: natY, width: natW, height: natH };
+      }
+      const res = await fetch(GENERATE_SERVER + "/crop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "크롭에 실패했습니다.");
+
+      snapshot();
+      try{ if(im.file) URL.revokeObjectURL(im.url); }catch(err){}
+      im.relPath = data.relPath;
+      im.name = data.relPath.split("/").pop();
+      im.url = data.relPath;
+      delete im.file;
+      if(project.heroImageId === cropTarget.imageId){
+        // hero stays pointed at the same image id; only its stored path changed.
+      }
+      renderEditor();
+      saveAndRefresh();
+      closeCropModal();
+    }catch(err){
+      alert("크롭 실패: " + err.message);
+    }finally{
+      cropConfirmBtn.disabled = false;
+      cropConfirmBtn.textContent = "Crop";
+    }
+  });
+
   async function runGenerate(){
     const project = getCurrentProject();
     if(!project) return;
@@ -1445,6 +1713,12 @@
     const addFilesBtn = e.target.closest('[data-action="add-files"]');
     if(addFilesBtn){ pendingBlockId = addFilesBtn.dataset.blockId; filesInput.click(); return; }
 
+    const cropImageBtn = e.target.closest('[data-action="crop-image"]');
+    if(cropImageBtn){
+      openCropModal(cropImageBtn.dataset.blockId, cropImageBtn.dataset.imageId);
+      return;
+    }
+
     const removeImageBtn = e.target.closest('[data-action="remove-image"]');
     if(removeImageBtn){
       snapshot();
@@ -1530,9 +1804,16 @@
   };
 
   const PREVIEW_CSS = `
-    :root{--bg:#f3f2ee;--fg:#111;--muted:#78756c;--line:rgba(17,17,17,.14);}
+    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:swap;}
+    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:swap;}
+    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:swap;}
+    :root{--bg:#f3f2ee;--fg:#111;--muted:#78756c;--line:rgba(17,17,17,.14);
+      --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+      --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+      --font-medium:'SUIT-Medium', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;}
     *{box-sizing:border-box;margin:0;padding:0;}
-    body{font-family:-apple-system,"Apple SD Gothic Neo","Pretendard","Malgun Gothic","Helvetica Neue",Arial,sans-serif;color:var(--fg);background:#fff;line-height:1.5;}
+    body{font-family:var(--font-thin);color:var(--fg);background:#fff;line-height:1.5;}
+    h1,h2,h3,.work-card .meta .name,.p-caption .label{font-family:var(--font-bold);}
     img{display:block;max-width:100%;}
     a{color:inherit;text-decoration:none;}
     .p-main{height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;}
@@ -1555,19 +1836,21 @@
     .gallery-track{display:flex;flex-direction:row;height:100%;transition:transform .65s cubic-bezier(.65,0,.35,1);}
     .gallery-frame{flex:0 0 auto;height:100%;}
     .gallery-frame img{height:100%;width:auto;max-width:none;display:block;}
-    .gallery-counter{position:absolute;right:14px;bottom:14px;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
-    .gallery-hint{position:absolute;left:14px;bottom:14px;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
+    .gallery-counter{position:absolute;right:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
+    .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
     .gallery:hover .gallery-hint{opacity:1;}
-    .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;margin-top:22px;padding-top:14px;border-top:1px solid var(--line);}
+    .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
-    .p-caption .label{font-size:1rem;font-weight:700;}
-    .p-body{margin-top:18px;font-size:.98rem;color:#2b2a26;white-space:pre-line;}
+    .p-caption .label{font-size:1rem;}
+    .p-block-heading{margin-top:18px;font-size:1.1rem;font-family:var(--font-bold);}
+    .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;}
+    .p-block .gallery{margin-top:26px;}
     .p-credits{max-width:1080px;margin:0 auto 100px;padding-top:8px;}
     .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding-bottom:18px;margin-bottom:30px;border-bottom:1px solid var(--line);}
     .credits-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:26px 24px;}
     .credit-item{border-top:1px solid var(--line);padding-top:10px;}
     .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
-    .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;}
+    .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;font-family:var(--font-medium);}
   `;
 
   const PREVIEW_RUNTIME_JS = [
@@ -1621,16 +1904,16 @@
     const blocksHTML = project.blocks.map((block, bi) => {
       const frames = (block.images||[]).map(im => '<div class="gallery-frame"><img src="' + im.url + '" alt=""></div>').join("");
       const count = (block.images||[]).length || 1;
-      const heading = block.heading ? '<div class="p-body" style="font-weight:700;font-size:1.1rem;margin-top:22px;">' + escapeHTML(block.heading) + '</div>' : "";
-      const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-body">' + escapeHTML(t) + '</p>').join("");
+      const heading = block.heading ? '<div class="p-block-heading">' + escapeHTML(block.heading) + '</div>' : "";
+      const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
       return '<div class="p-block">'
+        + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
+        + heading + paras
         + '<div class="gallery" data-index="0" data-count="' + count + '">'
         +   '<div class="gallery-track">' + frames + '</div>'
         +   '<div class="gallery-counter">01 / ' + String(count).padStart(2,"0") + '</div>'
         +   '<div class="gallery-hint">Click for next</div>'
         + '</div>'
-        + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
-        + heading + paras
         + '</div>';
     }).join("");
 
@@ -1640,12 +1923,15 @@
         ).join("") + '</div></div>'
       : "";
 
-    const socialHTML = ["youtube","vimeo","instagram"].map(k => {
-      const href = (project.social && project.social[k]) || "#";
-      return '<a href="' + escapeHTML(href) + '" target="_blank" rel="noopener">' + SOCIAL_ICONS[k] + '</a>';
-    }).join("");
-
     const textColor = project.textColor || "#fff3ef";
+    const socialLinks = ["youtube","vimeo","instagram"]
+      .map(k => [k, (project.social && project.social[k]) || ""])
+      .filter(([, href]) => href.trim() && href.trim() !== "#");
+    const socialBoxHTML = socialLinks.length
+      ? '<div class="p-social" style="background:' + project.color + ';color:' + textColor + '">'
+        + socialLinks.map(([k, href]) => '<a href="' + escapeHTML(href) + '" target="_blank" rel="noopener">' + SOCIAL_ICONS[k] + '</a>').join("")
+        + '</div>'
+      : "";
     const letterSpacing = (project.titleLetterSpacing!=null ? project.titleLetterSpacing : -0.02) + "em";
     const lineHeight = project.titleLineHeight!=null ? project.titleLineHeight : 1.02;
     const fontFamily = (project.titleFont && project.titleFont.dataUrl) ? "font-family:'ProjectTitleFont';" : "";
@@ -1658,7 +1944,7 @@
       +   '<div class="p-hero">' + heroMedia + '</div>'
       +   '<div class="p-colorbox" style="background:' + project.color + ';color:' + textColor + ';' + boxVars + '">'
       +     '<h1 style="letter-spacing:' + letterSpacing + ';line-height:' + lineHeight + ';' + fontFamily + '">' + escapeHTML(project.title||"Untitled") + '</h1></div>'
-      +   '<div class="p-social" style="background:' + project.color + ';color:' + textColor + '">' + socialHTML + '</div>'
+      +   socialBoxHTML
       + '</div>'
       + '<div class="p-detail">' + blocksHTML + creditsHTML + '</div>';
   }
