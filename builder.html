@@ -947,11 +947,13 @@
       ? '<div class="thumb video-thumb">🎬</div>'
       : '<img class="thumb" src="' + im.url + '" alt="">';
     const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
+    const revertBtn = im.original ? '<button class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + im.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '';
     return '<div class="image-row" draggable="true" data-sort-item data-item-id="' + im.id + '">'
       + '<span class="drag-handle">⠿</span>'
       + thumb
       + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
       + cropBtn
+      + revertBtn
       + '<button class="icon-btn" data-action="remove-image" data-image-id="' + im.id + '">삭제</button>'
       + '</div>';
   }
@@ -1073,6 +1075,7 @@
       +         '<div class="field-row">'
       +           '<button type="button" class="btn-sm" data-action="hero-upload">새 이미지 첨부</button>'
       +           (project.heroImage ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImage.id + '">크롭</button>' : '')
+      +           (project.heroImage && project.heroImage.original ? '<button type="button" class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + project.heroImage.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '')
       +           (project.heroImage ? '<button type="button" class="icon-btn" data-action="remove-hero-image">제거</button>' : '')
       +         '</div>'
       +       '</div>'
@@ -1578,7 +1581,13 @@
       if(!res.ok || !data.ok) throw new Error(data.error || "크롭에 실패했습니다.");
 
       snapshot();
-      try{ if(im.file) URL.revokeObjectURL(im.url); }catch(err){}
+      /* keep the pre-crop image around (once) so "되돌리기" can restore it — a second
+         crop on top of a crop still reverts all the way back to the true original. */
+      if(!im.original){
+        im.original = { relPath: im.relPath, name: im.name, url: im.url, file: im.file };
+      } else if(im.file){
+        try{ URL.revokeObjectURL(im.url); }catch(err){}
+      }
       im.relPath = data.relPath;
       im.name = data.relPath.split("/").pop();
       im.url = data.relPath;
@@ -1959,6 +1968,30 @@
       return;
     }
 
+    const revertImageBtn = e.target.closest('[data-action="revert-image"]');
+    if(revertImageBtn){
+      const found = findImage(project, revertImageBtn.dataset.imageId);
+      if(found && found.im.original){
+        snapshot();
+        const im = found.im;
+        const orig = im.original;
+        try{ if(im.file) URL.revokeObjectURL(im.url); }catch(err){}
+        im.relPath = orig.relPath;
+        im.name = orig.name;
+        if(orig.file){
+          im.file = orig.file;
+          try{ im.url = URL.createObjectURL(orig.file); }catch(err){ im.url = orig.relPath; }
+        } else {
+          delete im.file;
+          im.url = orig.url || orig.relPath;
+        }
+        delete im.original;
+        renderEditor();
+        saveAndRefresh();
+      }
+      return;
+    }
+
     const removeImageBtn = e.target.closest('[data-action="remove-image"]');
     if(removeImageBtn){
       snapshot();
@@ -2091,6 +2124,7 @@
     .gallery-counter{position:absolute;right:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
     .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
     .gallery:hover .gallery-hint{opacity:1;}
+    @media (max-width:760px){ .gallery{min-height:0;} }
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
