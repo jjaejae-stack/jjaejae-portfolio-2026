@@ -10,6 +10,14 @@
 - **크레딧 이미지 → 데이터 반영**: Galaxy Tab S9 프로젝트의 실제 크레딧 슬라이드 이미지를 읽어서 크레딧 22개 항목을 builder에 입력함.
 - (참고) 블록을 자유롭게 추가하는 기능은 이미 있었음 — 편집 패널 "블록 (사진 세트)" 섹션 제목 옆 **"+ 블록 추가"** 버튼.
 
+## 최근 변경 — Info/프로젝트 진입 시 주소창 URL 변경 (2026-07-26)
+
+지금까지는 Info나 프로젝트를 열어도 전부 JS로 화면만 바뀌는 싱글 페이지 방식이라 주소가 `jjaejae.com` 그대로였음. 사용자가 "왜 jjaejae.com/info 처럼 안 바뀌냐"고 질문 → **해시(#) 방식 대신 깔끔한 경로**(`jjaejae.com/info`, `jjaejae.com/ssf-shop`)를 선택해서 구현.
+
+- **`vercel.json` 신규 생성**: `{"rewrites":[{"source":"/((?!.*\\.).*)","destination":"/index.html"}]}` — 점(`.`)이 없는 경로(즉 `/info`, `/ssf-shop`처럼 확장자 없는 라우트)는 전부 `index.html`로 되돌려주고, 점이 있는 경로(이미지·폰트·아이콘 등 실제 파일)는 그대로 서빙됨. 이게 있어야 `/info`를 새로고침하거나 링크를 공유해도 정상적으로 열림(정적 사이트라 서버 라우팅이 따로 없어서 이 rewrite가 필수).
+- **index.html JS 라우팅**: `history.pushState`로 주소를 바꾸는 `goHome()`/`goInfo()`/`goProject(id)` 래퍼 함수를 추가하고, 기존에 `openProject`/`closeProject`/`scrollIntoView`를 직접 부르던 곳(Work 카드 클릭, 헤더 nav, 프로젝트 상세뷰의 이전/다음/All Work 링크, 닫기 버튼, Esc 키)을 전부 이 래퍼로 교체. `popstate` 이벤트(뒤로/앞으로가기)와 최초 페이지 로드 시에는 `applyRouteFromLocation()`이 현재 `location.pathname`을 읽어 그에 맞는 화면을 열어줌(과거의 `location.hash` 딥링크 방식은 fallback으로 남겨둠).
+- **로컬 `file://`에서 테스트할 때 주의**: `history.pushState`로 주소는 바뀌지만(예: `file:///ssf-shop`), 그 상태에서 새로고침하면 실제 로컬 파일이 없어서 에러가 남 — 이건 정상이고, 실제 배포 환경(Vercel + 위 rewrite)에서만 새로고침/직접 접속이 정상 동작함. Puppeteer로 클릭→URL 변경→뒤로가기→복귀까지 전부 확인함(에러 0건).
+
 ## 최근 변경 — 파비콘 추가 + 오늘 작업 GitHub/Vercel에 직접 push (2026-07-26)
 
 - **파비콘**: `jjaejae.jpg`(검정 배경+흰 워드마크, 로고 이미지화 때 썼던 그 원본)를 32/192/512px로 리사이즈해서 `favicon-32.png`/`favicon-192.png`/`favicon-512.png`로 저장, `<head>`에 `<link rel="icon">` 3개(사이즈별) + `<link rel="apple-touch-icon">` 추가.

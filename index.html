@@ -1103,7 +1103,7 @@
         <span class="name">${p.title}</span>
         <span class="tag">${[p.tag, p.year].filter(Boolean).join(" · ")}</span>
       </div>`;
-    card.addEventListener("click", () => openProject(p.id));
+    card.addEventListener("click", () => goProject(p.id));
     return card;
   }
   const workProjects = PROJECTS.filter(p => (p.category || "work") === "work");
@@ -1226,10 +1226,10 @@
       activateGalleryFrame(g, 0);
     });
     if(PROJECTS.length > 1){
-      scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); openProject(prev.id); });
-      scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); openProject(next.id); });
+      scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); goProject(prev.id); });
+      scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); goProject(next.id); });
     }
-    scrollRoot.querySelector("[data-allwork]").addEventListener("click", (e) => { e.preventDefault(); closeProject(); document.getElementById("work").scrollIntoView(); });
+    scrollRoot.querySelector("[data-allwork]").addEventListener("click", (e) => { e.preventDefault(); goHome(); document.getElementById("work").scrollIntoView(); });
   }
 
   /* gallery height is a fixed base value (captured once from CSS, cached on the element)
@@ -1317,8 +1317,42 @@
     closeBtn.classList.remove("show");
   }
 
-  closeBtn.addEventListener("click", closeProject);
-  document.addEventListener("keydown", (e) => { if(e.key === "Escape"){ closeProject(); closeInfo(); } });
+  /* ---------------- routing: clean URLs (/, /info, /<project-id>) ----------------
+     these wrappers pair a view-state change with a history.pushState so the address
+     bar tracks Info/project navigation (vercel.json rewrites everything back to
+     index.html so refreshing/sharing one of these paths works). */
+  function goHome(){
+    closeProject();
+    closeInfo();
+    history.pushState(null, "", "/");
+  }
+  function goInfo(){
+    closeProject();
+    openInfo();
+    history.pushState(null, "", "/info");
+  }
+  function goProject(id){
+    closeInfo();
+    openProject(id);
+    history.pushState(null, "", "/" + id);
+  }
+  function applyRouteFromLocation(){
+    const clean = location.pathname.replace(/^\/+|\/+$/g, "") || (location.hash ? location.hash.slice(1) : "");
+    if(clean === "info"){
+      closeProject();
+      openInfo();
+    }else if(PROJECTS.some(p => p.id === clean)){
+      closeInfo();
+      openProject(clean);
+    }else{
+      closeProject();
+      closeInfo();
+    }
+  }
+  window.addEventListener("popstate", applyRouteFromLocation);
+
+  closeBtn.addEventListener("click", goHome);
+  document.addEventListener("keydown", (e) => { if(e.key === "Escape") goHome(); });
 
   const infoView = document.getElementById("info-view");
   function openInfo(){
@@ -1334,9 +1368,8 @@
 
   document.querySelectorAll("[data-go]").forEach(el => {
     el.addEventListener("click", () => {
-      closeProject();
-      if(el.dataset.go === "info"){ openInfo(); return; }
-      closeInfo();
+      if(el.dataset.go === "info"){ goInfo(); return; }
+      goHome();
       const target = el.dataset.go === "work" ? document.getElementById("work")
         : el.dataset.go === "play" ? document.getElementById("play")
         : document.getElementById("intro");
@@ -1376,10 +1409,7 @@
     }
   });
 
-  if(location.hash){
-    const deepLinkId = location.hash.slice(1);
-    if(PROJECTS.some(p => p.id === deepLinkId)) openProject(deepLinkId);
-  }
+  applyRouteFromLocation();
 
 })();
 </script>
