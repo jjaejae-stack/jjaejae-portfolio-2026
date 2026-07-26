@@ -2,6 +2,66 @@
 
 최종 업데이트: 2026-07-26
 
+## 최근 변경 — Work/Play 데이터 연동 (builder.html) (2026-07-26)
+
+위 "Play" 탭/섹션 항목에서 남겨뒀던 TODO("PLAY_PROJECTS 데이터 배열/builder 편집 패널은 아직 없음")를 처리했습니다.
+
+- **데이터 모델**: 프로젝트에 `category` 필드 추가(`"work"` | `"play"`, 기본값 `"work"`) — `newProject()`, `buildSSFSampleProject()`, `exportProjectCode()` 모두 반영. 기존에 저장된 프로젝트처럼 `category` 필드가 아예 없는 경우도 전부 "work"로 취급(하위호환, 마이그레이션 불필요).
+- **index.html**: `PROJECTS`를 `category`로 나눠 `#work-grid`/`#play-grid`에 각각 렌더링. Play 프로젝트가 하나도 없으면 기존 "Coming soon" 문구 그대로 유지.
+- **builder.html**: 좌측 사이드바 맨 위에 **Work / Play 탭 버튼**을 추가 — 클릭하면 그 섹션에 속한 프로젝트만 목록에 표시. "+ 새 프로젝트"는 현재 활성 탭의 섹션으로 생성됨. 편집 패널에도 프로젝트명 바로 아래 **"섹션 (Work / Play)"** 토글을 추가해서 기존 프로젝트도 언제든 섹션을 바꿀 수 있음(바꾸면 사이드바 목록에서 즉시 다른 탭으로 이동).
+- Publish를 누르면 `category` 필드도 그대로 index.html에 반영되므로, Play 프로젝트를 채우고 Publish하면 실제 사이트의 `#play-grid`에 나타남.
+
+## 최근 변경 — "Play" 탭/섹션 추가 (2026-07-26)
+
+헤더 nav에 Work 옆 **"Play"** 탭을 추가(순서: Work → Play → Info). Work 섹션 바로 아래에 `#play` 섹션을 새로 만들고(`#play-grid`), Work와 동일한 2열 그리드/카드 CSS를 공유하도록 셀렉터를 `#work-grid, #play-grid` 등으로 일반화함. 지금은 `#play-grid` 안에 "Coming soon" 플레이스홀더 문구만 있음 — **실제 개인 작업물 콘텐츠는 사용자가 빌더에서 채울 예정** (아직 `PLAY_PROJECTS` 같은 데이터 배열이나 builder.html 쪽 편집 패널은 만들지 않음, 프론트엔드 라우팅/레이아웃만 준비된 상태). 다음에 이어서 할 일 목록에 추가해둠.
+
+## 최근 변경 — Info 카피 다듬기 + 스크롤 버그 수정 + 브랜드 로고 이미지화 (2026-07-26)
+
+- **Info 카피**: 첫 인사 문장에서 "AKA. jjaejae" 삭제(그냥 "아트디렉터 최재훈입니다."). 두 태그라인("A RAW NAME FOR SHARP IDEAS", "LOOK AGAIN")을 큰 헤드라인 크기에서 **본문과 같은 크기 + 볼드**로 축소(`.info-tagline` 폰트 크기를 `.info-body`와 동일하게). "LOOK AGAIN"의 대괄호 `[ ]` 제거.
+- **Info 오버레이 스크롤 버그**: 내용이 길어 스크롤할 때 macOS/iOS의 elastic bounce로 뒤에 있는 Work 리스트(SSF SHOP 카드 등)가 살짝 비쳐 보이던 문제 수정. `#info-view` 자체는 이제 `overflow:hidden`(절대 스크롤 안 됨, 배경이 항상 뷰포트 전체를 덮음)이고, 그 안에 새로 넣은 `.info-scroll` 래�퍼만 `overflow-y:auto; overscroll-behavior:contain`로 스크롤을 전담 + 바깥으로 스크롤 체이닝 안 되게 막음. JS `openInfo()`/`closeInfo()`에서도 `document.documentElement.style.overflow`를 직접 토글해 이중 안전장치를 둠.
+- **브랜드 로고 이미지화**: 좌상단 "jjaejae" 텍스트를 사용자가 준 실제 로고(`jjaejae.jpg`, 검정 배경+흰색 워드마크)에서 **배경 투명 + 워드마크 블랙**으로 가공한 PNG로 교체. 가공은 Pillow로 luminance 값을 알파 채널로 변환해서 만듦(`/Users/cheil/Desktop/jjaejae/Personal/2026 PF/jjaejae-wordmark-black.png`, 691×387, 원본 대비 여백 크롭됨). 헤더(`#site-header`)는 `mix-blend-mode:difference`라서 검정 이미지를 넣으면 안 보이게 되므로, **브랜드 로고는 `#site-header` 밖으로 빼서 별도의 `.brand-logo` 요소**(블렌드 모드 없음, 항상 순수 검정)로 만듦 — 표시/숨김 규칙(메인 마퀴에서 숨김 → past-hero 시 100%, project/info 오버레이에서 40%)은 헤더·코너 프레임과 동일하게 공유.
+
+## 최근 변경 — Info 오버레이 카피 교체 (2026-07-26)
+
+Info 오버레이 본문을 "jjaejae" 이름 유래·매니페스토 톤의 실제 카피로 교체함. 구조를 3단계 클래스로 나눔:
+- `.info-lead` — 첫 인사 문장(700, 중간 크기)
+- `.info-body` — 일반 본문 문단(500, 작은 크기, 여러 개)
+- `.info-tagline` — "A RAW NAME FOR SHARP IDEAS", "[ LOOK AGAIN ]" 같은 굵은 독립 헤드라인(800, 큰 크기)
+기존에 있던 `.bio`/`.hl`(밑줄 강조 span) 클래스는 이 구조로 대체되어 제거됨. 이후 카피를 더 수정하고 싶으면 `#info-view` 안의 `.info-content` 블록(HTML)만 편집하면 됨 — 새 문단/태그라인을 추가할 때는 `.info-body`/`.info-tagline` 클래스를 그대로 재사용.
+
+## 최근 변경 — 디테일 페이지에서 코너 프레임 40% 옅게 (2026-07-26)
+
+Work 리스트(마퀴만 지난 상태, `body.past-hero`)에서는 헤더/코너 프레임이 기존처럼 100% 또렷하게 보이지만, **프로젝트 상세뷰(`body.project-open`)나 Info 오버레이(`body.info-open`)에 들어가면 opacity 0.4로 옅어지도록** 분리함. 마우스를 올리면(`:hover`) 다시 opacity 1로 또렷해짐. `mix-blend-mode:difference`는 그대로 유지해서 어떤 배경색 위에서도 읽히긴 하되, 배경 위에 자연스럽게 얹히는 느낌을 줌.
+
+## 최근 변경 — 코너 프레임(요일/시계/Email/IG) 추가 (2026-07-26)
+
+레퍼런스(Cargo 템플릿)처럼 화면 네 모서리·중간 사이드에 작은 UI 텍스트를 띄우는 "프레임" 요소를 추가했습니다.
+- 위치: 좌측 중단 `#frame-day`(요일, 예: "Saturday"), 우측 중단 `#frame-clock`(HH:MM:SS 실시간 시계), 좌하단 `#frame-email`(mailto 링크), 우하단 `#frame-ig`(Instagram 링크). 모두 `.frame-item` 클래스 공유, `mix-blend-mode:difference`로 헤더와 동일한 방식.
+- **표시 규칙은 기존 헤더와 동일**: 메인 마퀴 화면에서는 안 보이고, `body.past-hero`(스크롤로 마퀴를 벗어남) / `body.project-open`(프로젝트 상세뷰) / `body.info-open`(Info 오버레이) 중 하나라도 켜지면 페이드인. 즉 "메인 롤링 화면에는 없고, 스크롤하거나 다른 페이지에 들어갔을 때 항상 떠있게" 요구사항 그대로.
+- 요일/시계는 JS `setInterval(tickFrameClock, 1000)`으로 매초 갱신. 모바일(≤600px)에서는 요일/시계를 숨겨 좁은 화면에서 겹치지 않게 함(Email/IG는 유지).
+
+## 최근 변경 — Info를 풀스크린 오버레이로 부활 (2026-07-26)
+
+앞서 삭제했던 소개글을 **헤더 nav의 "Info" 버튼 클릭 시 열리는 풀스크린 오버레이**(`#info-view`)로 다시 추가했습니다 (스크롤로 도달하는 섹션이 아님).
+- 배경은 실제 사진 대신 **CSS만으로 만든 하늘색 그라데이션 + SVG feTurbulence 노이즈 오버레이**(`.info-bg` + `.info-grain`, opacity .06, mix-blend-mode:overlay)로 레퍼런스의 "약간 노이즈 있는 하늘 사진" 느낌을 재현. 실제 이미지 파일은 쓰지 않음 — 나중에 진짜 사진으로 교체하고 싶으면 `.info-bg`의 `background`를 이미지로 바꾸면 됨.
+- 내용은 큰 좌측 정렬 본문 텍스트(`Hey! 안녕하세요...`) + 일부 단어 이탤릭+밑줄 강조(`.hl`, 삼성/나이키/SSF SHOP) + Instagram/Email 링크. 이름(jjaejae)과 "Work/Info" 텍스트는 오버레이 안에 따로 안 넣고 **항상 떠 있는 헤더를 그대로 재사용**(레퍼런스처럼 좌상단 이름·우상단 nav 구조).
+- `openInfo()`/`closeInfo()` 함수 추가, `data-go="info"` 클릭 시 스크롤 대신 오버레이를 열도록 라우팅 분기. Esc 키·다른 nav 클릭(Work/브랜드)으로 닫힘. `z-index:450`(헤더 500보다 낮음, project-view 400보다 높음)이라 오버레이가 열려 있어도 헤더는 계속 보이고 클릭 가능.
+- 헤더 자체의 "메인 화면에서 숨김 → 스크롤 지나면 표시" 로직(`past-hero`)은 그대로 유지됨 — Info 버튼도 스크롤을 지나야 보임.
+
+## 최근 변경 — Info 섹션 제거 + 헤더 스크롤 연동 (2026-07-26)
+
+- 이름/소개/링크가 있던 `#info` 섹션을 **완전히 삭제**. 이제 구조는 `#intro`(마퀴) → 스크롤 → `#work`(Work 리스트)로 단순화됨.
+- `#intro`(마퀴 화면)를 클릭하면 `#work`로 스무스 스크롤(`introEl.addEventListener("click", ...)`). 자연스러운 스크롤로도 바로 Work가 이어짐(사이에 있던 info가 없어졌으므로).
+- 헤더(`#site-header`)는 이제 **메인(마퀴) 화면에서는 완전히 숨김**(`opacity:0`)이고, `IntersectionObserver`로 `#intro`가 뷰포트에서 벗어나면 `body.past-hero` 클래스를 붙여 페이드인. 프로젝트 상세뷰가 열려있을 때(`body.project-open`)도 항상 보이게 처리.
+- 헤더 텍스트를 볼드(brand 800, nav 700)로, "Info" 탭은 섹션 삭제와 함께 제거(현재 nav는 "Work"만 남음). 브랜드 텍스트 "Jaehoon Choi" → **"jjaejae"**로 변경(헤더, `<title>`, 푸터 저작권 표기 모두). 단, SSF SHOP 크레딧의 실명 "Jaehoon Choi (@jjaejae__)"는 실제 크레딧 정보라 그대로 둠.
+
+## 최근 변경 — 마퀴 튜닝 + 프로젝트 메인 박스 디자인 (2026-07-26)
+
+- **마퀴**: 폰트 크기를 `vw` 대신 `svh` 기준(`clamp(2.6rem, 16svh, 9rem)`, `line-height:1`)으로 바꿔 각 줄(row) 높이를 거의 꽉 채우도록 키움. 5줄 속도(duration)도 전체적으로 더 느리게 상향(예: 한국어 64→84, 영어 76→100 등).
+- **줄 순서/컬러**: 한국어가 5줄 중 정확히 가운데(3번째)에 오도록 배열 순서를 `영어 → 스페인어 → 한국어 → 프랑스어 → 일본어`로 재배치. 스페인어는 레드(`#c62828`), 프랑스어는 블루(`#3f6fd1`)로 변경, 일본어는 기존 연두색(`#e3e07a`)을 넘겨받음(5색 팔레트 재사용, 새 색상 추가 없음). 방향 교차(`reverse`)는 이제 언어별 수동 플래그가 아니라 **줄 인덱스 홀/짝으로 자동 계산**하도록 `renderGreetings()` 로직을 정리함.
+- **프로젝트 메인 박스**(`.p-colorbox`, `.p-social`): 기존 라운드 코너(`border-radius:var(--pradius)`)를 없애고, 사용자가 준 레퍼런스(Cargo 스타일 카드) 그대로 **각진 모서리 + 3px 블랙 보더 + 블러 없는 오프셋 그림자**(`box-shadow:10px 10px 0 #111` / 소셜박스는 `8px 8px 0`, 모바일은 2px 보더·6px 그림자)로 교체. 배경색 자체는 그대로 `project.color`를 써서 빌더에서 커스터마이징 가능. `--pradius` CSS 변수는 더 이상 쓰이지 않아 제거함.
+- **builder.html도 동일하게 수정**: 미리보기 CSS(`.p-main`/`.p-colorbox`/`.p-social`, 1223~1235번째 줄 근처)에 같은 각진+오프셋그림자 스타일을 반영해 실제 사이트와 미리보기가 어긋나지 않게 함.
+
 ## 최근 변경 — Publish 버튼 + GitHub/Vercel 배포 연동 (2026-07-26)
 
 builder.html의 각 프로젝트 편집 화면에 **PUBLISH** 버튼을 추가했습니다. 누르면 그 프로젝트 데이터가 실제 `index.html`의 `PROJECTS` 배열에 반영되고, GitHub에 커밋·푸시되어 Vercel이 자동 재배포합니다.
@@ -132,3 +192,5 @@ python3 server.py
 - [ ] Work 리스트 카드 디자인 최종 점검 (현재 SSF SHOP 1개만 있어 레이아웃 검증이 제한적)
 - [ ] 필요시 Generate 프롬프트를 실제 클라이언트/캠페인 사실 기반으로 다듬기 (현재는 초안/플레이스홀더 톤 유지하도록 설계됨)
 - [ ] builder.html의 3테마 카드 디자인(각진 모서리 + 오프셋 그림자)을 index.html 쪽에도 적용할지 여부 확인
+- [x] ~~"Play"(개인 작업물) 섹션 데이터 연동~~ — `category` 플래그를 기존 `PROJECTS`에 추가하는 방식으로 완료 (2026-07-26, 위 "Work/Play 데이터 연동" 항목 참고). 이제 builder에서 Play 탭으로 프로젝트를 만들고 채운 뒤 Publish하면 됨.
+- [ ] "Play" 섹션에 실제 콘텐츠 채우기 (아직 프로젝트 0개 — Coming soon 문구만 있음)
