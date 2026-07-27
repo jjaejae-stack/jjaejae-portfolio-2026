@@ -361,26 +361,27 @@
   @media (max-width:760px){
     .gallery{min-height:0;}
   }
-  /* mode-multi/mode-all: JS (layoutFrames) sets each frame's exact width/height in px from
-     its own natural aspect ratio at a shared row height (or column width) — same "no crop,
-     no letterbox" approach as the single-image mode, just applied to several frames at once. */
+  /* mode-multi: JS(layoutFrames)가 각 프레임을 자기 원본 비율대로 한 행(또는 한 열)에 채워 넣음
+     (공유 높이/너비 기준, 절대 잘리거나 레터박스 되지 않음) — 단일 이미지 모드와 같은 원칙을
+     여러 프레임에 동시에 적용한 것. */
   .gallery.mode-multi .gallery-frame{display:none; flex:0 0 auto;}
   .gallery.mode-multi .gallery-frame.visible{display:block;}
   .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video, .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; display:block; border:0;}
   .gallery.mode-multi .gallery-track{gap:2px;}
-  .gallery.mode-all{height:auto!important; max-height:none!important; min-height:0; cursor:default; overflow:visible; background:none;}
-  .gallery.mode-all .gallery-track{flex-wrap:wrap; height:auto; gap:8px; transform:none!important;}
-  .gallery.mode-all .gallery-frame{flex:0 0 auto;}
-  .gallery.mode-all .gallery-frame img, .gallery.mode-all .gallery-frame video, .gallery.mode-all .gallery-frame iframe{width:100%; height:100%; display:block; border:0;}
   .gallery.direction-column .gallery-track{flex-direction:column;}
   .gallery.mode-multi.direction-column{height:auto!important; max-height:none!important; min-height:0;}
   .gallery.mode-multi.direction-column .gallery-track{height:auto;}
-  .gallery.mode-all.direction-column .gallery-track{flex-direction:column; flex-wrap:nowrap;}
   .gallery.mode-free{position:relative; height:60vh; max-height:640px; min-height:280px; cursor:default; background:#111;}
   .gallery.mode-free .gallery-track{position:relative; height:100%; display:block;}
   .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
   .gallery.mode-free .gallery-frame img, .gallery.mode-free .gallery-frame video{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; margin:auto; display:block;}
   .gallery.mode-free .gallery-frame iframe{width:100%; height:100%; border:0;}
+
+  /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
+     기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함 — galleryHTML()의 mode "all" 분기 참고 */
+  .gallery-video-stack{display:flex; flex-direction:column; gap:8px;}
+  .gallery-video-frame{position:relative; width:100%; background:#111;}
+  .gallery-video-frame iframe, .gallery-video-frame video{display:block; width:100%; height:auto; aspect-ratio:16/9; border:0; background:#000;}
 
   /* 블록 이름(라벨)·헤딩·본문은 사진 위에 겹치는 게 아니라, 페이지 안에서 사진 "윗부분"(위쪽)에
      일반 텍스트로 먼저 오고 그 아래에 사진이 옴 */
@@ -407,6 +408,7 @@
   }
   .p-block-body.muted{color:var(--muted); font-style:italic;}
   .p-block .gallery{margin-top:26px;}
+  .p-block .gallery-video-stack{margin-top:26px;}
 
   .p-credits{max-width:1080px; margin:0 auto 100px; padding-top:8px;}
   .p-credits h3{
@@ -1206,16 +1208,26 @@
         <div class="gallery-track">${frames}</div>
       </div>`;
     }
-    const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
-    const modeClass = (m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "")) + (dir === "column" && perPage > 1 ? " direction-column" : "");
+    if(m === "all"){
+      /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
+         기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함. */
+      const videoSrcs = images.filter(isVideoSrc);
+      const photoSrcs = images.filter(src => !isVideoSrc(src));
+      const videoHTML = videoSrcs.length
+        ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src)}</div>`).join("")}</div>`
+        : "";
+      const photoHTML = photoSrcs.length ? galleryHTML(photoSrcs, blockId + "-photos", "1", dir) : "";
+      return `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>`;
+    }
+    const perPage = m === "1" ? 1 : parseInt(m, 10);
+    const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const frames = images.map(mediaFrameHTML).join("");
-    const showChrome = m !== "all";
     const counterEnd = Math.min(perPage, images.length || 1);
     return `
       <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}">
         <div class="gallery-track">${frames}</div>
-        ${showChrome ? `<div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>` : ""}
-        ${showChrome ? `<div class="gallery-hint">Click for next</div>` : ""}
+        <div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>
+        <div class="gallery-hint">Click for next</div>
       </div>`;
   }
 
@@ -1401,9 +1413,9 @@
     if(isMediaReady(media)){ cb(); return; }
     media.addEventListener(media.tagName === "VIDEO" ? "loadedmetadata" : "load", cb, {once:true});
   }
-  /* mode-multi/mode-all: size each frame from its OWN natural aspect ratio (never crop,
-     never letterbox) — row mode shares a height and sums widths (shrinking only if the
-     whole row would overflow), column mode shares a width and sums heights. */
+  /* mode-multi: size each frame from its OWN natural aspect ratio (never crop, never
+     letterbox) — row mode shares a height and sums widths (shrinking only if the whole
+     row would overflow), column mode shares a width and sums heights. */
   function layoutFrames(gallery, frames, direction){
     if(!frames.length) return;
     const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
@@ -1423,15 +1435,6 @@
         });
         gallery.style.width = width + "px";
         gallery.style.height = totalHeight + "px";
-      } else if(gallery.classList.contains("mode-all")){
-        if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
-        const height = parseFloat(gallery.dataset.baseHeight);
-        frames.forEach((f, i) => {
-          f.style.width = (height * ratios[i]) + "px";
-          f.style.height = height + "px";
-        });
-        gallery.style.height = "auto";
-        gallery.style.width = "100%";
       } else {
         if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
         let height = parseFloat(gallery.dataset.baseHeight);
@@ -1470,10 +1473,6 @@
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
     if(mode === "free") return;
-    if(mode === "all"){
-      layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row");
-      return;
-    }
     if(perPage <= 1){
       g.addEventListener("click", () => rollGallery(g));
       activateGalleryFrame(g, 0);
@@ -1497,8 +1496,6 @@
       if(mode === "1"){
         g.querySelectorAll(".gallery-frame").forEach(f => delete f.dataset.sized);
         activateGalleryFrame(g, parseInt(g.dataset.index, 10));
-      } else if(mode === "all"){
-        layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row");
       } else {
         layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame.visible")), g.dataset.direction || "row");
       }
