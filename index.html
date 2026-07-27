@@ -11,6 +11,7 @@
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraBold.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraLight.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-Medium.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/DINNextLTPro-MediumCond.woff2" crossorigin>
 <style>
   /* 초기 로딩 시 시스템 폰트로 먼저 그려졌다가 SUIT 폰트로 바뀌면서 텍스트가 덜컹거리던 문제 —
      preload로 폰트를 즉시 받아오고, font-display:block으로 폰트 로드 전까지 잠깐 텍스트를 숨겨서
@@ -33,6 +34,12 @@
     font-weight:500;
     font-display:block;
   }
+  @font-face{
+    font-family:'DINNextLTPro-MediumCond';
+    src:url('fonts/DINNextLTPro-MediumCond.woff2') format('woff2');
+    font-weight:500;
+    font-display:block;
+  }
   :root{
     --bg:#f3f2ee;
     --fg:#111111;
@@ -42,6 +49,7 @@
     --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
     --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
     --font-medium:'SUIT-Medium', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+    --font-condensed:'DINNextLTPro-MediumCond', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html{scroll-behavior:smooth;}
@@ -81,8 +89,8 @@
   /* Work 리스트(마퀴만 지난 상태)에서는 또렷하게, 프로젝트 상세뷰·Info 오버레이(디테일 페이지)에서는
      배경 위에 자연스럽게 얹히도록 40%로 옅게 — 마우스를 올리면 잠깐 또렷해짐 */
   body.past-hero #site-header{opacity:1; pointer-events:auto;}
-  body.project-open #site-header, body.info-open #site-header{opacity:.4; pointer-events:auto;}
-  body.project-open #site-header:hover, body.info-open #site-header:hover{opacity:1;}
+  body.project-open #site-header, body.info-open #site-header, body.list-open #site-header{opacity:.4; pointer-events:auto;}
+  body.project-open #site-header:hover, body.info-open #site-header:hover, body.list-open #site-header:hover{opacity:1;}
   #site-header *{pointer-events:auto;}
   #site-header nav{display:flex; gap:22px;}
   #site-header nav button{opacity:.85; font-weight:700;}
@@ -189,47 +197,94 @@
   }
   @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 
-  /* ---------- work / play (same list layout, shared by both sections) ---------- */
-  #work, #play{padding:60px 6vw 120px;}
-  #work h2, #play h2{
-    font-size:13px; letter-spacing:.16em; text-transform:uppercase;
+  /* ---------- work / play landing: scroll down to just these two words ---------- */
+  #work-play{
+    display:flex;
+    min-height:100vh;
+  }
+  #work-play .wp-link{
+    flex:1;
+    display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-condensed);
+    font-size:clamp(3rem, 11vw, 9rem);
+    letter-spacing:-.02em;
+    cursor:pointer;
+  }
+  /* 마우스 커서에 가까운 글자일수록 세로로 길어지는 효과 — JS(initLetterStretch)가
+     각 글자를 span으로 쪼개서 커서와의 거리에 따라 scaleY를 실시간으로 적용함 */
+  #work-play .wp-link .letter{
+    display:inline-block;
+    transform-origin:center bottom;
+    transition:transform .18s ease-out;
+    will-change:transform;
+  }
+  .list-filter .letter{
+    display:inline-block;
+    transform-origin:center bottom;
+    transition:transform .18s ease-out;
+    will-change:transform;
+  }
+  #work-play .wp-divider{width:1px; align-self:stretch; margin:80px 0; background:var(--line);}
+  @media (max-width:760px){
+    #work-play{flex-direction:column;}
+    #work-play .wp-divider{width:auto; height:1px; align-self:stretch; margin:0 44px;}
+  }
+
+  /* ---------- work/play list overlay (opened from the words above, or header nav) ---------- */
+  #list-view{
+    display:none;
+    position:fixed; inset:0; z-index:410;
+    background:#fff;
+    overflow-y:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  #list-view.open{display:block;}
+  body.list-open{overflow:hidden;}
+  #list-view .list-inner{max-width:1400px; margin:0 auto; padding:130px 6vw 100px;}
+  #list-view h1{font-family:var(--font-condensed); font-size:clamp(2.4rem, 7vw, 4.4rem); letter-spacing:-.02em;}
+  #list-view .list-filters{display:flex; flex-wrap:wrap; gap:10px; margin:32px 0 44px;}
+  /* 기본 상태에서는 테두리가 안 보이다가(투명), 마우스를 올리면 알약 모양 테두리가 나타남 —
+     선택된(active) 탭만 항상 채워진 알약 모양으로 표시 (참고 영상과 동일한 인터랙션) */
+  .list-filter{
+    font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+    padding:8px 16px;
+    border:1px solid transparent;
+    border-radius:999px;
     color:var(--muted);
-    padding-bottom:18px;
-    border-bottom:1px solid var(--line);
-    margin-bottom:36px;
+    opacity:.75;
+    transition:opacity .2s, border-color .2s;
   }
-  #work-grid, #play-grid{
-    display:grid;
-    grid-template-columns:repeat(2, 1fr);
-    gap:56px 40px;
-  }
+  .list-filter:hover{opacity:1; border-color:var(--line-strong);}
+  .list-filter.active{opacity:1; background:#111; color:#fff; border-color:#111;}
+  /* 두 컬럼에 프로젝트를 번갈아 나눠 담는 고정 엇갈림(masonry) 배치 — CSS column-count는
+     아이템이 몇 개 없을 때 한쪽 컬럼에 다 몰아넣고 반대쪽을 비워버리는 경우가 있어서,
+     JS(renderGrid)에서 두 개의 .list-col로 직접 나눠 담는 방식을 씀. */
+  .list-grid{display:flex; gap:32px; align-items:flex-start;}
+  .list-col{flex:1; min-width:0; display:flex; flex-direction:column; gap:32px;}
   .play-placeholder{color:var(--muted); font-style:italic; font-size:.95rem;}
   .work-card{cursor:pointer;}
-  .work-card .thumb{
-    position:relative;
-    aspect-ratio:16/10;
-    overflow:hidden;
-    background:#111;
-  }
+  .work-card .thumb{position:relative; overflow:hidden; background:#111; border-radius:18px;}
   .work-card .thumb img{
-    width:100%; height:100%; object-fit:cover;
+    width:100%; height:auto; display:block;
     transition:transform .7s cubic-bezier(.2,.7,.2,1);
   }
   .work-card:hover .thumb img{transform:scale(1.045);}
   .work-card .accent{
     position:absolute; left:0; bottom:0; right:0; height:4px;
   }
+  /* 프로젝트명/카테고리/년도는 기본적으로 숨겨져 있다가, 마우스를 올리면 나타남 */
   .work-card .meta{
     display:flex; justify-content:space-between; align-items:baseline;
-    margin-top:16px;
-    padding-top:14px;
-    border-top:1px solid var(--line);
+    margin-top:14px;
+    opacity:0;
+    transition:opacity .25s;
   }
+  .work-card:hover .meta{opacity:1;}
   .work-card .meta .name{font-size:1.05rem; font-weight:700; letter-spacing:-.01em;}
-  .work-card .meta .tag{font-size:12px; color:var(--muted);}
+  .work-card .meta .tag{font-size:12px; color:var(--muted); text-align:right;}
 
   @media (max-width:760px){
-    #work-grid, #play-grid{grid-template-columns:1fr; gap:44px;}
+    #list-view .list-inner{padding:110px 6vw 80px;}
   }
 
   /* ---------- project view ---------- */
@@ -536,14 +591,10 @@
     <div class="scroll-cue"><span class="dot"></span>Scroll</div>
   </main>
 
-  <section id="work">
-    <h2>Work</h2>
-    <div id="work-grid"></div>
-  </section>
-
-  <section id="play">
-    <h2>Play</h2>
-    <div id="play-grid"><p class="play-placeholder">Coming soon — 개인 작업물이 곧 채워질 예정입니다.</p></div>
+  <section id="work-play" aria-label="Work and Play">
+    <button type="button" class="wp-link" data-go="work">WORK</button>
+    <div class="wp-divider"></div>
+    <button type="button" class="wp-link" data-go="play">PLAY</button>
   </section>
 
   <footer>
@@ -553,6 +604,14 @@
 
   <div id="project-view">
     <div id="project-scroll"></div>
+  </div>
+
+  <div id="list-view">
+    <div class="list-inner">
+      <h1 id="list-title"></h1>
+      <div class="list-filters" id="list-filters"></div>
+      <div class="list-grid" id="list-grid"></div>
+    </div>
   </div>
 
   <div id="info-view">
@@ -1152,11 +1211,11 @@
   ];
   */
 
-  /* ---------------- render: work / play grids ----------------
+  /* ---------------- render: work / play list overlay ----------------
      project.category is "work" or "play" — missing/unrecognized values
-     default to "work" so older project entries keep showing up as before. */
-  const workGrid = document.getElementById("work-grid");
-  const playGrid = document.getElementById("play-grid");
+     default to "work" so older project entries keep showing up as before.
+     Both categories share one overlay (#list-view); openList(category) fills it in,
+     with a filter-tab row built from whatever tags are present in that category. */
   function projectCard(p){
     const card = document.createElement("div");
     card.className = "work-card";
@@ -1172,12 +1231,49 @@
     card.addEventListener("click", () => goProject(p.id));
     return card;
   }
-  const workProjects = PROJECTS.filter(p => (p.category || "work") === "work");
-  const playProjects = PROJECTS.filter(p => p.category === "play");
-  workProjects.forEach(p => workGrid.appendChild(projectCard(p)));
-  if(playProjects.length){
-    playGrid.innerHTML = "";
-    playProjects.forEach(p => playGrid.appendChild(projectCard(p)));
+
+  const listTitle = document.getElementById("list-title");
+  const listFilters = document.getElementById("list-filters");
+  const listGrid = document.getElementById("list-grid");
+
+  function renderList(category){
+    const items = PROJECTS.filter(p => (p.category || "work") === category);
+    listTitle.textContent = category === "play" ? "PLAY" : "WORK";
+    const tags = Array.from(new Set(items.map(p => p.tag).filter(Boolean)));
+    let activeTag = "All";
+    function renderGrid(){
+      listGrid.innerHTML = "";
+      const filtered = activeTag === "All" ? items : items.filter(p => p.tag === activeTag);
+      if(!filtered.length){
+        listGrid.innerHTML = `<p class="play-placeholder">Coming soon — 준비 중입니다.</p>`;
+        return;
+      }
+      const numCols = window.innerWidth <= 760 ? 1 : 2;
+      const cols = Array.from({length: numCols}, () => {
+        const col = document.createElement("div");
+        col.className = "list-col";
+        return col;
+      });
+      filtered.forEach((p, i) => cols[i % numCols].appendChild(projectCard(p)));
+      cols.forEach(col => listGrid.appendChild(col));
+    }
+    listFilters.innerHTML = "";
+    if(tags.length >= 1){
+      ["All", ...tags].forEach(t => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "list-filter" + (t === activeTag ? " active" : "");
+        btn.textContent = t;
+        btn.addEventListener("click", () => {
+          activeTag = t;
+          listFilters.querySelectorAll(".list-filter").forEach(b => b.classList.toggle("active", b.textContent === t));
+          renderGrid();
+        });
+        listFilters.appendChild(btn);
+        initLetterStretch(btn, { maxScale:0.5, minRadius:36 });
+      });
+    }
+    renderGrid();
   }
 
   /* ---------------- render: project view ---------------- */
@@ -1313,7 +1409,7 @@
       </div>
       <div class="p-nav">
         ${PROJECTS.length > 1 ? `<a href="#" data-prev>← ${prev.title}</a>` : `<span></span>`}
-        <a href="#" data-allwork>All Work</a>
+        <a href="#" data-allwork>All ${(project.category || "work") === "play" ? "Play" : "Work"}</a>
         ${PROJECTS.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
       </div>`;
 
@@ -1322,7 +1418,10 @@
       scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); goProject(prev.id); });
       scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); goProject(next.id); });
     }
-    scrollRoot.querySelector("[data-allwork]").addEventListener("click", (e) => { e.preventDefault(); goHome(); document.getElementById("work").scrollIntoView(); });
+    scrollRoot.querySelector("[data-allwork]").addEventListener("click", (e) => {
+      e.preventDefault();
+      (project.category || "work") === "play" ? goPlay() : goWork();
+    });
   }
 
   /* gallery height is a fixed base value (captured once from CSS, cached on the element)
@@ -1534,22 +1633,51 @@
     closeBtn.classList.remove("show");
   }
 
-  /* ---------------- routing: clean URLs (/, /info, /<project-id>) ----------------
+  const listView = document.getElementById("list-view");
+  function openList(category){
+    /* ✕ Close 버튼은 프로젝트 상세뷰(openProject)에서만 보이면 됨 — Work/Play 리스트는
+       헤더 nav나 브랜드 로고 클릭, 혹은 Escape로 나가므로 이 버튼을 켜지 않음 */
+    renderList(category);
+    listView.classList.add("open");
+    listView.scrollTop = 0;
+    document.body.classList.add("list-open");
+  }
+  function closeList(){
+    listView.classList.remove("open");
+    document.body.classList.remove("list-open");
+  }
+
+  /* ---------------- routing: clean URLs (/, /info, /work, /play, /<project-id>) ----------------
      these wrappers pair a view-state change with a history.pushState so the address
-     bar tracks Info/project navigation (vercel.json rewrites everything back to
+     bar tracks Info/Work/Play/project navigation (vercel.json rewrites everything back to
      index.html so refreshing/sharing one of these paths works). */
   function goHome(){
     closeProject();
     closeInfo();
+    closeList();
     history.pushState(null, "", "/");
   }
   function goInfo(){
     closeProject();
+    closeList();
     openInfo();
     history.pushState(null, "", "/info");
   }
+  function goWork(){
+    closeProject();
+    closeInfo();
+    openList("work");
+    history.pushState(null, "", "/work");
+  }
+  function goPlay(){
+    closeProject();
+    closeInfo();
+    openList("play");
+    history.pushState(null, "", "/play");
+  }
   function goProject(id){
     closeInfo();
+    closeList();
     openProject(id);
     history.pushState(null, "", "/" + id);
   }
@@ -1557,13 +1685,24 @@
     const clean = location.pathname.replace(/^\/+|\/+$/g, "") || (location.hash ? location.hash.slice(1) : "");
     if(clean === "info"){
       closeProject();
+      closeList();
       openInfo();
+    }else if(clean === "work"){
+      closeProject();
+      closeInfo();
+      openList("work");
+    }else if(clean === "play"){
+      closeProject();
+      closeInfo();
+      openList("play");
     }else if(PROJECTS.some(p => p.id === clean)){
       closeInfo();
+      closeList();
       openProject(clean);
     }else{
       closeProject();
       closeInfo();
+      closeList();
     }
   }
   window.addEventListener("popstate", applyRouteFromLocation);
@@ -1585,12 +1724,11 @@
 
   document.querySelectorAll("[data-go]").forEach(el => {
     el.addEventListener("click", () => {
-      if(el.dataset.go === "info"){ goInfo(); return; }
+      const go = el.dataset.go;
+      if(go === "info") return goInfo();
+      if(go === "work") return goWork();
+      if(go === "play") return goPlay();
       goHome();
-      const target = el.dataset.go === "work" ? document.getElementById("work")
-        : el.dataset.go === "play" ? document.getElementById("play")
-        : document.getElementById("intro");
-      target.scrollIntoView({behavior:"smooth"});
     });
   });
 
@@ -1603,6 +1741,40 @@
 
   // clicking the greeting marquee cycles its 5-row color palette (scrolling still reveals Work below)
   introEl.addEventListener("click", () => applyPalette(paletteIndex + 1));
+
+  /* 커서에 가까운 글자일수록 세로로 길어지는 효과 — 글자를 span 단위로 쪼갠 뒤 mousemove에서
+     각 글자 중심과 커서 사이의 가로 거리를 재서 scaleY를 적용함(거리가 멀수록 1에 가깝게, 커서
+     바로 아래일수록 최대치로). WORK/PLAY 큰 글자뿐 아니라 카테고리 필터 탭의 작은 글자에도 같은
+     방식으로 적용하되, 폰트 크기가 작아 기본 반경(fontSize*0.7)이 너무 좁아지지 않도록 최소
+     반경(minRadius)을 둠. */
+  function initLetterStretch(el, opts){
+    opts = opts || {};
+    const maxScale = opts.maxScale != null ? opts.maxScale : 0.7;
+    const minRadius = opts.minRadius || 0;
+    const letters = [...el.textContent].map(ch => {
+      const span = document.createElement("span");
+      span.className = "letter";
+      span.textContent = ch;
+      return span;
+    });
+    el.textContent = "";
+    letters.forEach(span => el.appendChild(span));
+    el.addEventListener("mousemove", (e) => {
+      const fontSize = parseFloat(getComputedStyle(el).fontSize);
+      const radius = Math.max(fontSize * 0.7, minRadius);
+      letters.forEach(span => {
+        const r = span.getBoundingClientRect();
+        const center = r.left + r.width / 2;
+        const dist = Math.abs(e.clientX - center);
+        const strength = Math.max(0, 1 - dist / radius);
+        span.style.transform = `scaleY(${1 + strength * maxScale})`;
+      });
+    });
+    el.addEventListener("mouseleave", () => {
+      letters.forEach(span => { span.style.transform = ""; });
+    });
+  }
+  document.querySelectorAll("#work-play .wp-link").forEach(el => initLetterStretch(el));
 
   /* corner frame: live day-of-week + clock */
   const dayEl = document.getElementById("frame-day");
