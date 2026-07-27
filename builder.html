@@ -2343,9 +2343,9 @@
   };
 
   const PREVIEW_CSS = `
-    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:swap;}
-    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:swap;}
-    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:swap;}
+    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:block;}
+    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:block;}
     :root{--bg:#f3f2ee;--fg:#111;--muted:#78756c;--line:rgba(17,17,17,.14);
       --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
       --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
@@ -2414,31 +2414,46 @@
   `;
 
   const PREVIEW_RUNTIME_JS = [
+    'function sizeGalleryFrame(gallery, frame){',
+    '  var media = frame.querySelector("img, video, iframe");',
+    '  if(!media || !isMediaReady(media)) return null;',
+    '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
+    '  var baseHeight = parseFloat(gallery.dataset.baseHeight);',
+    '  var ratio = mediaRatio(media);',
+    '  var availWidth = gallery.parentElement.clientWidth;',
+    '  var height = baseHeight;',
+    '  var width = height * ratio;',
+    '  if(availWidth > 0 && width > availWidth){ width = availWidth; height = width / ratio; }',
+    '  frame.style.width = width + "px";',
+    '  frame.style.height = height + "px";',
+    '  media.style.width = width + "px";',
+    '  media.style.height = height + "px";',
+    '  frame.dataset.sized = "1";',
+    '  return { height: height, width: width };',
+    '}',
     'function activateGalleryFrame(gallery, index){',
     '  var frames = gallery.querySelectorAll(".gallery-frame");',
     '  var frame = frames[index];',
     '  var media = frame && frame.querySelector("img, video, iframe");',
     '  if(!media) return;',
     '  var apply = function(){',
-    '    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight; }',
-    '    var baseHeight = parseFloat(gallery.dataset.baseHeight);',
-    '    var ratio;',
-    '    if(media.tagName === "IMG") ratio = media.naturalWidth / media.naturalHeight;',
-    '    else if(media.tagName === "VIDEO") ratio = (media.videoWidth && media.videoHeight) ? media.videoWidth / media.videoHeight : 16/9;',
-    '    else ratio = 16/9;',
-    '    var availWidth = gallery.parentElement.clientWidth;',
-    '    var height = baseHeight;',
-    '    var width = height * ratio;',
-    '    if(availWidth > 0 && width > availWidth){ width = availWidth; height = width / ratio; }',
-    '    gallery.style.height = height + "px";',
-    '    gallery.style.width = width + "px";',
+    '    frames.forEach(function(f){',
+    '      if(f === frame || f.dataset.sized) return;',
+    '      var m = f.querySelector("img, video, iframe");',
+    '      if(!m) return;',
+    '      if(isMediaReady(m)){ sizeGalleryFrame(gallery, f); }',
+    '      else waitMediaReady(m, function(){',
+    '        sizeGalleryFrame(gallery, f);',
+    '        var curFrame = gallery.querySelectorAll(".gallery-frame")[parseInt(gallery.dataset.index || "0", 10)];',
+    '        if(curFrame) gallery.querySelector(".gallery-track").style.transform = "translateX(-" + curFrame.offsetLeft + "px)";',
+    '      });',
+    '    });',
+    '    var size = sizeGalleryFrame(gallery, frame) || { height: parseFloat(gallery.dataset.baseHeight || 280), width: parseFloat(gallery.dataset.baseHeight || 280) };',
+    '    gallery.style.height = size.height + "px";',
+    '    gallery.style.width = size.width + "px";',
     '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + frame.offsetLeft + "px)";',
     '  };',
-    '  if(media.tagName === "IMG"){',
-    '    if(media.complete && media.naturalWidth){ apply(); } else { media.addEventListener("load", apply, {once:true}); }',
-    '  } else if(media.tagName === "VIDEO"){',
-    '    if(media.readyState >= 1 && media.videoWidth){ apply(); } else { media.addEventListener("loadedmetadata", apply, {once:true}); }',
-    '  } else { apply(); }',
+    '  waitMediaReady(media, apply);',
     '}',
     'function rollGallery(gallery){',
     '  var count = parseInt(gallery.dataset.count, 10);',
@@ -2537,7 +2552,7 @@
     '    if(mode === "free") return;',
     '    delete g.dataset.baseHeight;',
     '    g.style.height = "";',
-    '    if(mode === "1"){ activateGalleryFrame(g, parseInt(g.dataset.index, 10)); }',
+    '    if(mode === "1"){ g.querySelectorAll(".gallery-frame").forEach(function(f){ delete f.dataset.sized; }); activateGalleryFrame(g, parseInt(g.dataset.index, 10)); }',
     '    else if(mode === "all"){ layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row"); }',
     '    else { layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame.visible")), g.dataset.direction || "row"); }',
     '  });',

@@ -8,24 +8,30 @@
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
 <link rel="apple-touch-icon" href="favicon-192.png">
+<link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraBold.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraLight.woff2" crossorigin>
+<link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-Medium.woff2" crossorigin>
 <style>
+  /* 초기 로딩 시 시스템 폰트로 먼저 그려졌다가 SUIT 폰트로 바뀌면서 텍스트가 덜컹거리던 문제 —
+     preload로 폰트를 즉시 받아오고, font-display:block으로 폰트 로드 전까지 잠깐 텍스트를 숨겨서
+     폰트가 바뀌는 순간이 눈에 보이지 않게 함(특히 인트로 마퀴 텍스트에 중요) */
   @font-face{
     font-family:'SUIT-ExtraBold';
     src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');
     font-weight:800;
-    font-display:swap;
+    font-display:block;
   }
   @font-face{
     font-family:'SUIT-ExtraLight';
     src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');
     font-weight:200;
-    font-display:swap;
+    font-display:block;
   }
   @font-face{
     font-family:'SUIT-Medium';
     src:url('fonts/SUIT-Medium.woff2') format('woff2');
     font-weight:500;
-    font-display:swap;
+    font-display:block;
   }
   :root{
     --bg:#f3f2ee;
@@ -1310,43 +1316,66 @@
   /* gallery height is a fixed base value (captured once from CSS, cached on the element)
      so it never compounds. width is derived per-image from that base height × its own
      natural ratio — and only shrinks the height when a very wide image would otherwise
-     overflow the column, so nothing ever gets cropped. */
+     overflow the column, so nothing ever gets cropped.
+
+     Each frame gets its OWN explicit pixel width/height, set directly on the frame (not
+     via img{height:100%} of the live .gallery box). .gallery's box height/width animate
+     with a CSS transition when advancing — if every sibling frame's image size were
+     derived from that same animating box (as a percentage), every frame in the track
+     would resize together mid-transition, which desyncs the track's translateX from
+     each frame's real offsetLeft and shows two half-frames stuck together (the mobile
+     swipe glitch) or a box that doesn't shrink to the next image (the "last photo"
+     crop). Sizing each frame independently, once, removes that feedback loop. */
+  function sizeGalleryFrame(gallery, frame){
+    const media = frame.querySelector("img, video, iframe");
+    if(!media || !isMediaReady(media)) return null;
+    if(!gallery.dataset.baseHeight){
+      gallery.dataset.baseHeight = gallery.clientHeight || 280;
+    }
+    const baseHeight = parseFloat(gallery.dataset.baseHeight);
+    const ratio = mediaRatio(media);
+    const availWidth = gallery.parentElement.clientWidth;
+    let height = baseHeight;
+    let width = height * ratio;
+    /* availWidth is 0 if this runs before layout is visible (e.g. a video-link frame that
+       doesn't wait on a load event) — skip the shrink-to-fit rather than collapse to 0×0. */
+    if(availWidth > 0 && width > availWidth){
+      width = availWidth;
+      height = width / ratio;
+    }
+    frame.style.width = width + "px";
+    frame.style.height = height + "px";
+    media.style.width = width + "px";
+    media.style.height = height + "px";
+    frame.dataset.sized = "1";
+    return { height, width };
+  }
+
   function activateGalleryFrame(gallery, index){
     const frames = gallery.querySelectorAll(".gallery-frame");
     const frame = frames[index];
     const media = frame && frame.querySelector("img, video, iframe");
     if(!media) return;
     const apply = () => {
-      if(!gallery.dataset.baseHeight){
-        gallery.dataset.baseHeight = gallery.clientHeight;
-      }
-      const baseHeight = parseFloat(gallery.dataset.baseHeight);
-      let ratio;
-      if(media.tagName === "IMG") ratio = media.naturalWidth / media.naturalHeight;
-      else if(media.tagName === "VIDEO") ratio = (media.videoWidth && media.videoHeight) ? media.videoWidth / media.videoHeight : 16/9;
-      else ratio = 16/9;
-      const availWidth = gallery.parentElement.clientWidth;
-      let height = baseHeight;
-      let width = height * ratio;
-      /* availWidth is 0 if this runs before layout is visible (e.g. a video-link frame that
-         doesn't wait on a load event) — skip the shrink-to-fit rather than collapse to 0×0. */
-      if(availWidth > 0 && width > availWidth){
-        width = availWidth;
-        height = width / ratio;
-      }
-      gallery.style.height = height + "px";
-      gallery.style.width = width + "px";
+      frames.forEach(f => {
+        if(f === frame || f.dataset.sized) return;
+        const m = f.querySelector("img, video, iframe");
+        if(!m) return;
+        if(isMediaReady(m)){ sizeGalleryFrame(gallery, f); }
+        else waitMediaReady(m, () => {
+          sizeGalleryFrame(gallery, f);
+          /* a later frame finishing its load can shift offsets of everything after it —
+             re-snap the track to wherever the active frame ends up now. */
+          const curFrame = gallery.querySelectorAll(".gallery-frame")[parseInt(gallery.dataset.index || "0", 10)];
+          if(curFrame) gallery.querySelector(".gallery-track").style.transform = `translateX(-${curFrame.offsetLeft}px)`;
+        });
+      });
+      const size = sizeGalleryFrame(gallery, frame) || { height: parseFloat(gallery.dataset.baseHeight || 280), width: parseFloat(gallery.dataset.baseHeight || 280) };
+      gallery.style.height = size.height + "px";
+      gallery.style.width = size.width + "px";
       gallery.querySelector(".gallery-track").style.transform = `translateX(-${frame.offsetLeft}px)`;
     };
-    if(media.tagName === "IMG"){
-      if(media.complete && media.naturalWidth){ apply(); }
-      else{ media.addEventListener("load", apply, {once:true}); }
-    } else if(media.tagName === "VIDEO"){
-      if(media.readyState >= 1 && media.videoWidth){ apply(); }
-      else{ media.addEventListener("loadedmetadata", apply, {once:true}); }
-    } else {
-      apply();
-    }
+    waitMediaReady(media, apply);
   }
 
   function rollGallery(gallery){
@@ -1466,6 +1495,7 @@
       delete g.dataset.baseHeight;
       g.style.height = "";
       if(mode === "1"){
+        g.querySelectorAll(".gallery-frame").forEach(f => delete f.dataset.sized);
         activateGalleryFrame(g, parseInt(g.dataset.index, 10));
       } else if(mode === "all"){
         layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row");
