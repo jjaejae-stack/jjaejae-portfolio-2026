@@ -601,15 +601,25 @@
         + '<div class="gallery-track">' + frames + '</div>'
         + '</div>';
     }
-    const perPage = m === "all" ? count : (m === "1" ? 1 : parseInt(m, 10));
-    const modeClass = (m === "all" ? " mode-all" : (perPage > 1 ? " mode-multi" : "")) + (dir === "column" && perPage > 1 ? " direction-column" : "");
+    if(m === "all"){
+      /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
+         기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함. */
+      const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
+      const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
+      const videoHTML = videoIms.length
+        ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
+        : "";
+      const photoHTML = photoIms.length ? galleryBlockHTML(photoIms, blockKey + "-photos", "1", dir) : "";
+      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>';
+    }
+    const perPage = m === "1" ? 1 : parseInt(m, 10);
+    const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const frames = images.map(galleryFrameHTML).join("");
-    const showChrome = m !== "all";
     const counterEnd = Math.min(perPage, images.length || 1);
     return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '">'
       + '<div class="gallery-track">' + frames + '</div>'
-      + (showChrome ? '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>' : '')
-      + (showChrome ? '<div class="gallery-hint">Click for next</div>' : '')
+      + '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>'
+      + '<div class="gallery-hint">Click for next</div>'
       + '</div>';
   }
   function cloneAsHeroImage(im){
@@ -2386,25 +2396,24 @@
     .gallery.mode-multi .gallery-frame.visible{display:block;}
     .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video,.gallery.mode-multi .gallery-frame iframe{width:100%;height:100%;display:block;border:0;}
     .gallery.mode-multi .gallery-track{gap:2px;}
-    .gallery.mode-all{height:auto!important;max-height:none!important;min-height:0;cursor:default;overflow:visible;background:none;}
-    .gallery.mode-all .gallery-track{flex-wrap:wrap;height:auto;gap:8px;transform:none!important;}
-    .gallery.mode-all .gallery-frame{flex:0 0 auto;}
-    .gallery.mode-all .gallery-frame img,.gallery.mode-all .gallery-frame video,.gallery.mode-all .gallery-frame iframe{width:100%;height:100%;display:block;border:0;}
     .gallery.direction-column .gallery-track{flex-direction:column;}
     .gallery.mode-multi.direction-column{height:auto!important;max-height:none!important;min-height:0;}
     .gallery.mode-multi.direction-column .gallery-track{height:auto;}
-    .gallery.mode-all.direction-column .gallery-track{flex-direction:column;flex-wrap:nowrap;}
     .gallery.mode-free{position:relative;height:60vh;max-height:640px;min-height:280px;cursor:default;background:#111;}
     .gallery.mode-free .gallery-track{position:relative;height:100%;display:block;}
     .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
     .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
     .gallery.mode-free .gallery-frame iframe{width:100%;height:100%;border:0;}
+    .gallery-video-stack{display:flex;flex-direction:column;gap:8px;}
+    .gallery-video-frame{position:relative;width:100%;background:#111;}
+    .gallery-video-frame iframe,.gallery-video-frame video{display:block;width:100%;height:auto;aspect-ratio:16/9;border:0;background:#000;}
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
     .p-block-heading{margin-top:18px;font-size:1.1rem;font-family:var(--font-bold);}
     .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;font-family:var(--font-medium);}
     .p-block .gallery{margin-top:26px;}
+    .p-block .gallery-video-stack{margin-top:26px;}
     .p-credits{max-width:1080px;margin:0 auto 100px;padding-top:8px;}
     .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);padding-bottom:18px;margin-bottom:30px;border-bottom:1px solid var(--line);}
     .credits-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:26px 24px;}
@@ -2495,14 +2504,6 @@
     '      });',
     '      gallery.style.width = width + "px";',
     '      gallery.style.height = totalHeight + "px";',
-    '    } else if(gallery.classList.contains("mode-all")){',
-    '      if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
-    '      var heightAll = parseFloat(gallery.dataset.baseHeight);',
-    '      frames.forEach(function(f, i){',
-    '        f.style.width = (heightAll * ratios[i]) + "px"; f.style.height = heightAll + "px";',
-    '      });',
-    '      gallery.style.height = "auto";',
-    '      gallery.style.width = "100%";',
     '    } else {',
     '      if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
     '      var height = parseFloat(gallery.dataset.baseHeight);',
@@ -2535,7 +2536,6 @@
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
     '  if(mode === "free") return;',
-    '  if(mode === "all"){ layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row"); return; }',
     '  if(perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
     '  showGalleryPage(g, 0);',
     '  g.addEventListener("click", function(){',
@@ -2553,7 +2553,6 @@
     '    delete g.dataset.baseHeight;',
     '    g.style.height = "";',
     '    if(mode === "1"){ g.querySelectorAll(".gallery-frame").forEach(function(f){ delete f.dataset.sized; }); activateGalleryFrame(g, parseInt(g.dataset.index, 10)); }',
-    '    else if(mode === "all"){ layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame")), g.dataset.direction || "row"); }',
     '    else { layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame.visible")), g.dataset.direction || "row"); }',
     '  });',
     '});'
