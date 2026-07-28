@@ -2382,10 +2382,10 @@
     }
     .p-detail{padding:80px 6vw 40px;}
     .p-block{max-width:920px;margin:0 auto 96px;}
-    .gallery{position:relative;overflow:hidden;height:60vh;max-height:640px;min-height:280px;margin:0 auto;background:#111;cursor:pointer;transition:width .65s cubic-bezier(.65,0,.35,1),height .65s cubic-bezier(.65,0,.35,1);}
+    .gallery{position:relative;overflow:hidden;height:60vh;max-height:640px;min-height:280px;margin:0 auto;background:#111;cursor:pointer;border-radius:18px;transition:width .65s cubic-bezier(.65,0,.35,1),height .65s cubic-bezier(.65,0,.35,1);}
     .gallery-track{display:flex;flex-direction:row;height:100%;transition:transform .65s cubic-bezier(.65,0,.35,1);}
     .gallery-frame{flex:0 0 auto;height:100%;}
-    .gallery-frame img{height:100%;width:auto;max-width:none;display:block;}
+    .gallery-frame img{height:100%;width:auto;max-width:none;display:block;cursor:zoom-in;}
     .gallery-frame video{height:100%;width:auto;max-width:none;display:block;background:#000;}
     .gallery-frame iframe{height:100%;width:auto;aspect-ratio:16/9;max-width:none;display:block;border:0;background:#000;}
     .gallery-counter{position:absolute;right:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
@@ -2405,7 +2405,7 @@
     .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
     .gallery.mode-free .gallery-frame iframe{width:100%;height:100%;border:0;}
     .gallery-video-stack{display:flex;flex-direction:column;gap:8px;}
-    .gallery-video-frame{position:relative;width:100%;background:#111;}
+    .gallery-video-frame{position:relative;width:100%;background:#111;border-radius:18px;overflow:hidden;}
     .gallery-video-frame iframe,.gallery-video-frame video{display:block;width:100%;height:auto;aspect-ratio:16/9;border:0;background:#000;}
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
@@ -2420,6 +2420,19 @@
     .credit-item{border-top:1px solid var(--line);padding-top:10px;}
     .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
     .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;font-family:var(--font-medium);}
+    #lightbox{display:none;position:fixed;inset:0;z-index:600;align-items:center;justify-content:center;background:rgba(10,10,10,.92);}
+    #lightbox.open{display:flex;}
+    #lightbox img{max-width:88vw;max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:12px;user-select:none;-webkit-user-drag:none;}
+    #lightbox-close{position:absolute;top:22px;right:28px;z-index:2;font-size:14px;letter-spacing:.02em;color:#fff;opacity:.75;transition:opacity .2s;background:none;border:0;cursor:pointer;}
+    #lightbox-close:hover{opacity:1;}
+    #lightbox-prev,#lightbox-next{position:absolute;top:50%;transform:translateY(-50%);z-index:2;font-size:34px;line-height:1;color:#fff;opacity:.6;padding:14px 18px;transition:opacity .2s;background:none;border:0;cursor:pointer;}
+    #lightbox-prev{left:6px;}
+    #lightbox-next{right:6px;}
+    #lightbox-prev:hover,#lightbox-next:hover{opacity:1;}
+    @media (max-width:600px){
+      #lightbox-prev,#lightbox-next{font-size:24px;padding:10px 12px;}
+      #lightbox-close{top:16px;right:18px;}
+    }
   `;
 
   const PREVIEW_RUNTIME_JS = [
@@ -2545,6 +2558,33 @@
     '    showGalleryPage(g, page);',
     '  });',
     '}',
+    'var lightbox = document.getElementById("lightbox");',
+    'var lightboxImg = document.getElementById("lightbox-img");',
+    'var lightboxList = [];',
+    'var lightboxIndex = 0;',
+    'function showLightboxFrame(){ lightboxImg.src = lightboxList[lightboxIndex] || ""; }',
+    'function openLightbox(list, index){ lightboxList = list; lightboxIndex = index; showLightboxFrame(); lightbox.classList.add("open"); }',
+    'function closeLightbox(){ lightbox.classList.remove("open"); lightboxImg.src = ""; }',
+    'function lightboxNav(dir){ if(!lightboxList.length) return; lightboxIndex = (lightboxIndex + dir + lightboxList.length) % lightboxList.length; showLightboxFrame(); }',
+    'document.getElementById("lightbox-close").addEventListener("click", closeLightbox);',
+    'document.getElementById("lightbox-prev").addEventListener("click", function(e){ e.stopPropagation(); lightboxNav(-1); });',
+    'document.getElementById("lightbox-next").addEventListener("click", function(e){ e.stopPropagation(); lightboxNav(1); });',
+    'lightbox.addEventListener("click", function(e){ if(e.target === lightbox) closeLightbox(); });',
+    'document.addEventListener("keydown", function(e){',
+    '  if(!lightbox.classList.contains("open")) return;',
+    '  if(e.key === "Escape") closeLightbox();',
+    '  if(e.key === "ArrowLeft") lightboxNav(-1);',
+    '  if(e.key === "ArrowRight") lightboxNav(1);',
+    '});',
+    'document.body.addEventListener("click", function(e){',
+    '  var img = e.target.closest(".gallery-frame img");',
+    '  if(!img) return;',
+    '  var gallery = img.closest(".gallery");',
+    '  if(!gallery) return;',
+    '  e.stopPropagation();',
+    '  var imgs = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame img"));',
+    '  openLightbox(imgs.map(function(im){ return im.getAttribute("src"); }), imgs.indexOf(img));',
+    '}, true);',
     'document.querySelectorAll(".gallery").forEach(function(g){ initGallery(g); });',
     'window.addEventListener("resize", function(){',
     '  document.querySelectorAll(".gallery").forEach(function(g){',
@@ -2604,7 +2644,13 @@
       +     '<h1 style="letter-spacing:' + letterSpacing + ';line-height:' + lineHeight + ';' + fontFamily + '">' + escapeHTML(project.title||"Untitled") + '</h1></div>'
       +   socialBoxHTML
       + '</div>'
-      + '<div class="p-detail">' + blocksHTML + creditsHTML + '</div>';
+      + '<div class="p-detail">' + blocksHTML + creditsHTML + '</div>'
+      + '<div id="lightbox">'
+      +   '<button type="button" id="lightbox-close" aria-label="Close">✕</button>'
+      +   '<button type="button" id="lightbox-prev" aria-label="Previous">&lt;</button>'
+      +   '<img id="lightbox-img" src="" alt="">'
+      +   '<button type="button" id="lightbox-next" aria-label="Next">&gt;</button>'
+      + '</div>';
   }
 
   function buildFontFaceCSS(project){

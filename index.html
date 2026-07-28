@@ -198,9 +198,12 @@
   @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 
   /* ---------- work / play landing: scroll down to just these two words ---------- */
+  /* min-height를 100vh가 아니라 90vh로 살짝 줄여서(+ 아래 footer 여백 확보), 스크롤을 끝까지
+     내려도 WORK/PLAY 글자가 상단 로고 자리까지, footer 문구가 하단 IG·Top 자리까지 닿지
+     않게 여백을 미리 확보함 (실기기 높이 667~932px 범위로 실측 후 값 결정) */
   #work-play{
     display:flex;
-    min-height:100vh;
+    min-height:90vh;
   }
   #work-play .wp-link{
     flex:1;
@@ -370,7 +373,7 @@
     .p-social{border-width:2px; box-shadow:6px 6px 0 #111;}
   }
 
-  .p-detail{padding:80px 6vw 40px;}
+  .p-detail{padding:112px 6vw 40px;}
   .p-block{max-width:920px; margin:0 auto 96px;}
   .gallery{
     position:relative;
@@ -381,6 +384,7 @@
     margin:0 auto;
     background:#111;
     cursor:pointer;
+    border-radius:18px;
     transition:width .65s cubic-bezier(.65,0,.35,1), height .65s cubic-bezier(.65,0,.35,1);
   }
   .gallery-track{
@@ -388,7 +392,7 @@
     transition:transform .65s cubic-bezier(.65,0,.35,1);
   }
   .gallery-frame{flex:0 0 auto; height:100%;}
-  .gallery-frame img{height:100%; width:auto; max-width:none; display:block;}
+  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; cursor:zoom-in;}
   .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000;}
   .gallery-frame iframe{height:100%; width:auto; aspect-ratio:16/9; max-width:none; display:block; border:0; background:#000;}
   .gallery-counter{
@@ -435,7 +439,7 @@
   /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
      기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함 — galleryHTML()의 mode "all" 분기 참고 */
   .gallery-video-stack{display:flex; flex-direction:column; gap:8px;}
-  .gallery-video-frame{position:relative; width:100%; background:#111;}
+  .gallery-video-frame{position:relative; width:100%; background:#111; border-radius:18px; overflow:hidden;}
   .gallery-video-frame iframe, .gallery-video-frame video{display:block; width:100%; height:auto; aspect-ratio:16/9; border:0; background:#000;}
 
   /* 블록 이름(라벨)·헤딩·본문은 사진 위에 겹치는 게 아니라, 페이지 안에서 사진 "윗부분"(위쪽)에
@@ -493,8 +497,46 @@
   .p-nav a{color:var(--muted);}
   .p-nav a:hover{color:var(--fg);}
 
+  /* ---------- lightbox: 갤러리 사진을 클릭하면 그 위에 한 겹 더 뜨는 확대 레이어 ----------
+     영상(iframe/video)은 대상이 아니고 사진(img)만 해당 — 클릭한 사진이 속한 갤러리의
+     사진들만 모아서 그 안에서 < / > 로 이전·다음 이동, 바깥 클릭·✕·Esc로 닫힘 */
+  #lightbox{
+    display:none; position:fixed; inset:0; z-index:600;
+    align-items:center; justify-content:center;
+    background:rgba(10,10,10,.92);
+  }
+  #lightbox.open{display:flex;}
+  #lightbox img{
+    max-width:88vw; max-height:88vh;
+    width:auto; height:auto;
+    object-fit:contain;
+    border-radius:12px;
+    user-select:none;
+    -webkit-user-drag:none;
+  }
+  #lightbox-close{
+    position:absolute; top:22px; right:28px; z-index:2;
+    font-size:14px; letter-spacing:.02em; color:#fff; opacity:.75;
+    transition:opacity .2s;
+  }
+  #lightbox-close:hover{opacity:1;}
+  #lightbox-prev, #lightbox-next{
+    position:absolute; top:50%; transform:translateY(-50%);
+    z-index:2;
+    font-size:34px; line-height:1; color:#fff; opacity:.6;
+    padding:14px 18px;
+    transition:opacity .2s;
+  }
+  #lightbox-prev{left:6px;}
+  #lightbox-next{right:6px;}
+  #lightbox-prev:hover, #lightbox-next:hover{opacity:1;}
+  @media (max-width:600px){
+    #lightbox-prev, #lightbox-next{font-size:24px; padding:10px 12px;}
+    #lightbox-close{top:16px; right:18px;}
+  }
+
   footer{
-    padding:26px 6vw;
+    padding:26px 6vw 60px;
     font-size:12px; color:var(--muted);
     display:flex; justify-content:space-between;
     border-top:1px solid var(--line);
@@ -604,6 +646,15 @@
 
   <div id="project-view">
     <div id="project-scroll"></div>
+    <!-- project-view의 자식으로 둠 — project-view(고정+큰 스크롤 영역)의 형제로 두면
+         특정 스크롤 위치에서 이 확대 레이어의 배경이 제대로 합성되지 않고 뒤 콘텐츠가
+         비쳐 보이는 크로미움 렌더링 버그가 있어서, 자식으로 옮겨 회피함 -->
+    <div id="lightbox">
+      <button type="button" id="lightbox-close" aria-label="Close">✕</button>
+      <button type="button" id="lightbox-prev" aria-label="Previous">&lt;</button>
+      <img id="lightbox-img" src="" alt="">
+      <button type="button" id="lightbox-next" aria-label="Next">&gt;</button>
+    </div>
   </div>
 
   <div id="list-view">
@@ -1412,6 +1463,54 @@
   const scrollRoot = document.getElementById("project-scroll");
   const closeBtn = document.getElementById("project-close");
 
+  /* ---------------- lightbox: 갤러리 사진 클릭 시 확대 레이어 ----------------
+     동영상(iframe/video)은 대상이 아니고 사진만 해당. 클릭한 사진이 속한 갤러리 안의
+     사진들만 모아서 그 리스트 안에서 이전/다음으로 이동함(비디오 프레임은 건너뜀). */
+  const lightbox = document.getElementById("lightbox");
+  const lightboxImg = document.getElementById("lightbox-img");
+  let lightboxList = [];
+  let lightboxIndex = 0;
+
+  function showLightboxFrame(){
+    lightboxImg.src = lightboxList[lightboxIndex] || "";
+  }
+  function openLightbox(list, index){
+    lightboxList = list;
+    lightboxIndex = index;
+    showLightboxFrame();
+    lightbox.classList.add("open");
+  }
+  function closeLightbox(){
+    lightbox.classList.remove("open");
+    lightboxImg.src = "";
+  }
+  function lightboxNav(dir){
+    if(!lightboxList.length) return;
+    lightboxIndex = (lightboxIndex + dir + lightboxList.length) % lightboxList.length;
+    showLightboxFrame();
+  }
+  document.getElementById("lightbox-close").addEventListener("click", closeLightbox);
+  document.getElementById("lightbox-prev").addEventListener("click", (e) => { e.stopPropagation(); lightboxNav(-1); });
+  document.getElementById("lightbox-next").addEventListener("click", (e) => { e.stopPropagation(); lightboxNav(1); });
+  lightbox.addEventListener("click", (e) => { if(e.target === lightbox) closeLightbox(); });
+  document.addEventListener("keydown", (e) => {
+    if(!lightbox.classList.contains("open")) return;
+    if(e.key === "Escape") closeLightbox();
+    if(e.key === "ArrowLeft") lightboxNav(-1);
+    if(e.key === "ArrowRight") lightboxNav(1);
+  });
+  // capture 단계에서 가로채서, 사진을 눌렀을 때 갤러리 자체의 클릭(다음 사진 넘기기) 핸들러가
+  // 같이 발동해 확대 레이어 뒤에서 갤러리도 넘어가 버리는 걸 막음
+  scrollRoot.addEventListener("click", (e) => {
+    const img = e.target.closest(".gallery-frame img");
+    if(!img) return;
+    const gallery = img.closest(".gallery");
+    if(!gallery) return;
+    e.stopPropagation();
+    const imgs = Array.from(gallery.querySelectorAll(".gallery-frame img"));
+    openLightbox(imgs.map(im => im.getAttribute("src")), imgs.indexOf(img));
+  }, true);
+
   /* colorable icons: the shape comes from a white PNG used as a CSS mask, so the
      actual rendered color is whatever `currentColor` resolves to (the .p-social
      box's text color) — this keeps the exact logo artwork instead of a hand-drawn
@@ -1748,12 +1847,22 @@
   }
 
   // 프로젝트 상세뷰의 첫 화면(.p-main) 높이의 2/3를 스크롤로 지나면 body.project-past-hero를 켜서
-  // 브랜드 로고·Email·IG가 원래의 40%-옅게 규칙으로 돌아오게 함
+  // 브랜드 로고·Email·IG가 원래의 40%-옅게 규칙으로 돌아오게 함 — 단, 그 시점에 첫 블록의
+  // 캡션("라벨/01")·제목이 아직 화면 위쪽(로고 자리)에 걸쳐 있으면 안 되므로, 그 블록이
+  // 이미 다 지나간 뒤(더 아래로 스크롤된 뒤)로 최소 기준을 늦춰서 겹치지 않게 함
   viewRoot.addEventListener("scroll", () => {
     if(!document.body.classList.contains("project-open")) return;
     const pMain = scrollRoot.querySelector(".p-main");
     if(!pMain) return;
-    const threshold = pMain.offsetHeight * (2/3);
+    let threshold = pMain.offsetHeight * (2/3);
+    const firstBlock = scrollRoot.querySelector(".p-block");
+    if(firstBlock){
+      const refEl = firstBlock.querySelector(".p-block-heading") || firstBlock.querySelector(".p-caption");
+      if(refEl){
+        const refDocBottom = refEl.getBoundingClientRect().bottom + viewRoot.scrollTop;
+        threshold = Math.max(threshold, refDocBottom + 40);
+      }
+    }
     document.body.classList.toggle("project-past-hero", viewRoot.scrollTop > threshold);
   });
 
@@ -1762,6 +1871,7 @@
     document.body.classList.remove("project-open");
     document.body.classList.remove("project-past-hero");
     closeBtn.classList.remove("show");
+    closeLightbox();
   }
 
   const listView = document.getElementById("list-view");
