@@ -613,9 +613,31 @@
     padding-bottom:2px;
   }
   #info-view .links a:hover{border-color:#111;}
+
+  /* ---------- custom cursor: jjaejae "J" 아이콘, 이동 방향으로 살짝 끌려가듯 기울어짐 ----------
+     실제 마우스가 있는 기기(pointer:fine)에서만 적용 — 터치 기기는 그대로 둠.
+     메인 화면(5줄 인사말 마퀴)에서는 안 보이다가, 스크롤로 그 화면을 지나야(body.past-hero)
+     비로소 나타남 — 헤더/로고 등 다른 UI가 나타나는 시점과 동일하게 맞춤 */
+  @media (pointer:fine){
+    body.custom-cursor, body.custom-cursor *{ cursor:none !important; }
+  }
+  #cursor-j{
+    position:fixed; top:0; left:0;
+    width:14px; height:auto;
+    pointer-events:none;
+    z-index:9999;
+    transform-origin:top left;
+    will-change:transform;
+    display:none;
+    opacity:0;
+    transition:opacity .2s ease;
+  }
+  body.custom-cursor.past-hero #cursor-j{ display:block; }
 </style>
 </head>
 <body>
+
+  <img id="cursor-j" src="cursor-j.png" alt="">
 
   <header id="site-header">
     <nav>
@@ -1075,7 +1097,7 @@
       boxWidthScale:1,
       boxHeightScale:1,
       meta:"Client — i-Scream Edu · Agency — TBWA\\KOREA",
-      hero:"아이스크림 홈런/ac59fa169739327.64537424686f9.webp",
+      hero:"아이스크림 홈런/ac59fa169739327.64537424686f9.jpg",
       heroType:"video",
       heroVideoId:"823640859",
       social:{ youtube:"#", vimeo:"https://vimeo.com/823640859?fl=pl&fe=sh", instagram:"#" },
@@ -1085,14 +1107,14 @@
         {
           label:"Campaign",
           images:[
-            "아이스크림 홈런/6fdab5169739327.64535079c9124.webp",
+            "아이스크림 홈런/6fdab5169739327.64535079c9124.jpg",
           ],
           paragraphs:["아이스크림 홈런은 대한민국의 교육 브랜드입니다.", "2022년,아이스크림 홈런 2.0출시와 함께 교육 브랜드로서 긍정적인 이미지를 만드는 것이 필요했습니다.", "중독되는 후크송, 유명 강사를 앞세워 커뮤니케이션하는 경쟁 브랜드와 달리,", "아이스크림 홈런은 교육의 본질을 만들어주는 브랜드에 이미지를 만들고자 했습니다."]
         },
         {
           label:"Brand Workshop",
           images:[
-            "아이스크림 홈런/52ee07169739327.6453cbd096803.webp",
+            "아이스크림 홈런/52ee07169739327.6453cbd096803.jpg",
           ],
           paragraphs:["우리는 임직원 인터뷰를 통해 '교육의 본질'과 홈런의 '역할'에 대한 인터뷰를 진행했습니다. 그 결과, '자기 주도성'을 바탕으로 '회복력과 자존감'을 갖춰 '인생의 주인'이 되는 아이로 성장시키는 교육철학이 i-Scream HomeLearn에 공통적으로 내재되어 있다는 점을 발견할 수 있었습니다.", "더불어 수많은 회의와 워크샵을 통해 좀 더 명확하고 구체적인 문장으로 정리하여 '학습의 근본을 다질 수 있는 아이스크림 홈런'이란 새로운 아이덴티티를 정립했습니다."]
         },
@@ -1100,20 +1122,20 @@
           label:"Campaign Slogan",
           heading:"공부를 좋아하는 습관",
           images:[
-            "아이스크림 홈런/2f4158169739327.645362b8de829.webp",
+            "아이스크림 홈런/2f4158169739327.645362b8de829.jpg",
           ],
           paragraphs:[]
         },
         {
           label:"Slogan Design & Manifesto",
           images:[
-            "아이스크림 홈런/bb2f50169739327.645362b8ddd40.webp",
-            "아이스크림 홈런/31c854169739327.645362b7dcbd0.webp",
-            "아이스크림 홈런/d0c729169739327.645362b7dc107.webp",
-            "아이스크림 홈런/f2196a169739327.6453cbbe3e3aa.webp",
-            "아이스크림 홈런/ca2137169739327.6455233994f68.webp",
-            "아이스크림 홈런/0c8903169739327.645362b85df90.webp",
-            "아이스크림 홈런/a581b2169739327.645362b85d2f4.webp",
+            "아이스크림 홈런/bb2f50169739327.645362b8ddd40.jpg",
+            "아이스크림 홈런/31c854169739327.645362b7dcbd0.jpg",
+            "아이스크림 홈런/d0c729169739327.645362b7dc107.jpg",
+            "아이스크림 홈런/f2196a169739327.6453cbbe3e3aa.jpg",
+            "아이스크림 홈런/ca2137169739327.6455233994f68.jpg",
+            "아이스크림 홈런/0c8903169739327.645362b85df90.jpg",
+            "아이스크림 홈런/a581b2169739327.645362b85d2f4.jpg",
           ],
           paragraphs:["하루 하루 쌓이는 공부 습관을 '달력'으로 표현하고, 아이스크림 홈런 로고의 운동성있는 활자를 모티브로 진행했습니다."]
         },
@@ -1134,19 +1156,19 @@
         {
           label:"Poster",
           images:[
-            "아이스크림 홈런/fc8e5e169739327.64552275192f7.webp",
-            "아이스크림 홈런/062276169739327.6453cbbfade86.webp",
-            "아이스크림 홈런/ac59fa169739327.64537424686f9.webp",
-            "아이스크림 홈런/6fa4bc169739327.6453cbbfaeb89.webp",
+            "아이스크림 홈런/fc8e5e169739327.64552275192f7.jpg",
+            "아이스크림 홈런/062276169739327.6453cbbfade86.jpg",
+            "아이스크림 홈런/ac59fa169739327.64537424686f9.jpg",
+            "아이스크림 홈런/6fa4bc169739327.6453cbbfaeb89.jpg",
           ],
           paragraphs:[]
         },
         {
           label:"Launching Event",
           images:[
-            "아이스크림 홈런/f5b038169739327.6453ce2715245.webp",
-            "아이스크림 홈런/061a20169739327.6453ce2716146.webp",
-            "아이스크림 홈런/91c92e169739327.6453ce2716ee7.webp",
+            "아이스크림 홈런/f5b038169739327.6453ce2715245.jpg",
+            "아이스크림 홈런/061a20169739327.6453ce2716146.jpg",
+            "아이스크림 홈런/91c92e169739327.6453ce2716ee7.jpg",
           ],
           paragraphs:["우리는 아이스크림 홈런 2.0 런칭에 맞춰 학부모들을 초대해 행사를 열고, 새롭게 리뉴얼된 i-Scream HomeLearn에 대해 소개하고 교육 철학에 대해 공유하는 시간을 가졌습니다."]
         }
@@ -1744,9 +1766,29 @@
     if(media.tagName === "VIDEO") return media.readyState >= 1 && media.videoWidth;
     return true;
   }
+  /* img.complete가 true로 바뀌는 순간과 naturalWidth가 실제로 채워지는 순간 사이에
+     아주 짧은 간격(디코딩 타이밍)이 있을 수 있어서, 그 틈에 isMediaReady를 검사하면
+     "아직 준비 안 됨"으로 잘못 판단하고 load 이벤트만 기다리게 되는데, 이미지가 캐시 등의
+     이유로 아주 빨리 로드된 경우 load 이벤트는 이미 지나가버려서 콜백이 영영 안 불리고
+     그 사진의 갤러리 프레임이 계속 배경색(검은 박스)으로만 보이는 문제가 있었음 —
+     load/error 이벤트에만 기대지 않고 rAF로 짧게 재확인해서 이 경합 상태를 피함 */
   function waitMediaReady(media, cb){
     if(isMediaReady(media)){ cb(); return; }
-    media.addEventListener(media.tagName === "VIDEO" ? "loadedmetadata" : "load", cb, {once:true});
+    let done = false;
+    function finish(){
+      if(done) return;
+      done = true;
+      cb();
+    }
+    media.addEventListener(media.tagName === "VIDEO" ? "loadedmetadata" : "load", finish, {once:true});
+    media.addEventListener("error", finish, {once:true});
+    let tries = 0;
+    (function poll(){
+      if(done) return;
+      if(isMediaReady(media)){ finish(); return; }
+      tries++;
+      if(tries < 60) requestAnimationFrame(poll);
+    })();
   }
   /* mode-multi: size each frame from its OWN natural aspect ratio (never crop, never
      letterbox) — row mode shares a height and sums widths (shrinking only if the whole
@@ -2022,6 +2064,42 @@
     });
   }
   document.querySelectorAll("#work-play .wp-link").forEach(el => initLetterStretch(el));
+
+  /* ---------- custom cursor: jjaejae "J" 아이콘 ----------
+     실제 마우스가 있는 기기에서만 켬(터치 기기는 손대지 않음). 커서는 마우스를 그대로
+     따라가지 않고 매 프레임 조금씩(20%) 따라붙게 해서 살짝 지연되는 느낌을 주고,
+     그 지연된 만큼(목표 위치와의 가로 거리)을 기울기로 바꿔서 "끌려가듯" 기울어지게 함 —
+     빨리 움직일수록 뒤처지는 거리가 커지므로 자연히 더 크게 기울어짐. */
+  (function initCustomCursor(){
+    if(!window.matchMedia("(pointer:fine)").matches) return;
+    const cursorEl = document.getElementById("cursor-j");
+    document.body.classList.add("custom-cursor");
+
+    let mouseX = window.innerWidth / 2, mouseY = window.innerHeight / 2;
+    let curX = mouseX, curY = mouseY;
+    let angle = 0;
+    let started = false;
+
+    window.addEventListener("mousemove", (e) => {
+      mouseX = e.clientX;
+      mouseY = e.clientY;
+      if(!started){ curX = mouseX; curY = mouseY; started = true; cursorEl.style.opacity = "1"; }
+    });
+    document.addEventListener("mouseleave", () => { cursorEl.style.opacity = "0"; });
+    document.addEventListener("mouseenter", () => { if(started) cursorEl.style.opacity = "1"; });
+
+    function animate(){
+      const dx = mouseX - curX;
+      const dy = mouseY - curY;
+      curX += dx * 0.2;
+      curY += dy * 0.2;
+      const targetAngle = Math.max(-35, Math.min(35, dx * 1.4));
+      angle += (targetAngle - angle) * 0.25;
+      cursorEl.style.transform = `translate(${curX}px, ${curY}px) rotate(${angle}deg)`;
+      requestAnimationFrame(animate);
+    }
+    requestAnimationFrame(animate);
+  })();
 
   /* corner frame: live day-of-week + clock */
   const dayEl = document.getElementById("frame-day");
