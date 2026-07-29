@@ -616,8 +616,13 @@
 
   /* ---------- custom cursor: jjaejae "J" 아이콘, 이동 방향으로 살짝 끌려가듯 기울어짐 ----------
      실제 마우스가 있는 기기(pointer:fine)에서만 적용 — 터치 기기는 그대로 둠.
-     메인 화면(5줄 인사말 마퀴)에서는 안 보이다가, 스크롤로 그 화면을 지나야(body.past-hero)
-     비로소 나타남 — 헤더/로고 등 다른 UI가 나타나는 시점과 동일하게 맞춤 */
+     메인 화면(5줄 인사말 마퀴)에서는 안 보이다가, WORK/PLAY 글자가 화면에 살짝 보이기
+     시작하면(body.cursor-ready) 바로 나타남.
+     이미지는 실제(지연 없는) 마우스 좌표가 아니라 살짝 지연된 좌표를 중심으로 그려지는데,
+     예전엔 이미지의 좌상단 모서리를 좌표에 맞췄더니 J 글씨의 어느 부분을 눌러야 클릭이
+     되는지 감이 안 잡힌다는 피드백이 있었음 — translate(-50%,-50%)로 이미지 중심을
+     좌표에 맞추고 회전도 그 중심을 기준으로 돌게 해서, 정지했을 때 보이는 J의 중앙이
+     실제 클릭 지점과 일치하도록 함. */
   @media (pointer:fine){
     body.custom-cursor, body.custom-cursor *{ cursor:none !important; }
   }
@@ -626,13 +631,13 @@
     width:14px; height:auto;
     pointer-events:none;
     z-index:9999;
-    transform-origin:top left;
+    transform-origin:center;
     will-change:transform;
     display:none;
     opacity:0;
     transition:opacity .2s ease;
   }
-  body.custom-cursor.past-hero #cursor-j{ display:block; }
+  body.custom-cursor.cursor-ready #cursor-j{ display:block; }
 </style>
 </head>
 <body>
@@ -641,9 +646,9 @@
 
   <header id="site-header">
     <nav>
-      <button data-go="work">Work</button>
-      <button data-go="play">Play</button>
-      <button data-go="info">Info</button>
+      <button data-go="work">WORK</button>
+      <button data-go="play">PLAY</button>
+      <button data-go="info">INFO</button>
     </nav>
     <button id="project-close">✕ Close</button>
   </header>
@@ -2028,6 +2033,14 @@
     entries.forEach(entry => document.body.classList.toggle("past-hero", !entry.isIntersecting));
   }, { threshold:0 }).observe(introEl);
 
+  /* 커스텀 커서는 헤더보다 더 일찍 등장시킴 — WORK/PLAY 글자가 화면 하단에 살짝
+     보이기 시작하는 시점부터 바로 나타남. rootMargin으로 40px만큼 여유를 둬서
+     work-play 상단이 뷰포트 바닥에 정확히 딱 맞닿는(경계가 애매한) 순간이 아니라
+     확실히 스크롤이 조금 더 진행된 뒤에 켜지도록 함. */
+  new IntersectionObserver((entries) => {
+    entries.forEach(entry => document.body.classList.toggle("cursor-ready", entry.isIntersecting));
+  }, { threshold:0, rootMargin:"0px 0px -40px 0px" }).observe(document.getElementById("work-play"));
+
   // clicking the greeting marquee cycles its 5-row color palette (scrolling still reveals Work below)
   introEl.addEventListener("click", () => applyPalette(paletteIndex + 1));
 
@@ -2065,6 +2078,45 @@
   }
   document.querySelectorAll("#work-play .wp-link").forEach(el => initLetterStretch(el));
 
+  /* ---------- 우상단 내비(WORK / PLAY / INFO) 스크램블 텍스트 효과 ----------
+     마우스를 올리면 각 글자가 잠깐 랜덤 문자로 지글거리다가 원래 단어로 정렬됨. */
+  (function initNavScramble(){
+    const CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ!<>-_/[]{}=+*^?#";
+    function scramble(el){
+      const word = el.dataset.word || (el.dataset.word = el.textContent.trim());
+      const queue = word.split("").map(ch => {
+        const start = Math.floor(Math.random() * 40);
+        return { to: ch, start, end: start + Math.floor(Math.random() * 40), char: "" };
+      });
+      if(el._scrambleFrame) cancelAnimationFrame(el._scrambleFrame);
+      let frame = 0;
+      function update(){
+        let output = "";
+        let complete = 0;
+        queue.forEach(q => {
+          if(frame >= q.end){
+            complete++;
+            output += q.to;
+          }else if(frame >= q.start){
+            if(!q.char || Math.random() < 0.3) q.char = CHARS[Math.floor(Math.random() * CHARS.length)];
+            output += q.char;
+          }else{
+            output += q.to;
+          }
+        });
+        el.textContent = output;
+        if(complete < queue.length){
+          frame++;
+          el._scrambleFrame = requestAnimationFrame(update);
+        }
+      }
+      update();
+    }
+    document.querySelectorAll("#site-header nav button").forEach(btn => {
+      btn.addEventListener("mouseenter", () => scramble(btn));
+    });
+  })();
+
   /* ---------- custom cursor: jjaejae "J" 아이콘 ----------
      실제 마우스가 있는 기기에서만 켬(터치 기기는 손대지 않음). 커서는 마우스를 그대로
      따라가지 않고 매 프레임 조금씩(20%) 따라붙게 해서 살짝 지연되는 느낌을 주고,
@@ -2095,7 +2147,7 @@
       curY += dy * 0.2;
       const targetAngle = Math.max(-35, Math.min(35, dx * 1.4));
       angle += (targetAngle - angle) * 0.25;
-      cursorEl.style.transform = `translate(${curX}px, ${curY}px) rotate(${angle}deg)`;
+      cursorEl.style.transform = `translate(${curX}px, ${curY}px) translate(-50%, -50%) rotate(${angle}deg)`;
       requestAnimationFrame(animate);
     }
     requestAnimationFrame(animate);
