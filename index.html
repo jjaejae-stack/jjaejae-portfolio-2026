@@ -396,16 +396,18 @@
     min-height:280px;
     margin:0 auto;
     background:#111;
-    cursor:pointer;
+    cursor:grab;
+    touch-action:pan-y;
     border-radius:18px;
     transition:width .65s cubic-bezier(.65,0,.35,1), height .65s cubic-bezier(.65,0,.35,1);
   }
+  .gallery.dragging, .gallery.dragging .gallery-frame img{cursor:grabbing;}
   .gallery-track{
     display:flex; flex-direction:row; height:100%;
     transition:transform .65s cubic-bezier(.65,0,.35,1);
   }
   .gallery-frame{flex:0 0 auto; height:100%;}
-  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; cursor:zoom-in;}
+  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; cursor:zoom-in; -webkit-user-drag:none; user-select:none;}
   .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000;}
   .gallery-frame iframe{height:100%; width:auto; aspect-ratio:16/9; max-width:none; display:block; border:0; background:#000;}
   .gallery-counter{
@@ -1646,13 +1648,26 @@
     if(e.key === "ArrowRight") lightboxNav(1);
   });
   // capture 단계에서 가로채서, 사진을 눌렀을 때 갤러리 자체의 클릭(다음 사진 넘기기) 핸들러가
-  // 같이 발동해 확대 레이어 뒤에서 갤러리도 넘어가 버리는 걸 막음
+  // 같이 발동해 확대 레이어 뒤에서 갤러리도 넘어가 버리는 걸 막음.
+  // 사진의 좌우 가장자리(GALLERY_SIDE_ZONE)를 누르면 이전/다음 사진으로 넘기고, 가운데를
+  // 누르면 확대(라이트박스)함 — 드래그 직후에 따라오는 클릭은 initGalleryDrag가 표시해둔
+  // gallery.dataset.dragged로 걸러서 드래그 종료가 즉시 확대/넘기기로 오인되지 않게 함.
+  const GALLERY_SIDE_ZONE = 0.22;
   scrollRoot.addEventListener("click", (e) => {
     const img = e.target.closest(".gallery-frame img");
     if(!img) return;
     const gallery = img.closest(".gallery");
     if(!gallery) return;
     e.stopPropagation();
+    if(gallery.dataset.dragged){ delete gallery.dataset.dragged; return; }
+    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
+    const count = parseInt(gallery.dataset.count, 10) || 1;
+    if(perPage <= 1 && count > 1){
+      const rect = img.getBoundingClientRect();
+      const relX = (e.clientX - rect.left) / rect.width;
+      if(relX < GALLERY_SIDE_ZONE){ rollGallery(gallery, -1); return; }
+      if(relX > 1 - GALLERY_SIDE_ZONE){ rollGallery(gallery, 1); return; }
+    }
     const imgs = Array.from(gallery.querySelectorAll(".gallery-frame img"));
     openLightbox(imgs.map(im => im.getAttribute("src")), imgs.indexOf(img));
   }, true);
@@ -1883,10 +1898,11 @@
     waitMediaReady(media, apply);
   }
 
-  function rollGallery(gallery){
+  function rollGallery(gallery, dir){
+    dir = dir || 1;
     const count = parseInt(gallery.dataset.count, 10);
     let index = parseInt(gallery.dataset.index, 10);
-    index = (index + 1) % count;
+    index = (index + dir + count) % count;
     gallery.dataset.index = index;
     gallery.querySelector(".gallery-counter").textContent = `${String(index+1).padStart(2,"0")} / ${String(count).padStart(2,"0")}`;
     activateGalleryFrame(gallery, index);
@@ -1982,6 +1998,54 @@
     layoutFrames(gallery, visible, gallery.dataset.direction || "row");
   }
 
+  /* 클릭하지 않고도 사진을 좌우로 넘겨볼 수 있도록 하는 드래그/스와이프 — 트랙을 손가락/마우스를
+     따라 실시간으로 옮기다가 놓는 시점에 충분히 움직였으면 다음/이전 프레임으로 스냅하고,
+     아니면 원래 위치로 되돌아감. 동영상/iframe 프레임(자체 컨트롤 필요)은 드래그 대상에서 제외. */
+  function initGalleryDrag(gallery){
+    const track = gallery.querySelector(".gallery-track");
+    let startX = 0, startTransform = 0, dragging = false, moved = false;
+    gallery.addEventListener("pointerdown", (e) => {
+      if(e.target.closest("video, iframe")) return;
+      if(e.button !== undefined && e.button !== 0) return;
+      const count = parseInt(gallery.dataset.count, 10) || 1;
+      if(count <= 1) return;
+      dragging = true; moved = false;
+      startX = e.clientX;
+      const frame = gallery.querySelectorAll(".gallery-frame")[parseInt(gallery.dataset.index || "0", 10)];
+      startTransform = -(frame ? frame.offsetLeft : 0);
+      track.style.transition = "none";
+      gallery.setPointerCapture(e.pointerId);
+    });
+    gallery.addEventListener("pointermove", (e) => {
+      if(!dragging) return;
+      const dx = e.clientX - startX;
+      if(!moved && Math.abs(dx) > 4){ moved = true; gallery.classList.add("dragging"); }
+      if(moved){
+        e.preventDefault(); // 네이티브 이미지 드래그 고스트(특히 Firefox)가 커스텀 드래그를 가로채지 않게 함
+        track.style.transform = `translateX(${startTransform + dx}px)`;
+      }
+    });
+    function endDrag(e){
+      if(!dragging) return;
+      dragging = false;
+      gallery.classList.remove("dragging");
+      track.style.transition = "";
+      if(moved){
+        gallery.dataset.dragged = "1";
+        setTimeout(() => { delete gallery.dataset.dragged; }, 0);
+        const dx = e.clientX - startX;
+        const width = gallery.clientWidth || 1;
+        if(Math.abs(dx) > Math.min(60, width * 0.15)){
+          rollGallery(gallery, dx < 0 ? 1 : -1);
+        } else {
+          activateGalleryFrame(gallery, parseInt(gallery.dataset.index, 10));
+        }
+      }
+    }
+    gallery.addEventListener("pointerup", endDrag);
+    gallery.addEventListener("pointercancel", endDrag);
+  }
+
   function initGallery(g){
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
@@ -1989,6 +2053,10 @@
     if(perPage <= 1){
       g.addEventListener("click", () => rollGallery(g));
       activateGalleryFrame(g, 0);
+      initGalleryDrag(g);
+      const hint = g.querySelector(".gallery-hint");
+      const count = parseInt(g.dataset.count, 10) || 1;
+      if(hint && count > 1) hint.textContent = "Drag or click edges · Click center to zoom";
       return;
     }
     showGalleryPage(g, 0);
