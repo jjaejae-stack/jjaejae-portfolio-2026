@@ -155,7 +155,7 @@
   .icon-btn:hover{color:var(--accent);}
 
   .image-list{display:flex; flex-direction:column; gap:12px; margin:14px 0;}
-  .image-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line-strong); padding:6px 8px; background:var(--surface); box-shadow:var(--card-shadow); cursor:grab;}
+  .image-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line-strong); padding:6px 8px; background:var(--surface); box-shadow:var(--card-shadow);}
   .image-row.dragging{opacity:.35;}
   .image-row.selected{background:color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color:var(--accent);}
   .image-row .image-select{flex:0 0 auto; width:15px; height:15px; cursor:pointer;}
@@ -883,7 +883,7 @@
       const active = (mode === "project" && p.id === currentId) ? " active" : "";
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
-      return '<div class="project-item' + active + '" draggable="true" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
+      return '<div class="project-item' + active + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
         + '<span class="drag-handle">⠿</span>'
         + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
         + '<span class="info">'
@@ -1007,6 +1007,24 @@
   ====================================================================== */
   const editorEl = document.getElementById("editor");
   let dragItem = null;
+
+  /* [data-sort-item] cards only carry `draggable="true"` while the mouse is actually
+     held down on their ⠿ handle — not permanently. A permanently-draggable card would
+     hijack any click-drag gesture that starts inside it, including selecting text in a
+     nested <textarea>/<input>, which the browser would otherwise treat as a normal
+     text selection. */
+  let armedDragItem = null;
+  document.addEventListener("mousedown", (e) => {
+    const handle = e.target.closest(".drag-handle");
+    if(!handle) return;
+    const item = handle.closest("[data-sort-item]");
+    if(!item) return;
+    item.draggable = true;
+    armedDragItem = item;
+  });
+  document.addEventListener("mouseup", () => {
+    if(armedDragItem){ armedDragItem.draggable = false; armedDragItem = null; }
+  });
 
   function getDragAfterElement(scope, y){
     const items = Array.from(scope.children).filter(el => el.matches("[data-sort-item]") && el !== dragItem);
@@ -1173,6 +1191,13 @@
   }
 
   let infoData = loadInfo();
+  /* one-level undo scoped to the last GENERATE call — separate from the project
+     undo stack since INFO editing has no general undo/redo system. */
+  let infoGenerateUndo = null;
+  /* cache-bust key for info-bg.jpg — server.py overwrites that same file on disk when a
+     new background photo is attached, so the preview needs a fresh query string each
+     time to avoid showing a browser-cached copy of the old one. */
+  let infoBgVersion = Date.now();
 
   function saveInfo(){
     try{ localStorage.setItem(INFO_STORAGE_KEY, JSON.stringify(infoData)); }
@@ -1185,24 +1210,84 @@
     if(el.hasAttribute("data-info-field") && el.dataset.infoField === "lead"){
       infoData.lead = el.value;
     } else if(el.hasAttribute("data-info-paragraph-text")){
-      const idx = parseInt(el.dataset.index, 10);
-      if(infoData.paragraphs[idx]) infoData.paragraphs[idx].text = el.value;
+      const p = infoData.paragraphs.find(x => x.id === el.dataset.paraId);
+      if(p) p.text = el.value;
     } else if(el.hasAttribute("data-info-link-field")){
       const idx = parseInt(el.dataset.index, 10);
       const field = el.dataset.infoLinkField;
       if(infoData.links[idx]) infoData.links[idx][field] = el.value;
+    } else if(el.hasAttribute("data-info-para-style")){
+      const p = infoData.paragraphs.find(x => x.id === el.dataset.paraId);
+      if(!p) return;
+      applyInfoStyleField(el, el.dataset.infoParaStyle, {
+        fontFamily: v => p.fontFamily = v,
+        fontWeight: v => p.fontWeight = v,
+        fontScale: v => p.fontScale = v,
+        letterSpacing: v => p.letterSpacing = v,
+        color: v => p.color = v
+      });
+    } else if(el.hasAttribute("data-info-lead-style")){
+      applyInfoStyleField(el, el.dataset.infoLeadStyle, {
+        fontFamily: v => infoData.leadFontFamily = v,
+        fontWeight: v => infoData.leadFontWeight = v,
+        fontScale: v => infoData.leadFontScale = v,
+        letterSpacing: v => infoData.leadLetterSpacing = v,
+        color: v => infoData.leadColor = v
+      });
     } else {
       return;
     }
     saveInfoAndRefresh();
   }
 
+  /* shared by both the per-paragraph and lead "스타일" panels — `setters` maps each
+     of the 5 style fields to a closure that writes the parsed value onto whichever
+     object (a paragraph, or infoData itself) the caller is editing. */
+  function applyInfoStyleField(el, field, setters){
+    if(field === "fontFamily"){
+      setters.fontFamily(el.value);
+    } else if(field === "fontWeight"){
+      const v = parseInt(el.value, 10);
+      setters.fontWeight(v);
+      const disp = el.closest(".field-group").querySelector(".slider-value");
+      if(disp) disp.textContent = v;
+    } else if(field === "fontScale"){
+      const v = parseFloat(el.value);
+      setters.fontScale(v);
+      const disp = el.closest(".field-group").querySelector(".slider-value");
+      if(disp) disp.textContent = Math.round(v * 100) + "%";
+    } else if(field === "letterSpacing"){
+      const v = parseFloat(el.value);
+      setters.letterSpacing(v);
+      const disp = el.closest(".field-group").querySelector(".slider-value");
+      if(disp) disp.textContent = v + "em";
+    } else if(field === "color"){
+      setters.color(el.value);
+      const hexInput = el.closest(".color-row").querySelector('input.field-inline');
+      if(hexInput) hexInput.value = el.value;
+    } else if(field === "color-hex"){
+      if(/^#[0-9a-fA-F]{6}$/.test(el.value)){
+        setters.color(el.value);
+        const colorInput = el.closest(".color-row").querySelector('input[type=color]');
+        if(colorInput) colorInput.value = el.value;
+      }
+    }
+  }
+
   function handleInfoEditorClick(e){
+    const toggleHead = e.target.closest('[data-toggle]');
+    if(toggleHead){
+      const id = toggleHead.dataset.toggle;
+      if(openSections.has(id)) openSections.delete(id); else openSections.add(id);
+      const section = document.getElementById(id);
+      if(section) section.classList.toggle("collapsed");
+      return;
+    }
     const typeToggle = e.target.closest('[data-info-type-toggle] button');
     if(typeToggle){
-      const idx = parseInt(typeToggle.closest('[data-info-type-toggle]').dataset.index, 10);
-      if(infoData.paragraphs[idx]){
-        infoData.paragraphs[idx].type = typeToggle.dataset.value === "tagline" ? "tagline" : "body";
+      const p = infoData.paragraphs.find(x => x.id === typeToggle.closest('[data-info-type-toggle]').dataset.paraId);
+      if(p){
+        p.type = typeToggle.dataset.value === "tagline" ? "tagline" : "body";
         renderEditor();
         saveInfoAndRefresh();
       }
@@ -1210,8 +1295,8 @@
     }
     const removeParaBtn = e.target.closest('[data-action="remove-info-paragraph"]');
     if(removeParaBtn){
-      const idx = parseInt(removeParaBtn.dataset.index, 10);
-      infoData.paragraphs.splice(idx, 1);
+      const paraId = removeParaBtn.dataset.paraId;
+      infoData.paragraphs = infoData.paragraphs.filter(x => x.id !== paraId);
       renderEditor();
       saveInfoAndRefresh();
       return;
@@ -1237,20 +1322,122 @@
       return;
     }
     if(e.target.closest('[data-action="publish-info"]')){ runPublishInfo(); return; }
+    if(e.target.closest('[data-action="save-info"]')){ runSaveInfo(); return; }
+    if(e.target.closest('[data-action="upload-info-bg"]')){ infoBgFileInput.click(); return; }
     if(e.target.closest('[data-action="generate-info"]')){ openInfoGenerateModal(); return; }
+    if(e.target.closest('[data-action="undo-generate-info"]')){ undoInfoGenerate(); return; }
   }
 
-  function infoParagraphRowHTML(p, i){
-    return '<div class="block-card" draggable="true" data-sort-item data-item-id="' + p.id + '" style="padding:10px 12px; margin-bottom:12px;">'
+  function runSaveInfo(){
+    const btn = document.getElementById("save-info-btn");
+    try{
+      saveInfo();
+      if(btn){
+        const orig = btn.textContent;
+        btn.textContent = "SAVED ✓";
+        setTimeout(() => { btn.textContent = orig; }, 1200);
+      }
+    }catch(e){
+      alert("저장 실패: " + e.message);
+    }
+  }
+
+  /* fontFamily picks one of the site's 3 loaded typefaces (see INFO_PREVIEW_CSS /
+     index.html's --font-thin/medium/bold); fontWeight/fontScale/color are inline-style
+     overrides layered on top of the paragraph type's default look. All are optional
+     (null/"" = inherit the type's normal default) so most paragraphs need no
+     per-paragraph HTML at all. */
+  function infoParagraphStyleAttr(p){
+    const styles = [];
+    if(p.fontFamily === "thin") styles.push("font-family:var(--font-thin)");
+    else if(p.fontFamily === "medium") styles.push("font-family:var(--font-medium)");
+    else if(p.fontFamily === "bold") styles.push("font-family:var(--font-bold)");
+    if(p.fontWeight) styles.push("font-weight:" + p.fontWeight);
+    if(p.fontScale && Math.abs(p.fontScale - 1) > 0.001){
+      styles.push("font-size:calc(clamp(1rem, 1.7vw, 1.2rem) * " + p.fontScale + ")");
+    }
+    if(p.letterSpacing) styles.push("letter-spacing:" + p.letterSpacing + "em");
+    if(p.color) styles.push("color:" + p.color);
+    return styles.length ? (' style="' + styles.join(";") + '"') : "";
+  }
+
+  /* lead uses the exact same 5 controls as a paragraph's "스타일" panel — kept in
+     its own function (rather than reusing infoParagraphStyleAttr) since the lead's
+     base font-size clamp() is different from a paragraph's. */
+  function infoLeadStyleAttr(info){
+    const styles = [];
+    if(info.leadFontFamily === "thin") styles.push("font-family:var(--font-thin)");
+    else if(info.leadFontFamily === "medium") styles.push("font-family:var(--font-medium)");
+    else if(info.leadFontFamily === "bold") styles.push("font-family:var(--font-bold)");
+    if(info.leadFontWeight) styles.push("font-weight:" + info.leadFontWeight);
+    if(info.leadFontScale && Math.abs(info.leadFontScale - 1) > 0.001){
+      styles.push("font-size:calc(clamp(1.4rem, 3.2vw, 2.3rem) * " + info.leadFontScale + ")");
+    }
+    if(info.leadLetterSpacing) styles.push("letter-spacing:" + info.leadLetterSpacing + "em");
+    if(info.leadColor) styles.push("color:" + info.leadColor);
+    return styles.length ? (' style="' + styles.join(";") + '"') : "";
+  }
+
+  /* shared markup for both the per-paragraph "스타일" panel and the lead's — same
+     5 controls (font / weight / size / letter-spacing / color), just pointed at
+     different data-* attributes so handleInfoField can tell them apart. */
+  function infoStyleFieldsHTML(kind, paraId, opts){
+    const attr = kind === "para" ? "data-info-para-style" : "data-info-lead-style";
+    const idAttr = kind === "para" ? (' data-para-id="' + paraId + '"') : "";
+    return ''
+      + '<div class="field-group"><label class="field-label">폰트</label>'
+      +   '<select class="field" ' + attr + '="fontFamily"' + idAttr + '>'
+      +     '<option value=""' + (opts.fontFamily===""?' selected':'') + '>기본</option>'
+      +     '<option value="thin"' + (opts.fontFamily==="thin"?' selected':'') + '>가는 서체</option>'
+      +     '<option value="medium"' + (opts.fontFamily==="medium"?' selected':'') + '>중간 서체</option>'
+      +     '<option value="bold"' + (opts.fontFamily==="bold"?' selected':'') + '>굵은 서체</option>'
+      +   '</select></div>'
+      + '<div class="field-group"><label class="field-label">글자 굵기 <span class="slider-value">' + opts.weight + '</span></label>'
+      +   '<input type="range" class="field" ' + attr + '="fontWeight"' + idAttr + ' min="200" max="900" step="100" value="' + opts.weight + '"></div>'
+      + '<div class="field-group"><label class="field-label">글자 크기 <span class="slider-value">' + Math.round(opts.scale*100) + '%</span></label>'
+      +   '<input type="range" class="field" ' + attr + '="fontScale"' + idAttr + ' min="0.5" max="2.5" step="0.05" value="' + opts.scale + '"></div>'
+      + '<div class="field-group"><label class="field-label">자간 <span class="slider-value">' + opts.letterSpacing + 'em</span></label>'
+      +   '<input type="range" class="field" ' + attr + '="letterSpacing"' + idAttr + ' min="-0.05" max="0.15" step="0.005" value="' + opts.letterSpacing + '"></div>'
+      + '<div class="field-group"><label class="field-label">글자 색상</label>'
+      +   '<div class="color-row">'
+      +     '<input type="color" ' + attr + '="color"' + idAttr + ' value="' + opts.color + '">'
+      +     '<input class="field-inline" ' + attr + '="color-hex"' + idAttr + ' value="' + opts.color + '">'
+      +   '</div></div>';
+  }
+
+  /* Every control below is keyed off the paragraph's stable `id` (data-para-id),
+     not its array position — native drag-and-drop reordering (syncOrderFromDOM)
+     moves DOM nodes directly without a full re-render, so a positional index
+     baked into the HTML at render time would silently point at the wrong
+     paragraph the moment the list gets reordered. */
+  function infoParagraphRowHTML(p){
+    const styleId = "info-para-style-" + p.id;
+    const styleOpen = openSections.has(styleId);
+    const defaultWeight = p.type === "tagline" ? 800 : 500;
+    const defaultColor = p.type === "tagline" ? "#15171c" : "#2b2f36";
+    const styleOpts = {
+      fontFamily: p.fontFamily || "",
+      weight: p.fontWeight != null ? p.fontWeight : defaultWeight,
+      scale: p.fontScale != null ? p.fontScale : 1,
+      letterSpacing: p.letterSpacing != null ? p.letterSpacing : 0,
+      color: p.color || defaultColor
+    };
+    return '<div class="block-card" data-sort-item data-item-id="' + p.id + '" style="padding:10px 12px; margin-bottom:12px;">'
       + '<div class="block-card-head">'
       +   '<span class="drag-handle">⠿</span>'
-      +   '<div class="view-toggle" data-info-type-toggle data-index="' + i + '" style="flex:1;">'
+      +   '<div class="view-toggle" data-info-type-toggle data-para-id="' + p.id + '" style="flex:1;">'
       +     '<button type="button" data-value="body"' + (p.type!=="tagline"?' class="active"':'') + '>본문</button>'
       +     '<button type="button" data-value="tagline"' + (p.type==="tagline"?' class="active"':'') + '>태그라인</button>'
       +   '</div>'
-      +   '<button class="icon-btn" data-action="remove-info-paragraph" data-index="' + i + '">삭제</button>'
+      +   '<button class="icon-btn" data-toggle="' + styleId + '">스타일</button>'
+      +   '<button class="icon-btn" data-action="remove-info-paragraph" data-para-id="' + p.id + '">삭제</button>'
       + '</div>'
-      + '<textarea class="field" data-info-paragraph-text data-index="' + i + '" placeholder="줄바꿈 = 줄바꿈으로 그대로 표시됩니다">' + escapeHTML(p.text||"") + '</textarea>'
+      + '<textarea class="field" data-info-paragraph-text data-para-id="' + p.id + '" placeholder="줄바꿈 = 줄바꿈으로 그대로 표시됩니다">' + escapeHTML(p.text||"") + '</textarea>'
+      + '<div class="section' + (styleOpen ? '' : ' collapsed') + '" id="' + styleId + '" style="margin-top:10px;">'
+      +   '<div class="section-body">'
+      +     infoStyleFieldsHTML("para", p.id, styleOpts)
+      +   '</div>'
+      + '</div>'
       + '</div>';
   }
 
@@ -1264,20 +1451,46 @@
 
   function renderInfoEditor(){
     const paragraphsHTML = infoData.paragraphs.length
-      ? infoData.paragraphs.map((p,i) => infoParagraphRowHTML(p,i)).join("")
+      ? infoData.paragraphs.map(p => infoParagraphRowHTML(p)).join("")
       : '<div class="image-list-empty">아직 문단이 없습니다.</div>';
     const linksHTML = infoData.links.length
       ? infoData.links.map((l,i) => infoLinkRowHTML(l,i)).join("")
       : '<div class="image-list-empty">아직 링크가 없습니다.</div>';
+    const leadStyleOpen = openSections.has("info-lead-style");
+    const leadStyleOpts = {
+      fontFamily: infoData.leadFontFamily || "",
+      weight: infoData.leadFontWeight != null ? infoData.leadFontWeight : 700,
+      scale: infoData.leadFontScale != null ? infoData.leadFontScale : 1,
+      letterSpacing: infoData.leadLetterSpacing != null ? infoData.leadLetterSpacing : 0,
+      color: infoData.leadColor || "#15171c"
+    };
     editorEl.innerHTML = ''
       + '<div class="btn-row">'
       +   '<button class="btn-primary" id="generate-info-btn" data-action="generate-info">GENERATE</button>'
+      +   (infoGenerateUndo ? '<button class="btn-secondary" id="undo-generate-info-btn" data-action="undo-generate-info" title="방금 GENERATE 이전으로 되돌립니다">되돌리기</button>' : '')
+      +   '<button class="btn-secondary" id="save-info-btn" data-action="save-info">SAVE</button>'
       +   '<button class="btn-primary" id="publish-info-btn" data-action="publish-info">PUBLISH</button>'
       + '</div>'
       + '<p id="info-generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<p id="info-publish-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<div class="field-group"><label class="field-label">인사말 (첫 문단, 줄바꿈 그대로 유지)</label>'
       +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea></div>'
+      + '<div class="section' + (leadStyleOpen ? '' : ' collapsed') + '" id="info-lead-style">'
+      +   '<div class="section-head" data-toggle="info-lead-style"><span><span class="chevron">▾</span>인사말 스타일</span></div>'
+      +   '<div class="section-body">'
+      +     infoStyleFieldsHTML("lead", null, leadStyleOpts)
+      +   '</div>'
+      + '</div>'
+      + '<div class="section">'
+      +   '<div class="section-head">배경 사진</div>'
+      +   '<div class="hero-image-row">'
+      +     '<img class="hero-thumb" src="info-bg.jpg?v=' + infoBgVersion + '" alt="" onerror="this.classList.add(\'hero-thumb-empty\')">'
+      +     '<div class="hero-image-controls">'
+      +       '<button type="button" class="btn-sm" data-action="upload-info-bg">새 사진 첨부</button>'
+      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">첨부하면 바로 실제 파일(info-bg.jpg)이 교체됩니다 — PUBLISH를 누르면 다음 커밋에 함께 올라갑니다. 취소하려면 원래 쓰던 사진을 다시 첨부해주세요.</p>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
       + '<div class="section">'
       +   '<div class="section-head">본문 문단 (드래그로 순서 변경) <button class="btn-sm" data-action="add-info-paragraph">+ 문단 추가</button></div>'
       +   '<div id="info-paragraph-list" data-sort-scope="info-paragraphs">' + paragraphsHTML + '</div>'
@@ -1402,14 +1615,15 @@
       const data = await res.json().catch(() => ({}));
       if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
 
+      infoGenerateUndo = { lead: infoData.lead, paragraphs: JSON.parse(JSON.stringify(infoData.paragraphs)) };
       if(data.lead) infoData.lead = data.lead;
       if(Array.isArray(data.paragraphs) && data.paragraphs.length){
         infoData.paragraphs = data.paragraphs.map(text => ({ id: uid(), type:"body", text: text }));
       }
       if(status){
         status.textContent = mode === "polish"
-          ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 태그라인으로 바꿀 문단이 있으면 직접 골라주세요."
-          : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 태그라인으로 바꿀 문단이 있으면 직접 골라주세요.";
+          ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요."
+          : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요.";
       }
       renderEditor();
       saveInfoAndRefresh();
@@ -1424,6 +1638,15 @@
     }finally{
       setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "GENERATE"; } }, 800);
     }
+  }
+
+  function undoInfoGenerate(){
+    if(!infoGenerateUndo) return;
+    infoData.lead = infoGenerateUndo.lead;
+    infoData.paragraphs = infoGenerateUndo.paragraphs;
+    infoGenerateUndo = null;
+    renderEditor();
+    saveInfoAndRefresh();
   }
 
   /* ======================================================================
@@ -1475,7 +1698,7 @@
     const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
     const revertBtn = im.original ? '<button class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + im.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '';
     const isSelected = selectedBlockId === blockId && selectedImages.has(im.id);
-    return '<div class="image-row' + (isSelected ? ' selected' : '') + '" draggable="true" data-sort-item data-item-id="' + im.id + '">'
+    return '<div class="image-row' + (isSelected ? ' selected' : '') + '" data-sort-item data-item-id="' + im.id + '">'
       + '<input type="checkbox" class="image-select" data-action="toggle-select-image" data-block-id="' + blockId + '" data-image-id="' + im.id + '"' + (isSelected ? ' checked' : '') + '>'
       + '<span class="drag-handle">⠿</span>'
       + thumb
@@ -1504,7 +1727,7 @@
     const rows = (block.images||[]).length
       ? block.images.map(im => imageRowHTML(im, block.id)).join("")
       : '<div class="image-list-empty">아직 사진이 없습니다.</div>';
-    return '<div class="block-card" draggable="true" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
+    return '<div class="block-card" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
       + '<div class="block-card-head">'
       +   '<span class="drag-handle">⠿</span>'
       +   '<input class="field-inline" data-field="label" data-block-id="' + block.id + '" placeholder="블록 이름 (예: Brand Film)" value="' + escapeHTML(block.label||"") + '">'
@@ -1549,6 +1772,7 @@
     editorEl.innerHTML = ''
       + '<div class="btn-row">'
       +   '<button class="btn-primary" id="generate-btn" data-action="generate">GENERATE</button>'
+      +   '<button class="btn-secondary" id="undo-edit-btn" data-action="undo-edit" title="가장 최근 변경을 되돌립니다 (GENERATE 포함)">되돌리기</button>'
       +   '<button class="btn-secondary" id="save-btn" data-action="save">SAVE</button>'
       +   '<button class="btn-secondary" id="translate-ko-en-btn" data-action="translate-ko-en">KR → EN</button>'
       +   '<button class="btn-secondary" id="translate-en-ko-btn" data-action="translate-en-ko">EN → KR</button>'
@@ -1750,7 +1974,7 @@
   });
   editorEl.addEventListener("input", (e) => {
     if(mode === "info"){
-      const infoEl = e.target.closest("[data-info-field], [data-info-paragraph-text], [data-info-link-field]");
+      const infoEl = e.target.closest("[data-info-field], [data-info-paragraph-text], [data-info-link-field], [data-info-para-style], [data-info-lead-style]");
       if(infoEl) handleInfoField(infoEl);
       return;
     }
@@ -1810,6 +2034,52 @@
     renderEditor();
     saveAndRefresh();
   });
+
+  /* ---- INFO page background photo — unlike project images (referenced by relPath,
+     expected to already exist on disk), this one is written to disk immediately via
+     server.py so a plain localStorage-only INFO record never needs to hold a File
+     blob or base64 data. */
+  const infoBgFileInput = document.createElement("input");
+  infoBgFileInput.type = "file"; infoBgFileInput.accept = "image/*";
+  document.body.appendChild(infoBgFileInput);
+  infoBgFileInput.addEventListener("change", () => {
+    const file = infoBgFileInput.files && infoBgFileInput.files[0];
+    infoBgFileInput.value = "";
+    if(file) uploadInfoBgImage(file);
+  });
+
+  async function uploadInfoBgImage(file){
+    const status = document.getElementById("info-publish-status");
+    if(status){ status.style.display = "block"; status.textContent = "배경 사진을 저장하는 중..."; }
+    try{
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("파일을 읽지 못했습니다."));
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch(GENERATE_SERVER + "/upload-info-bg", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl: dataUrl, filename: file.name })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      infoBgVersion = Date.now();
+      if(status) status.textContent = "완료 — 배경 사진을 교체했습니다. PUBLISH를 눌러야 GitHub에도 반영됩니다.";
+      renderEditor();
+      refreshPreview();
+    }catch(e){
+      alert(
+        "배경 사진 저장 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(status) status.style.display = "none";
+    }
+  }
 
   /* ---- title font: attach via button OR drag-and-drop onto the preview box ---- */
   const fontInput = document.createElement("input");
@@ -2773,6 +3043,7 @@
     }
 
     if(e.target.closest('[data-action="generate"]')){ openDirectionModal(); return; }
+    if(e.target.closest('[data-action="undo-edit"]')){ undo(); return; }
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
     if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
@@ -3138,15 +3409,23 @@
      styling (background, grain, lead/body/tagline typography, links), since
      that overlay is never rendered by the project-detail preview above. ---- */
   const INFO_PREVIEW_CSS = `
+    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:block;}
+    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:block;}
+    :root{
+      --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+      --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+      --font-medium:'SUIT-Medium', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
+    }
     body{background:#f3f2ee;}
     .info-page-preview{position:relative; min-height:100vh; overflow:hidden;}
-    .info-page-preview .info-bg{position:absolute; inset:0; z-index:0; background-image:url("info-bg.jpg"); background-size:cover; background-position:center 35%;}
+    .info-page-preview .info-bg{position:absolute; inset:0; z-index:0; background-size:cover; background-position:center 35%;}
     .info-page-preview .info-grain{position:absolute; inset:0; z-index:1; opacity:.09; mix-blend-mode:overlay; pointer-events:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
     .info-page-preview .info-inner{position:relative; z-index:2; display:flex; align-items:center; min-height:100vh; padding:150px 6vw 100px;}
     .info-page-preview .info-content{max-width:760px;}
-    .info-page-preview .info-lead{font-size:clamp(1.4rem, 3.2vw, 2.3rem); font-weight:700; line-height:1.36; color:#15171c;}
-    .info-page-preview .info-body{margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:500; line-height:1.6; color:#2b2f36;}
-    .info-page-preview .info-tagline{margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:800; color:#15171c;}
+    .info-page-preview .info-lead{font-family:var(--font-medium); font-size:clamp(1.4rem, 3.2vw, 2.3rem); font-weight:700; line-height:1.36; color:#15171c;}
+    .info-page-preview .info-body{font-family:var(--font-thin); margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:500; line-height:1.6; color:#2b2f36;}
+    .info-page-preview .info-tagline{font-family:var(--font-thin); margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:800; color:#15171c;}
     .info-page-preview .links{margin-top:44px; display:flex; gap:26px; font-size:15px; font-weight:700;}
     .info-page-preview .links a{border-bottom:2px solid rgba(17,17,17,.5); padding-bottom:2px;}
   `;
@@ -3155,15 +3434,19 @@
 
   function buildInfoPreviewBodyHTML(info){
     const paras = (info.paragraphs||[]).map(p =>
-      '<p class="info-' + (p.type==="tagline"?"tagline":"body") + '">' + textToBrHTML(p.text) + '</p>'
+      '<p class="info-' + (p.type==="tagline"?"tagline":"body") + '"' + infoParagraphStyleAttr(p) + '>' + textToBrHTML(p.text) + '</p>'
     ).join("");
     const links = (info.links||[]).map(l =>
       '<a href="' + escapeHTML(l.url||"#") + '">' + escapeHTML(l.label||"") + '</a>'
     ).join("");
+    /* NOTE: the url(...) value must be single-quoted, not JSON.stringify()'d — that
+       wraps it in double quotes, which prematurely closes the surrounding style="..."
+       HTML attribute and silently drops the background-image entirely. */
+    const bgUrl = "info-bg.jpg?v=" + infoBgVersion;
     return '<div class="info-page-preview">'
-      + '<div class="info-bg"></div><div class="info-grain"></div>'
+      + '<div class="info-bg" style="background-image:url(\'' + bgUrl + '\')"></div><div class="info-grain"></div>'
       + '<div class="info-inner"><div class="info-content">'
-      +   '<p class="info-lead">' + textToBrHTML(info.lead) + '</p>'
+      +   '<p class="info-lead"' + infoLeadStyleAttr(info) + '>' + textToBrHTML(info.lead) + '</p>'
       +   paras
       +   '<div class="links">' + links + '</div>'
       + '</div></div>'
@@ -3174,6 +3457,11 @@
   const EMPTY_DOC = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;">프로젝트를 선택하세요</body></html>';
 
   const refreshPreview = debounce(function(){
+    /* Re-measure the PC/Mobile box on every refresh (not just on window resize or
+       an explicit PC/Mobile click) — switching between project editing and the INFO
+       tab, or any other DOM change that could shift #preview-stage's box, must not
+       leave the frame sized from a stale measurement. Cheap no-op if nothing changed. */
+    sizePreviewStage();
     if(mode === "info"){
       const infoDoc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
         + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
