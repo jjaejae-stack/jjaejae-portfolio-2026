@@ -8,8 +8,14 @@
   /* ---------- themes ----------
      default (no data-theme / "mono") = white bg, black text/borders.
      data-theme="blue"  = soft blue bg, white cards, hard black shadow.
-     data-theme="dark"  = near-black bg, dark gray cards, hard black shadow.
-     All three share the same flat, no-radius "card + offset shadow" look. */
+     data-theme="dark"  = near-black bg, soft rounded pill UI (no borders/hard
+       shadows) — a deliberately different look from white/blue, modeled on a
+       reference screenshot (rounded chips/cards, flat fill, orange section
+       labels). See the "dark theme: pill UI" rules near the end of this
+       stylesheet for the actual shape/pill overrides; the vars below just set
+       its colors (--card-shadow:none so every var(--card-shadow) consumer
+       drops its shadow automatically). White/blue keep the original flat,
+       no-radius "card + offset shadow" look. */
   :root{
     --bg:#ffffff; --surface:#ffffff; --fg:#111111; --muted:#666666;
     --line:rgba(0,0,0,.14); --line-strong:#000000;
@@ -21,9 +27,9 @@
     --accent:#111111; --card-shadow:6px 6px 0 #111111;
   }
   body[data-theme="dark"]{
-    --bg:#151515; --surface:#242424; --fg:#f1efe9; --muted:#9c988f;
-    --line:rgba(255,255,255,.12); --line-strong:rgba(255,255,255,.4);
-    --accent:#D9503A; --card-shadow:6px 6px 0 #000000;
+    --bg:#0c0c0d; --surface:#1c1c1e; --surface-2:#313134; --fg:#f2f1ee; --muted:#8f8d89;
+    --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+    --accent:#D9503A; --card-shadow:none;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   html,body{height:100%;}
@@ -274,6 +280,76 @@
   }
   #theme-toggle:hover{transform:scale(1.1);}
   #theme-toggle:active{transform:scale(.94);}
+
+  /* ---------- dark theme: pill UI ----------
+     Reference: rounded chip/pill buttons, rounded cards with no border or hard
+     offset shadow, rounded photo thumbnails, orange section labels — a softer
+     look than the flat/angular "card + offset shadow" white and blue themes
+     share. --card-shadow is already "none" for this theme (see the vars block
+     up top), so this section only needs border-radius/border/fill overrides. */
+  body[data-theme="dark"] .btn-primary,
+  body[data-theme="dark"] .btn-secondary,
+  body[data-theme="dark"] .btn-sm,
+  body[data-theme="dark"] #new-project-btn,
+  body[data-theme="dark"] #info-nav-btn,
+  body[data-theme="dark"] .tag-tabs button,
+  body[data-theme="dark"] .view-toggle button{
+    border-radius:999px; border:none;
+  }
+  body[data-theme="dark"] .btn-primary{ background:#f2f1ee; color:#111; }
+  body[data-theme="dark"] .btn-secondary{ background:var(--surface); }
+  body[data-theme="dark"] .btn-secondary:hover{ background:var(--surface-2); }
+  body[data-theme="dark"] .btn-sm{ background:var(--surface); }
+  body[data-theme="dark"] .btn-sm:hover{ background:var(--surface-2); color:var(--fg); border-color:transparent; }
+  body[data-theme="dark"] #new-project-btn,
+  body[data-theme="dark"] #info-nav-btn{ background:var(--surface); }
+  body[data-theme="dark"] #new-project-btn:hover,
+  body[data-theme="dark"] #info-nav-btn:hover{ background:var(--surface-2); color:var(--fg); }
+  body[data-theme="dark"] #info-nav-btn.active{ background:#f2f1ee; color:#111; }
+
+  body[data-theme="dark"] .tag-tabs button{ background:var(--surface); }
+  body[data-theme="dark"] .tag-tabs button:hover{ border-color:transparent; background:var(--surface-2); }
+  body[data-theme="dark"] .tag-tabs button.active{ background:var(--surface-2); color:var(--fg); border-color:transparent; }
+  body[data-theme="dark"] .tag-tabs button.add-tag{ border:1px dashed var(--line-strong); }
+
+  body[data-theme="dark"] .view-toggle{ background:var(--surface); border-radius:999px; }
+  body[data-theme="dark"] .view-toggle button.active{ background:var(--surface-2); color:var(--fg); }
+
+  body[data-theme="dark"] .project-item,
+  body[data-theme="dark"] .block-card,
+  body[data-theme="dark"] .image-row,
+  body[data-theme="dark"] .selection-toolbar,
+  body[data-theme="dark"] .modal-box,
+  body[data-theme="dark"] #font-preview-box{
+    border:none; border-radius:18px; background:var(--surface);
+  }
+  body[data-theme="dark"] .project-item.active{ background:#f2f1ee; color:#111; }
+  body[data-theme="dark"] .project-item:hover{ background:var(--surface-2); }
+  body[data-theme="dark"] .image-row.selected{ background:color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+
+  body[data-theme="dark"] .hero-thumb,
+  body[data-theme="dark"] .image-row .thumb,
+  body[data-theme="dark"] .video-thumb{
+    border:none; border-radius:14px;
+  }
+
+  body[data-theme="dark"] .field,
+  body[data-theme="dark"] .field-inline{
+    border:none; border-radius:12px; background:var(--surface);
+  }
+  body[data-theme="dark"] .field:focus,
+  body[data-theme="dark"] .field-inline:focus{ outline-offset:0; }
+  body[data-theme="dark"] .color-row input[type=color]{ border:none; border-radius:8px; }
+
+  body[data-theme="dark"] .crop-stage-wrap,
+  body[data-theme="dark"] .layout-preview-wrap{ border-radius:16px; }
+
+  /* section labels pick up the reference's orange accent; nested buttons (e.g. the
+     "+ 문단 추가" add-buttons living inside a section-head) opt back out so they
+     stay legible pills instead of inheriting orange text. */
+  body[data-theme="dark"] .section-head{ color:var(--accent); }
+  body[data-theme="dark"] .section-head .btn-sm,
+  body[data-theme="dark"] .section-head .chevron{ color:var(--muted); }
 </style>
 </head>
 <body>
