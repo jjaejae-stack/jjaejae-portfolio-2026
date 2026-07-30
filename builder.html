@@ -63,6 +63,13 @@
     background:var(--surface); box-shadow:var(--card-shadow);
   }
   #new-project-btn:hover{border-color:var(--accent); color:var(--accent);}
+  #sync-order-btn{
+    width:100%; padding:8px; border:1px dashed var(--line-strong);
+    font-size:12px; color:var(--muted); margin-bottom:22px; text-align:center;
+    background:none;
+  }
+  #sync-order-btn:hover{border-color:var(--accent); color:var(--accent);}
+  #sync-order-btn:disabled{opacity:.6; cursor:default;}
   #info-nav-btn{
     width:100%; padding:10px; border:1px solid var(--line-strong);
     font-weight:600; text-align:left; margin-bottom:14px;
@@ -328,6 +335,7 @@
   body[data-theme="dark"] #new-project-btn:hover,
   body[data-theme="dark"] #info-nav-btn:hover{ background:var(--surface-2); color:var(--fg); }
   body[data-theme="dark"] #info-nav-btn.active{ background:#f2f1ee; color:#111; }
+  body[data-theme="dark"] #sync-order-btn{ border-radius:12px; border-color:var(--line-strong); }
 
   body[data-theme="dark"] .tag-tabs button{ background:var(--surface); }
   body[data-theme="dark"] .tag-tabs button:hover{ border-color:transparent; background:var(--surface-2); }
@@ -389,6 +397,7 @@
         <button type="button" data-category="play">Play</button>
       </div>
       <button id="new-project-btn">+ 새 프로젝트</button>
+      <button type="button" id="sync-order-btn" title="사이드바에서 드래그로 바꾼 프로젝트 순서를 실제 Work/Play 리스트 페이지에도 반영합니다">↕ 순서를 사이트에 반영</button>
       <div id="project-list" data-sort-scope="projects"></div>
     </aside>
 
@@ -1107,6 +1116,8 @@
     dbPut(p);
     selectProject(p.id);
   });
+
+  document.getElementById("sync-order-btn").addEventListener("click", runSyncOrder);
 
   async function deleteProject(id){
     allImages(projects.find(p=>p.id===id) || {blocks:[]}).forEach(im => { try{ URL.revokeObjectURL(im.url); }catch(e){} });
@@ -3156,6 +3167,42 @@
       if(status) status.style.display = "none";
     }finally{
       setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "PUBLISH"; } }, 1800);
+    }
+  }
+
+  /* ---- sync sidebar order to the live site — separate from per-project Publish,
+     since reordering the sidebar only ever touches IndexedDB; nothing pushes that
+     order to index.html until each affected project is republished individually
+     (easy to forget, and republishes the project's ENTIRE data along the way).
+     This sends just {id, order} for every project, so /publish-order can update
+     only that one field per project without touching anything else. ---- */
+  async function runSyncOrder(){
+    if(!confirm("사이드바의 현재 프로젝트 순서를 실제 Work/Play 리스트 페이지에도 반영할까요?\n\nindex.html이 수정되고 GitHub에 푸시되어 Vercel이 재배포합니다.")) return;
+
+    const btn = document.getElementById("sync-order-btn");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "반영 중..."; }
+
+    try{
+      const items = projects.map(p => ({ id: p.id, order: p.order != null ? p.order : 0 }));
+      const res = await fetch(GENERATE_SERVER + "/publish-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      alert("순서 반영 완료 — " + (data.updated || 0) + "개 프로젝트 업데이트.\n" + (data.note || ""));
+    }catch(e){
+      alert(
+        "순서 반영 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지, GitHub 연동이 되어 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
     }
   }
 

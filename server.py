@@ -633,6 +633,65 @@ def publish_project(project_id, code):
     return action
 
 
+_ORDER_FIELD_RE = re.compile(r"order\s*:\s*-?\d+(?:\.\d+)?\s*,?\s*")
+_CATEGORY_FIELD_RE = re.compile(r'category\s*:\s*"[^"]*"\s*,')
+_ID_FIELD_RE = re.compile(r'id\s*:\s*"((?:[^"\\]|\\.)*)"')
+
+
+def publish_order(items):
+    """Update just the `order:` field of each listed project (by id) inside
+    index.html's `const PROJECTS = [...]` array, leaving every other field of
+    that project untouched. Backs builder.html's "순서 반영" button, which lets
+    a sidebar reorder reach the live Work/Play list without republishing each
+    affected project's full data individually.
+
+    `items` is a list of {"id": ..., "order": ...} dicts. Returns how many
+    matching projects were actually updated."""
+    with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
+        html = f.read()
+
+    marker = "const PROJECTS = ["
+    marker_idx = html.find(marker)
+    if marker_idx == -1:
+        raise RuntimeError("index.html에서 'const PROJECTS = [' 를 찾을 수 없습니다.")
+    open_idx = marker_idx + len(marker) - 1
+    close_idx = _find_matching_bracket(html, open_idx)
+
+    entries = _split_top_level_items(html, open_idx + 1, close_idx)
+    order_by_id = {
+        it.get("id"): it.get("order")
+        for it in items
+        if isinstance(it, dict) and it.get("id") is not None and it.get("order") is not None
+    }
+
+    updated_count = 0
+    pieces = []
+    cursor = open_idx + 1
+    for (s, e) in entries:
+        pieces.append(html[cursor:s])
+        segment = html[s:e]
+        id_m = _ID_FIELD_RE.search(segment)
+        pid = id_m.group(1) if id_m else None
+        if pid is not None and pid in order_by_id:
+            new_order_stmt = "order:%s," % order_by_id[pid]
+            om = _ORDER_FIELD_RE.search(segment)
+            if om:
+                segment = segment[:om.start()] + new_order_stmt + segment[om.end():]
+            else:
+                cat_m = _CATEGORY_FIELD_RE.search(segment)
+                insert_at = cat_m.end() if cat_m else id_m.end() + 1
+                segment = segment[:insert_at] + "\n      " + new_order_stmt + segment[insert_at:]
+            updated_count += 1
+        pieces.append(segment)
+        cursor = e
+    pieces.append(html[cursor:close_idx])
+
+    new_html = html[:open_idx + 1] + "".join(pieces) + html[close_idx:]
+    with open(INDEX_HTML_PATH, "w", encoding="utf-8") as f:
+        f.write(new_html)
+    return updated_count
+
+
 def _find_matching_div_close(text, start_idx):
     """`start_idx` is right after the opening <div ...> tag's closing '>'.
     Returns the index of the matching '</div>' tag's start, counting nested
@@ -844,7 +903,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/upload-info-bg", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -917,6 +976,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 })
                 return
             result = {"action": "updated"}
+            result.update(git_result)
+            self._send_json(200, result)
+            return
+
+        if parsed.path == "/publish-order":
+            items = payload.get("items") if isinstance(payload.get("items"), list) else []
+            if not items:
+                self._send_json(400, {"error": "items가 필요합니다."})
+                return
+            try:
+                updated = publish_order(items)
+            except Exception as e:
+                self._send_json(500, {"error": "index.html 업데이트 실패: %s" % e})
+                return
+            try:
+                git_result = git_commit_and_push("Sync project order")
+            except Exception as e:
+                self._send_json(500, {
+                    "error": "%s (index.html은 이미 수정되었습니다 — 직접 git commit/push 하거나, 문제를 해결한 뒤 다시 시도하세요.)" % e
+                })
+                return
+            result = {"updated": updated}
             result.update(git_result)
             self._send_json(200, result)
             return
