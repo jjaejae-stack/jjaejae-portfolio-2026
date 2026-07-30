@@ -457,7 +457,11 @@
   .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video, .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; display:block; border:0;}
   .gallery.mode-multi .gallery-track{gap:2px;}
   .gallery.direction-column .gallery-track{flex-direction:column;}
-  .gallery.mode-multi.direction-column{height:auto!important; max-height:none!important; min-height:0;}
+  /* 단일(롤링) 갤러리용 고정 높이(60vh/최소 280px)가 mode-multi에도 그대로 상속되면, 여러 장을
+     원본 비율대로 한 행/열에 채운 실제 콘텐츠 높이가 그보다 작을 때 아래쪽에 빈 공간(검은 여백)이
+     남았음 — mode-multi는 JS(layoutFrames)가 항상 콘텐츠에 딱 맞는 px 높이를 인라인으로 지정하므로
+     방향(행/열) 상관없이 그 값을 그대로 쓰게 둠 */
+  .gallery.mode-multi{height:auto; max-height:none; min-height:0;}
   .gallery.mode-multi.direction-column .gallery-track{height:auto;}
   .gallery.mode-free{position:relative; height:60vh; max-height:640px; min-height:280px; cursor:default; background:#111;}
   .gallery.mode-free .gallery-track{position:relative; height:100%; display:block;}
@@ -1582,7 +1586,7 @@
   const listGrid = document.getElementById("list-grid");
 
   function renderList(category){
-    const items = PROJECTS.filter(p => (p.category || "work") === category)
+    const items = PROJECTS.filter(p => (p.category || "work") === category && !p.hidden)
       .sort((a, b) => (a.order != null ? a.order : 0) - (b.order != null ? b.order : 0));
     listTitle.textContent = category === "play" ? "PLAY" : "WORK";
     const tags = Array.from(new Set(items.map(p => p.tag).filter(Boolean)));
@@ -1661,7 +1665,15 @@
   lightbox.addEventListener("click", (e) => { if(e.target === lightbox) closeLightbox(); });
   document.addEventListener("keydown", (e) => {
     if(!lightbox.classList.contains("open")) return;
-    if(e.key === "Escape") closeLightbox();
+    if(e.key === "Escape"){
+      closeLightbox();
+      // 이 리스너가 document에 더 먼저 등록돼 있어서 항상 먼저 실행되는데, 여기서 라이트박스를
+      // 닫아버린 다음 나중에 등록된 Escape→goHome 리스너가 "지금 라이트박스가 열려있나"를
+      // 검사하면 이미 닫힌 뒤라 늘 true로 통과해 홈(WORK/PLAY)까지 나가버렸음 —
+      // stopImmediatePropagation으로 같은 이벤트에 대해 document의 나머지 리스너 실행 자체를 막음
+      e.stopImmediatePropagation();
+      return;
+    }
     if(e.key === "ArrowLeft") lightboxNav(-1);
     if(e.key === "ArrowRight") lightboxNav(1);
   });
@@ -1774,9 +1786,12 @@
   }
 
   function renderProject(project){
-    const idx = PROJECTS.findIndex(p => p.id === project.id);
-    const prev = PROJECTS[(idx - 1 + PROJECTS.length) % PROJECTS.length];
-    const next = PROJECTS[(idx + 1) % PROJECTS.length];
+    /* prev/next cycle only through visible projects — a hidden project should
+       never be reachable from here even if a visible one links "next" into it. */
+    const visibleProjects = PROJECTS.filter(p => !p.hidden);
+    const idx = visibleProjects.findIndex(p => p.id === project.id);
+    const prev = visibleProjects[(idx - 1 + visibleProjects.length) % visibleProjects.length];
+    const next = visibleProjects[(idx + 1) % visibleProjects.length];
 
     let fontStyleTag = document.getElementById("project-title-font");
     if(project.titleFontDataUrl){
@@ -1825,13 +1840,13 @@
         ${creditsHTML(project)}
       </div>
       <div class="p-nav">
-        ${PROJECTS.length > 1 ? `<a href="#" data-prev>← ${prev.title}</a>` : `<span></span>`}
+        ${visibleProjects.length > 1 ? `<a href="#" data-prev>← ${prev.title}</a>` : `<span></span>`}
         <a href="#" data-allwork>All ${(project.category || "work") === "play" ? "Play" : "Work"}</a>
-        ${PROJECTS.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
+        ${visibleProjects.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
       </div>`;
 
     scrollRoot.querySelectorAll(".gallery").forEach(g => initGallery(g));
-    if(PROJECTS.length > 1){
+    if(visibleProjects.length > 1){
       scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); goProject(prev.id); });
       scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); goProject(next.id); });
     }
@@ -2096,7 +2111,7 @@
 
   function openProject(id){
     const project = PROJECTS.find(p => p.id === id);
-    if(!project) return;
+    if(!project || project.hidden) return;
     /* #project-view is display:none until "open" is added — gallery sizing (activateGalleryFrame)
        reads clientWidth to fit frames, which is always 0 while hidden. Add "open" first so
        anything that sizes itself synchronously (e.g. a video-link frame, which doesn't wait on
@@ -2200,7 +2215,7 @@
       closeProject();
       closeInfo();
       openList("play");
-    }else if(PROJECTS.some(p => p.id === clean)){
+    }else if(PROJECTS.some(p => p.id === clean && !p.hidden)){
       closeInfo();
       closeList();
       openProject(clean);
