@@ -152,8 +152,9 @@
   .btn-row{display:flex; gap:8px; margin-bottom:16px;}
   .btn-row button{flex:1; padding:9px 8px; font-size:12.5px; white-space:nowrap;}
 
-  .block-card{border:1px solid var(--line-strong); padding:13px; margin-bottom:22px; background:var(--surface); box-shadow:var(--card-shadow);}
+  .block-card{border:1px solid var(--line-strong); padding:13px; margin-bottom:22px; background:var(--surface); box-shadow:var(--card-shadow); transition:border-color .15s, background .15s;}
   .block-card.dragging{opacity:.35;}
+  .block-card.file-drag-over{border-color:var(--accent) !important; background:color-mix(in srgb, var(--accent) 8%, var(--surface));}
   .block-card-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
   .drag-handle{cursor:grab; color:var(--muted); font-size:15px; user-select:none; flex:0 0 auto;}
   .block-card-head input{flex:1; font-weight:700;}
@@ -266,6 +267,15 @@
   .layout-frame .video-icon{display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#fff; font-size:20px; background:#222;}
   .layout-preview.free-canvas .layout-frame{position:absolute; cursor:move; border:1px solid rgba(255,255,255,.4); box-sizing:border-box;}
   .layout-frame .resize-handle{position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:#fff; border:1.5px solid var(--accent); border-radius:50%; cursor:nwse-resize; z-index:2;}
+  /* alignment guides — shown only while dragging/resizing a free-layout frame close
+     enough to snap against another frame's edge/center or the canvas's. */
+  /* fixed bright color, not var(--accent) — .layout-preview's background is always
+     near-black (#111) regardless of app theme, and --accent is near-black too in
+     the white/blue themes, which would make the guide invisible against it. */
+  .layout-guide{position:absolute; background:#ff2ecc; pointer-events:none; z-index:3; display:none; box-shadow:0 0 4px rgba(255,46,204,.8);}
+  .layout-guide.show{display:block;}
+  .layout-guide-v{top:0; bottom:0; width:1px;}
+  .layout-guide-h{left:0; right:0; height:1px;}
 
   /* ---------- editor image lightbox (click a photo thumbnail in the 사진 목록 to zoom) ---------- */
   #editor-lightbox{display:none; position:fixed; inset:0; z-index:970; align-items:center; justify-content:center; background:rgba(10,10,10,.92);}
@@ -577,6 +587,7 @@
           <button type="button" data-value="column">위아래로 (세로)</button>
         </div>
       </div>
+      <p class="hint" id="layout-video-note" style="display:none;">🎬 이 블록의 동영상은 여기서 설정하는 레이아웃과 무관하게 항상 사진 위쪽에 고정으로 표시됩니다 — 아래 미리보기와 조작은 사진에만 적용됩니다.</p>
       <div class="layout-preview-wrap">
         <div class="layout-preview" id="layout-preview"></div>
       </div>
@@ -755,30 +766,41 @@
   /* mode: "1" (default, one at a time — original filmstrip behavior), "2"/"3" (N per page,
      click advances a page), "all" (every photo shown at once, no click needed), "free"
      (each photo freely positioned/sized via freeLayout, index-aligned with images). */
-  function galleryBlockHTML(images, blockKey, mode, direction, freeLayout){
+  function galleryBlockHTML(images, blockKey, mode, direction){
     const m = mode || "1";
     const dir = direction === "column" ? "column" : "row";
-    const count = images.length || 1;
+    /* Video and photo items are always split apart — a block's galleryMode/
+       galleryDirection (including "free", each item's x/y/w/h) only ever governs
+       how its PHOTOS lay out; a video always renders in its own fixed stack
+       instead of being pulled into whatever arrangement the photos are using.
+       Mirrors index.html's galleryHTML() — keep both in sync. */
+    const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
+    const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
+    const videoHTML = videoIms.length
+      ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
+      : "";
     if(m === "free"){
-      const frames = images.map((im, i) => {
-        const pos = (freeLayout && freeLayout[i]) || defaultFreePos(i, images.length);
+      const count = photoIms.length || 1;
+      const frames = photoIms.map((im, i) => {
+        const pos = im.free || defaultFreePos(i, photoIms.length);
         return '<div class="gallery-frame" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;">' + galleryFrameInner(im) + '</div>';
       }).join("");
-      return '<div class="gallery mode-free" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
+      const photoHTML = '<div class="gallery mode-free" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
         + '<div class="gallery-track">' + frames + '</div>'
         + '</div>';
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
     }
     if(m === "all"){
-      /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
-         기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함. */
-      const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
-      const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
-      const videoHTML = videoIms.length
-        ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
-        : "";
       const photoHTML = photoIms.length ? galleryBlockHTML(photoIms, blockKey + "-photos", "1", dir) : "";
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
+    }
+    if(videoIms.length && photoIms.length){
+      const photoHTML = galleryBlockHTML(photoIms, blockKey + "-photos", m, dir);
       return '<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>';
     }
+    /* only reached for a block that's purely video or purely photo (the mixed
+       case always returns above), so `images` here is already single-type. */
+    const count = images.length || 1;
     const perPage = m === "1" ? 1 : parseInt(m, 10);
     const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const frames = images.map(galleryFrameHTML).join("");
@@ -2283,6 +2305,49 @@
     else if(file) alert("폰트 파일(.woff, .woff2, .ttf, .otf)만 지원합니다.");
   });
 
+  /* ---- drag photos/videos from Finder straight onto a block, instead of always going
+     through the "폴더에서 불러오기"/"사진 추가"/"동영상 추가" file pickers. Only reacts to
+     drags actually carrying OS files (dataTransfer.types includes "Files") — an internal
+     reorder drag (dragItem set, see section 5) carries no files, so the two never conflict. */
+  editorEl.addEventListener("dragover", (e) => {
+    if(dragItem) return;
+    const card = e.target.closest(".block-card[data-block-id]");
+    if(!card || !e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    card.classList.add("file-drag-over");
+  });
+  editorEl.addEventListener("dragleave", (e) => {
+    const card = e.target.closest(".block-card[data-block-id]");
+    if(card && !card.contains(e.relatedTarget)) card.classList.remove("file-drag-over");
+  });
+  editorEl.addEventListener("drop", (e) => {
+    if(dragItem) return;
+    const card = e.target.closest(".block-card[data-block-id]");
+    if(!card) return;
+    const files = e.dataTransfer.files;
+    if(!files || !files.length) return;
+    e.preventDefault();
+    card.classList.remove("file-drag-over");
+    handleDroppedBlockFiles(card.dataset.blockId, files);
+  });
+
+  function handleDroppedBlockFiles(blockId, fileList){
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === blockId);
+    if(!block) return;
+    const files = Array.from(fileList);
+    const imageFiles = files.filter(f => f.type.indexOf("image/") === 0);
+    const videoFile = files.find(f => f.type.indexOf("video/") === 0);
+    if(imageFiles.length){
+      pendingBlockId = blockId;
+      addFilesToBlock(imageFiles);
+    }
+    if(videoFile) openVideoModalWithFile(blockId, videoFile);
+    if(!imageFiles.length && !videoFile){
+      alert("이미지 또는 동영상 파일만 첨부할 수 있습니다.");
+    }
+  }
+
   /* ---- Generate: local helper server (server.py) shells out to the `claude` CLI —
      no API key in the browser, no manual copy/paste. Run `python3 server.py` once
      from this folder, then click Generate. ---- */
@@ -2608,6 +2673,15 @@
     videoModal.classList.remove("open");
     videoTargetBlockId = null;
   }
+  /* a video file dropped directly onto a block (see the drag-and-drop handlers in
+     section 6) still opens this modal rather than uploading silently — optimizing
+     video server-side takes real time, so showing the modal lets the user confirm
+     the right file was picked up before kicking that off. */
+  function openVideoModalWithFile(blockId, file){
+    openVideoModal(blockId);
+    videoPendingFile = file;
+    videoFileName.textContent = file.name;
+  }
 
   videoTabToggle.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -2715,13 +2789,21 @@
     return isVideo ? '<div class="video-icon">🎬</div>' : '<img src="' + im.url + '" alt="">';
   }
 
+  /* the layout modal only ever configures PHOTOS — a block's video(s) always render
+     in their own fixed stack above the photos regardless of galleryMode (see
+     galleryBlockHTML), so they're excluded from this modal's preview/free-canvas
+     entirely rather than shown as just another draggable/paginated item. */
+  function layoutPhotoImages(block){
+    return (block.images || []).filter(im => !isVideoPath(im.relPath || im.name));
+  }
   function openLayoutModal(blockId){
     const project = getCurrentProject();
     const block = project && project.blocks.find(b => b.id === blockId);
     if(!block) return;
     layoutTargetBlockId = blockId;
+    const photoIms = layoutPhotoImages(block);
     const free = {};
-    (block.images||[]).forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, block.images.length); });
+    photoIms.forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, photoIms.length); });
     layoutDraft = { mode: block.galleryMode || "1", direction: block.galleryDirection || "row", free: free };
     renderLayoutModal();
     layoutModal.classList.add("open");
@@ -2738,12 +2820,16 @@
     layoutDirectionRow.style.display = showDirection ? "block" : "none";
     layoutHint.style.display = layoutDraft.mode === "free" ? "block" : "none";
     layoutPresetRow.style.display = layoutDraft.mode === "free" ? "block" : "none";
+    const project = getCurrentProject();
+    const block = project.blocks.find(b => b.id === layoutTargetBlockId);
+    const hasVideo = (block.images || []).some(im => isVideoPath(im.relPath || im.name));
+    document.getElementById("layout-video-note").style.display = hasVideo ? "block" : "none";
     renderLayoutPreview();
   }
   function renderLayoutPreview(){
     const project = getCurrentProject();
     const block = project.blocks.find(b => b.id === layoutTargetBlockId);
-    const images = block.images || [];
+    const images = layoutPhotoImages(block);
     layoutPreviewEl.className = "layout-preview";
     layoutPreviewEl.style.flexDirection = "";
     layoutPreviewEl.style.flexWrap = "";
@@ -2761,6 +2847,10 @@
           + '<div class="resize-handle"></div>'
           + '</div>';
       }).join("");
+      layoutPreviewEl.insertAdjacentHTML("beforeend",
+        '<div class="layout-guide layout-guide-v" id="layout-guide-v"></div>'
+        + '<div class="layout-guide layout-guide-h" id="layout-guide-h"></div>'
+      );
       return;
     }
     const mode = layoutDraft.mode;
@@ -2789,6 +2879,16 @@
     layoutDraft.direction = btn.dataset.value;
     renderLayoutModal();
   });
+  document.getElementById("layout-preset-hero").addEventListener("click", () => {
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === layoutTargetBlockId);
+    if(!block) return;
+    const photoIms = layoutPhotoImages(block);
+    photoIms.forEach((im, i) => {
+      layoutDraft.free[im.id] = heroGridFreePos(i, photoIms.length);
+    });
+    renderLayoutPreview();
+  });
   document.getElementById("layout-cancel").addEventListener("click", closeLayoutModal);
   document.getElementById("layout-confirm").addEventListener("click", () => {
     const project = getCurrentProject();
@@ -2798,7 +2898,7 @@
     block.galleryMode = layoutDraft.mode;
     block.galleryDirection = layoutDraft.direction;
     if(layoutDraft.mode === "free"){
-      (block.images||[]).forEach(im => {
+      layoutPhotoImages(block).forEach(im => {
         if(layoutDraft.free[im.id]) im.free = layoutDraft.free[im.id];
       });
     }
@@ -2851,6 +2951,46 @@
     if(e.key === "ArrowRight") editorLightboxNav(1);
   });
 
+  /* ---- free-layout alignment snapping ----
+     While moving/resizing a frame, its relevant edges/center snap to the canvas's
+     edges/center and to every OTHER frame's edges/center once within SNAP_PCT of
+     one of those lines — same "smart guides" idea as Figma/Keynote object snapping,
+     scaled to this canvas's 0-100% coordinate space so it works at any preview size. */
+  const SNAP_PCT = 1.5;
+  function collectSnapLines(excludeImageId){
+    const xs = [0, 50, 100], ys = [0, 50, 100];
+    Object.keys(layoutDraft.free).forEach(id => {
+      if(id === excludeImageId) return;
+      const p = layoutDraft.free[id];
+      if(!p) return;
+      xs.push(p.x, p.x + p.w / 2, p.x + p.w);
+      ys.push(p.y, p.y + p.h / 2, p.y + p.h);
+    });
+    return { xs, ys };
+  }
+  /* tries snapping `pos`'s left/center/right (or top/center/bottom) edge against
+     `lines`; returns the matched line's coordinate for drawing a guide, or null. */
+  function snapAxis(pos, size, lines, isResize){
+    /* resizing only moves the trailing (right/bottom) edge, since pos stays fixed —
+       snapping that edge to `line` means the new size is simply `line - pos`. */
+    const edges = isResize
+      ? [{ ref: pos + size, adjust: (line) => line - pos }]
+      : [{ ref: pos, adjust: (line) => line }, { ref: pos + size / 2, adjust: (line) => line - size / 2 }, { ref: pos + size, adjust: (line) => line - size }];
+    let best = null, bestDist = SNAP_PCT, bestLine = null;
+    edges.forEach(edge => {
+      lines.forEach(line => {
+        const d = Math.abs(edge.ref - line);
+        if(d < bestDist){ bestDist = d; best = edge.adjust(line); bestLine = line; }
+      });
+    });
+    return best == null ? null : { value: best, line: bestLine };
+  }
+  function updateGuide(el, active, pct){
+    if(!el) return;
+    el.classList.toggle("show", active);
+    if(active) el.style[el.classList.contains("layout-guide-v") ? "left" : "top"] = pct + "%";
+  }
+
   layoutPreviewEl.addEventListener("mousedown", (e) => {
     if(!layoutDraft || layoutDraft.mode !== "free") return;
     const frame = e.target.closest(".layout-frame");
@@ -2872,13 +3012,23 @@
     const dxPct = (e.clientX - layoutDrag.startX) / layoutDrag.canvasRect.width * 100;
     const dyPct = (e.clientY - layoutDrag.startY) / layoutDrag.canvasRect.height * 100;
     const pos = layoutDraft.free[layoutDrag.imageId];
-    if(layoutDrag.mode === "move"){
+    const isResize = layoutDrag.mode === "resize";
+    if(!isResize){
       pos.x = Math.max(0, Math.min(100 - pos.w, layoutDrag.startPos.x + dxPct));
       pos.y = Math.max(0, Math.min(100 - pos.h, layoutDrag.startPos.y + dyPct));
     } else {
       pos.w = Math.max(8, Math.min(100 - pos.x, layoutDrag.startPos.w + dxPct));
       pos.h = Math.max(8, Math.min(100 - pos.y, layoutDrag.startPos.h + dyPct));
     }
+
+    const lines = collectSnapLines(layoutDrag.imageId);
+    const snapX = snapAxis(pos.x, pos.w, lines.xs, isResize);
+    const snapY = snapAxis(pos.y, pos.h, lines.ys, isResize);
+    if(snapX){ if(isResize) pos.w = Math.max(8, snapX.value); else pos.x = snapX.value; }
+    if(snapY){ if(isResize) pos.h = Math.max(8, snapY.value); else pos.y = snapY.value; }
+    updateGuide(document.getElementById("layout-guide-v"), !!snapX, snapX ? snapX.line : 0);
+    updateGuide(document.getElementById("layout-guide-h"), !!snapY, snapY ? snapY.line : 0);
+
     const frameEl = layoutPreviewEl.querySelector('.layout-frame[data-image-id="' + layoutDrag.imageId + '"]');
     if(frameEl){
       frameEl.style.left = pos.x + "%";
@@ -2887,7 +3037,12 @@
       frameEl.style.height = pos.h + "%";
     }
   });
-  document.addEventListener("mouseup", () => { layoutDrag = null; });
+  document.addEventListener("mouseup", () => {
+    if(!layoutDrag) return;
+    layoutDrag = null;
+    updateGuide(document.getElementById("layout-guide-v"), false, 0);
+    updateGuide(document.getElementById("layout-guide-h"), false, 0);
+  });
 
   async function runGenerate(){
     const project = getCurrentProject();
@@ -3548,7 +3703,7 @@
       return '<div class="p-block">'
         + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
         + heading + paras
-        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.images.map(im => im.free)) : "")
+        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection) : "")
         + '</div>';
     }).join("");
 
@@ -3721,6 +3876,7 @@
     L.push("  id:" + JSON.stringify(project.id) + ",");
     L.push("  title:" + JSON.stringify(project.title) + ",");
     L.push("  category:" + JSON.stringify(projectCategory(project)) + ",");
+    L.push("  order:" + (project.order != null ? project.order : 0) + ", /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */");
     L.push("  color:" + JSON.stringify(project.color) + ",");
     L.push("  textColor:" + JSON.stringify(project.textColor||"#fff3ef") + ",");
     L.push("  titleLetterSpacing:" + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + ",");

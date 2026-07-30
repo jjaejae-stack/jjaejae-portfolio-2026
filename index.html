@@ -1230,6 +1230,7 @@
       id:"neo-qled-8k",
       title:"Samsung Neo QLED 8K",
       category:"work",
+      order:1, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#123634",
       textColor:"#fff3ef",
       titleLetterSpacing:-0.02,
@@ -1254,6 +1255,7 @@
         },
         {
           label:"Private Training",
+          galleryMode:"3",
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Training-web.mp4",
             "cea0b9174932955.64abaaf25bfbe.gif",
@@ -1264,15 +1266,23 @@
         },
         {
           label:"Private Gaming Hub",
+          galleryMode:"3",
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Gaming Hub-web.mp4",
+            "01b01a174932955.64abbc0eb8234.gif",
+            "66935b174932955.64abbc0eb74b4.gif",
+            "99ca68174932955.64abbc0eb8ecb.gif",
           ],
           paragraphs:[]
         },
         {
           label:"Private Gaming Lounge",
+          galleryMode:"3",
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Gaming Lounge-web.mp4",
+            "c3bdf4174932955.64abbc0f86426.gif",
+            "ab7e99174932955.64abbc0f8778c.gif",
+            "916ab4174932955.64abbc0f855d0.gif",
           ],
           paragraphs:[]
         },
@@ -1299,7 +1309,29 @@
           paragraphs:[]
         }
       ],
-      credits:null
+      credits:[
+        ["Creative Director", "Sehyun Kim"],
+        ["CopyWriter", "Jihwan Park / Sehyuck Oh"],
+        ["Art Director", "Jaehoon Choi / Kangmin Kim"],
+        ["Agency Producer", "Sungjae Lee"],
+        ["Account Executive", "Cheonhak Lim / Hyeoung Hong / Grim Park / Hyeyoon Seol / Junhyung Park"],
+        ["Director", "Vanilla"],
+        ["Assistant Director", "Taekyun Lee / Jaeyong Lee"],
+        ["Executive Producer", "Minsik Kim"],
+        ["Producer", "Yongseok Kwak / Yooni Choi"],
+        ["Production", "GOOGGOOG / NYS"],
+        ["D.O.P", "Sanggil Han"],
+        ["Gaffer", "Heebong Noh"],
+        ["Art Team", "Junseung Lee"],
+        ["Stylist", "Ina Kim"],
+        ["Hair & Make Up", "Hankyung Choi"],
+        ["Model Agency", "Oceanstar"],
+        ["Edit", "편집인"],
+        ["2D", "GIANTSTEP"],
+        ["Sound", "Stone Sound Works"],
+        ["Photographer", "Jongho Kang"],
+        ["Model", "Takagi Rina / Kwangrok Choi"],
+      ]
     }
     /* 다른 프로젝트는 SSF SHOP 포맷이 확정되면 이어서 추가합니다. */
   ];
@@ -1530,7 +1562,8 @@
   const listGrid = document.getElementById("list-grid");
 
   function renderList(category){
-    const items = PROJECTS.filter(p => (p.category || "work") === category);
+    const items = PROJECTS.filter(p => (p.category || "work") === category)
+      .sort((a, b) => (a.order != null ? a.order : 0) - (b.order != null ? b.order : 0));
     listTitle.textContent = category === "play" ? "PLAY" : "WORK";
     const tags = Array.from(new Set(items.map(p => p.tag).filter(Boolean)));
     let activeTag = "All";
@@ -1636,28 +1669,46 @@
   function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout){
     const m = galleryMode || "1";
     const dir = galleryDirection === "column" ? "column" : "row";
-    const count = images.length || 1;
+    /* Video and photo items are always split apart — a block's galleryMode/
+       galleryDirection (including "free", each item's x/y/w/h) only ever governs
+       how its PHOTOS lay out; a video always renders in its own fixed stack
+       instead of being pulled into whatever arrangement the photos are using.
+       freeLayout is positionally aligned with the ORIGINAL images array (that's
+       how builder.html exports it), so photoFreeLayout has to be built by walking
+       both arrays together rather than just filtering images alone. */
+    const videoSrcs = [];
+    const photoSrcs = [];
+    const photoFreeLayout = [];
+    images.forEach((src, i) => {
+      if(isVideoSrc(src)) videoSrcs.push(src);
+      else { photoSrcs.push(src); photoFreeLayout.push(freeLayout && freeLayout[i]); }
+    });
+    const videoHTML = videoSrcs.length
+      ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src)}</div>`).join("")}</div>`
+      : "";
     if(m === "free"){
-      const frames = images.map((src, i) => {
-        const pos = (freeLayout && freeLayout[i]) || defaultFreePos(i, images.length);
+      const count = photoSrcs.length || 1;
+      const frames = photoSrcs.map((src, i) => {
+        const pos = photoFreeLayout[i] || defaultFreePos(i, photoSrcs.length);
         return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;">${mediaFrameInner(src)}</div>`;
       }).join("");
-      return `
+      const photoHTML = `
       <div class="gallery mode-free" data-block="${blockId}" data-count="${count}" data-mode="free">
         <div class="gallery-track">${frames}</div>
       </div>`;
+      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
     }
     if(m === "all"){
-      /* 영상+사진이 섞인 블록: 영상은 항상 위쪽에 고정으로 쌓아 보여주고, 사진들은 그 아래에
-         기존 롤링 갤러리(mode "1")로 좌우로 넘겨보게 함. */
-      const videoSrcs = images.filter(isVideoSrc);
-      const photoSrcs = images.filter(src => !isVideoSrc(src));
-      const videoHTML = videoSrcs.length
-        ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src)}</div>`).join("")}</div>`
-        : "";
       const photoHTML = photoSrcs.length ? galleryHTML(photoSrcs, blockId + "-photos", "1", dir) : "";
+      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
+    }
+    if(videoSrcs.length && photoSrcs.length){
+      const photoHTML = galleryHTML(photoSrcs, blockId + "-photos", m, dir);
       return `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>`;
     }
+    /* only reached for a block that's purely video or purely photo (the mixed
+       case always returns above), so `images` here is already single-type. */
+    const count = images.length || 1;
     const perPage = m === "1" ? 1 : parseInt(m, 10);
     const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const frames = images.map(mediaFrameHTML).join("");
