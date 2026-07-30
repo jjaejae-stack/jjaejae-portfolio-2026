@@ -406,10 +406,24 @@
     display:flex; flex-direction:row; height:100%;
     transition:transform .65s cubic-bezier(.65,0,.35,1);
   }
-  .gallery-frame{flex:0 0 auto; height:100%;}
-  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; cursor:zoom-in; -webkit-user-drag:none; user-select:none;}
+  .gallery-frame{flex:0 0 auto; height:100%; position:relative;}
+  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; -webkit-user-drag:none; user-select:none;}
   .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000;}
   .gallery-frame iframe{height:100%; width:auto; aspect-ratio:16/9; max-width:none; display:block; border:0; background:#000;}
+  /* 사진 우상단의 작은 확대 버튼 — 사진 자체를 누르면 갤러리가 넘어가므로(롤링/페이지 넘기기),
+     확대는 이 버튼을 눌러야만 열림 */
+  .gallery-zoom-btn{
+    position:absolute; top:10px; right:10px; z-index:7;
+    width:26px; height:26px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:16px; line-height:1; color:#fff;
+    background:rgba(0,0,0,.45);
+    border:none; border-radius:50%;
+    cursor:pointer;
+    opacity:.6;
+    transition:opacity .2s, background .2s;
+  }
+  .gallery-zoom-btn:hover{opacity:1; background:rgba(0,0,0,.7);}
   .gallery-counter{
     position:absolute; right:14px; bottom:14px; z-index:6;
     font-size:11px; color:#fff;
@@ -748,7 +762,7 @@
     return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(src);
   }
   function mediaFrameInner(src){
-    if(!isVideoSrc(src)) return `<img src="${u(src)}" alt="">`;
+    if(!isVideoSrc(src)) return `<img src="${u(src)}" alt=""><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>`;
     const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
     if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
@@ -1651,28 +1665,18 @@
     if(e.key === "ArrowLeft") lightboxNav(-1);
     if(e.key === "ArrowRight") lightboxNav(1);
   });
-  // capture 단계에서 가로채서, 사진을 눌렀을 때 갤러리 자체의 클릭(다음 사진 넘기기) 핸들러가
-  // 같이 발동해 확대 레이어 뒤에서 갤러리도 넘어가 버리는 걸 막음.
-  // 사진의 좌우 가장자리(GALLERY_SIDE_ZONE)를 누르면 이전/다음 사진으로 넘기고, 가운데를
-  // 누르면 확대(라이트박스)함 — 드래그 직후에 따라오는 클릭은 initGalleryDrag가 표시해둔
-  // gallery.dataset.dragged로 걸러서 드래그 종료가 즉시 확대/넘기기로 오인되지 않게 함.
-  const GALLERY_SIDE_ZONE = 0.22;
+  // 사진 자체를 누르면 갤러리 넘기기(단일 모드는 다음 사진으로 롤링, 여러 장 모드는 다음 페이지)
+  // 동작이 그대로 일어나야 하므로, 확대는 사진 우상단의 별도 + 버튼에서만 열림. capture 단계에서
+  // 가로채 stopPropagation해서 + 버튼 클릭이 그 아래 갤러리의 넘기기 클릭과 함께 발동하지 않게 함.
   scrollRoot.addEventListener("click", (e) => {
-    const img = e.target.closest(".gallery-frame img");
-    if(!img) return;
-    const gallery = img.closest(".gallery");
+    const btn = e.target.closest(".gallery-zoom-btn");
+    if(!btn) return;
+    const frame = btn.closest(".gallery-frame");
+    const gallery = frame && frame.closest(".gallery");
     if(!gallery) return;
     e.stopPropagation();
-    if(gallery.dataset.dragged){ delete gallery.dataset.dragged; return; }
-    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
-    const count = parseInt(gallery.dataset.count, 10) || 1;
-    if(perPage <= 1 && count > 1){
-      const rect = img.getBoundingClientRect();
-      const relX = (e.clientX - rect.left) / rect.width;
-      if(relX < GALLERY_SIDE_ZONE){ rollGallery(gallery, -1); return; }
-      if(relX > 1 - GALLERY_SIDE_ZONE){ rollGallery(gallery, 1); return; }
-    }
     const imgs = Array.from(gallery.querySelectorAll(".gallery-frame img"));
+    const img = frame.querySelector("img");
     openLightbox(imgs.map(im => im.getAttribute("src")), imgs.indexOf(img));
   }, true);
 
@@ -2009,7 +2013,7 @@
     const track = gallery.querySelector(".gallery-track");
     let startX = 0, startTransform = 0, dragging = false, moved = false;
     gallery.addEventListener("pointerdown", (e) => {
-      if(e.target.closest("video, iframe")) return;
+      if(e.target.closest("video, iframe, .gallery-zoom-btn")) return;
       if(e.button !== undefined && e.button !== 0) return;
       const count = parseInt(gallery.dataset.count, 10) || 1;
       if(count <= 1) return;
@@ -2055,12 +2059,15 @@
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
     if(mode === "free") return;
     if(perPage <= 1){
-      g.addEventListener("click", () => rollGallery(g));
+      g.addEventListener("click", () => {
+        if(g.dataset.dragged){ delete g.dataset.dragged; return; }
+        rollGallery(g);
+      });
       activateGalleryFrame(g, 0);
       initGalleryDrag(g);
       const hint = g.querySelector(".gallery-hint");
       const count = parseInt(g.dataset.count, 10) || 1;
-      if(hint && count > 1) hint.textContent = "Drag or click edges · Click center to zoom";
+      if(hint && count > 1) hint.textContent = "Drag or click for next · Tap + to zoom";
       return;
     }
     showGalleryPage(g, 0);
@@ -2206,7 +2213,9 @@
   window.addEventListener("popstate", applyRouteFromLocation);
 
   closeBtn.addEventListener("click", goHome);
-  document.addEventListener("keydown", (e) => { if(e.key === "Escape") goHome(); });
+  // 라이트박스가 열려있을 땐 Escape가 라이트박스만 닫아야 함(위쪽 lightbox keydown 핸들러가 처리) —
+  // 여기서 goHome까지 같이 불리면 이미지 확대 중 Escape 한 번에 프로젝트 상세페이지 밖으로 나가버림
+  document.addEventListener("keydown", (e) => { if(e.key === "Escape" && !lightbox.classList.contains("open")) goHome(); });
 
   const infoView = document.getElementById("info-view");
   function openInfo(){
