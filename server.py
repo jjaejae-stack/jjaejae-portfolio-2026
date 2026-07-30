@@ -653,6 +653,58 @@ def _info_text_to_html(text):
     return html_lib.escape(text or "", quote=False).replace("\n", "<br>")
 
 
+INFO_PARA_FONT_VARS = {"thin": "var(--font-thin)", "medium": "var(--font-medium)", "bold": "var(--font-bold)"}
+_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _valid_hex_color(c):
+    return c if isinstance(c, str) and _HEX_COLOR_RE.match(c) else None
+
+
+def _info_style_attr(obj, base_clamp, prefix=""):
+    """Mirrors builder.html's infoParagraphStyleAttr()/infoLeadStyleAttr() — same 5
+    fields (font family/weight/size/letter-spacing/color), read either off a paragraph
+    dict directly (prefix="") or off the top-level INFO record's lead* fields
+    (prefix="lead"). `base_clamp` is the CSS clamp() the paragraph type or the lead
+    normally renders at, since the size slider is a multiplier on top of that."""
+    styles = []
+    font_family = obj.get(prefix + "FontFamily" if prefix else "fontFamily")
+    if font_family in INFO_PARA_FONT_VARS:
+        styles.append("font-family:%s" % INFO_PARA_FONT_VARS[font_family])
+    font_weight = obj.get(prefix + "FontWeight" if prefix else "fontWeight")
+    if font_weight:
+        try:
+            styles.append("font-weight:%d" % int(font_weight))
+        except (TypeError, ValueError):
+            pass
+    font_scale = obj.get(prefix + "FontScale" if prefix else "fontScale")
+    if font_scale not in (None, "", 1, 1.0):
+        try:
+            scale = float(font_scale)
+            if abs(scale - 1.0) > 0.001:
+                styles.append("font-size:calc(%s * %s)" % (base_clamp, scale))
+        except (TypeError, ValueError):
+            pass
+    letter_spacing = obj.get(prefix + "LetterSpacing" if prefix else "letterSpacing")
+    if letter_spacing:
+        try:
+            styles.append("letter-spacing:%sem" % float(letter_spacing))
+        except (TypeError, ValueError):
+            pass
+    color = _valid_hex_color(obj.get(prefix + "Color" if prefix else "color"))
+    if color:
+        styles.append("color:%s" % color)
+    return (' style="%s"' % ";".join(styles)) if styles else ""
+
+
+def _info_paragraph_style_attr(p):
+    return _info_style_attr(p, "clamp(1rem, 1.7vw, 1.2rem)")
+
+
+def _info_lead_style_attr(data):
+    return _info_style_attr(data, "clamp(1.4rem, 3.2vw, 2.3rem)", prefix="lead")
+
+
 def render_info_content_html(data):
     """Render builder.html's INFO edit form data back into the exact markup
     shape index.html's #info-view expects (see its `.info-content` block)."""
@@ -660,13 +712,15 @@ def render_info_content_html(data):
     paragraphs = data.get("paragraphs") or []
     links = data.get("links") or []
 
-    parts = ['<p class="info-lead">' + _info_text_to_html(lead) + "</p>"]
+    parts = ['<p class="info-lead"%s>%s</p>' % (_info_lead_style_attr(data), _info_text_to_html(lead))]
     for p in paragraphs:
         text = (p.get("text") or "").strip()
         if not text:
             continue
         ptype = "tagline" if p.get("type") == "tagline" else "body"
-        parts.append('<p class="info-%s">%s</p>' % (ptype, _info_text_to_html(text)))
+        parts.append(
+            '<p class="info-%s"%s>%s</p>' % (ptype, _info_paragraph_style_attr(p), _info_text_to_html(text))
+        )
 
     link_parts = []
     for l in links:
@@ -702,6 +756,25 @@ def publish_info(data):
 
     with open(INDEX_HTML_PATH, "w", encoding="utf-8") as f:
         f.write(new_content)
+
+
+INFO_BG_PATH = os.path.join(BASE_DIR, "info-bg.jpg")
+
+
+def save_info_bg_image(payload):
+    """Overwrite info-bg.jpg on disk with a newly attached photo. Always saved under
+    that exact same filename (re-encoded to JPEG regardless of the source format) so
+    index.html's `url("info-bg.jpg")` CSS reference never has to change — the file
+    just rides along with whatever git commit the next Publish makes."""
+    data_url = payload.get("dataUrl") or ""
+    if "," not in data_url:
+        raise ValueError("dataUrl이 올바르지 않습니다.")
+    raw = base64.b64decode(data_url.split(",", 1)[1])
+    img = Image.open(io.BytesIO(raw))
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.save(INFO_BG_PATH, quality=92)
+    return {"ok": True}
 
 
 def _run_git(args):
@@ -771,7 +844,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/upload-info-bg", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -845,6 +918,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             result = {"action": "updated"}
             result.update(git_result)
+            self._send_json(200, result)
+            return
+
+        if parsed.path == "/upload-info-bg":
+            try:
+                result = save_info_bg_image(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "배경 사진 저장 실패: %s" % e})
+                return
             self._send_json(200, result)
             return
 
