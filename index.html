@@ -270,25 +270,14 @@
   .list-col{flex:1; min-width:0; display:flex; flex-direction:column; gap:32px;}
   .play-placeholder{color:var(--muted); font-style:italic; font-size:.95rem;}
   .work-card{cursor:pointer;}
-  .work-card .thumb{position:relative; overflow:hidden; background:#111; border-radius:18px; perspective:800px;}
+  .work-card .thumb{position:relative; overflow:hidden; background:#111; border-radius:18px;}
   .work-card .thumb img{
     width:100%; height:auto; display:block;
     transition:transform .7s cubic-bezier(.2,.7,.2,1);
   }
-  /* 스크롤 롤링 효과가 켜지면 img는 visibility:hidden으로 숨겨지고, 대신 같은 이미지를
-     여러 가로 띠(.curl-strip)로 잘라 각각 rotateX를 줘서 곡면처럼 보이게 함 — 이 hover
-     확대는 그 사이(로딩 전/실패 시) 폴백으로 남겨둠 */
   .work-card:hover .thumb img{transform:scale(1.045);}
-  .work-card .thumb .curl-strip{
-    position:absolute; left:0; right:0;
-    background-repeat:no-repeat;
-    pointer-events:none;
-    will-change:transform;
-  }
-  .work-card:hover .thumb{transform:scale(1.03);}
   .work-card .accent{
     position:absolute; left:0; bottom:0; right:0; height:4px;
-    z-index:3; /* .curl-strip들보다 위에 그려지도록 */
   }
   /* 프로젝트명/카테고리/년도는 기본적으로 숨겨져 있다가, 마우스를 올리면 나타남 */
   .work-card .meta{
@@ -2185,99 +2174,6 @@
 
   applyRouteFromLocation();
 
-})();
-</script>
-
-<script>
-/* ---------------- Work/Play 그리드: CSS 종이 롤링(curl) 효과 ----------------
-   #list-view를 스크롤할 때 각 프로젝트 썸네일이 "현재 스크롤 위치"(뷰포트 중심에서
-   얼마나 떨어져 있는지)에 따라 지속적으로 곡면처럼 휘어짐 — 스크롤 속도가 아니라
-   위치 기반이라 스크롤을 멈춰도 튕기듯 복귀(bobbing)하지 않고 그 자리의 곡률을 유지함.
-   뷰포트 중심 위쪽 카드는 윗변이, 아래쪽 카드는 아랫변이 화면 안쪽으로 말려 들어감.
-   구현: 실제 <img>는 visibility:hidden으로 숨기고, 같은 이미지를 여러 개의 가로 띠
-   (.curl-strip, background-image로 각자 다른 부분만 잘라 보여줌)로 겹쳐 쌓은 뒤,
-   중심에 가까운 띠는 거의 평평하게, 바깥쪽 띠일수록 rotateX를 크게 줘서 계단식으로
-   곡면을 근사함 — WebGL 없이 순수 CSS transform만 사용 (외부 라이브러리 의존성 없음). */
-(function initGridCurl(){
-  const listView = document.getElementById("list-view");
-  const listGrid = document.getElementById("list-grid");
-  if(!listView || !listGrid) return;
-
-  const SEGMENTS = 12;
-  const MAX_ANGLE = 40; // deg, bend가 ±1일 때 가장 바깥쪽 띠의 각도
-  let cards = [];
-
-  function clearCard(card){
-    card.img.style.visibility = "";
-    card.strips.forEach(s => s.remove());
-  }
-
-  function buildStrips(thumb, img){
-    thumb.querySelectorAll(".curl-strip").forEach(s => s.remove());
-    const w = thumb.clientWidth, h = thumb.clientHeight;
-    if(!w || !h) return null;
-    const stripH = h / SEGMENTS;
-    const src = img.currentSrc || img.src;
-    const strips = [];
-    for(let i = 0; i < SEGMENTS; i++){
-      const strip = document.createElement("div");
-      strip.className = "curl-strip";
-      strip.style.top = (i * stripH) + "px";
-      strip.style.height = stripH + "px";
-      strip.style.backgroundImage = `url("${src}")`;
-      strip.style.backgroundSize = `${w}px ${h}px`;
-      strip.style.backgroundPosition = `0 ${-(i * stripH)}px`;
-      thumb.appendChild(strip);
-      strips.push(strip);
-    }
-    img.style.visibility = "hidden";
-    return strips;
-  }
-
-  function buildCards(){
-    cards.forEach(clearCard);
-    cards = [];
-    listGrid.querySelectorAll(".work-card .thumb").forEach(thumb => {
-      const img = thumb.querySelector("img");
-      if(!img) return;
-      const setup = () => {
-        const strips = buildStrips(thumb, img);
-        if(strips) cards.push({ img, thumb, strips });
-      };
-      if(img.complete && img.naturalWidth) setup();
-      else img.addEventListener("load", setup, { once:true });
-    });
-  }
-
-  buildCards();
-  /* 필터 탭 전환 시 renderGrid()가 .list-col(listGrid의 직계 자식)을 통째로 새로 그리므로
-     그것만 감지하면 충분함 — subtree:true를 쓰면 buildStrips()가 .thumb 안쪽 깊숙이
-     추가/삭제하는 .curl-strip 자체도 mutation으로 잡혀서 buildCards()가 끝없이 재호출되는
-     무한 루프에 빠짐(페이지 멈춤의 원인이었음) */
-  new MutationObserver(buildCards).observe(listGrid, { childList: true });
-  window.addEventListener("resize", buildCards);
-
-  function frame(){
-    requestAnimationFrame(frame);
-    if(!listView.classList.contains("open") || !cards.length) return;
-    const vh = window.innerHeight;
-    const centerY = vh / 2;
-    cards.forEach(card => {
-      const rect = card.thumb.getBoundingClientRect();
-      if(!rect.height) return;
-      const bend = Math.max(-1, Math.min(1, (rect.top + rect.height / 2 - centerY) / centerY));
-      const n = card.strips.length;
-      const curlsAtTop = bend >= 0;
-      card.strips.forEach((strip, i) => {
-        const t = i / (n - 1); // 0(맨 위 띠) .. 1(맨 아래 띠)
-        const edge = curlsAtTop ? (1 - t) : t; // 말리는 쪽 가장자리일수록 1에 가까움
-        const angle = Math.sign(bend) * Math.abs(bend) * Math.pow(edge, 2) * MAX_ANGLE;
-        strip.style.transformOrigin = curlsAtTop ? "bottom" : "top";
-        strip.style.transform = `rotateX(${angle.toFixed(2)}deg)`;
-      });
-    });
-  }
-  requestAnimationFrame(frame);
 })();
 </script>
 </body>
