@@ -91,6 +91,12 @@
   body.past-hero #site-header{opacity:1; pointer-events:auto;}
   body.project-open #site-header, body.info-open #site-header, body.list-open #site-header{opacity:.4; pointer-events:auto;}
   body.project-open #site-header:hover, body.info-open #site-header:hover, body.list-open #site-header:hover{opacity:1;}
+  /* Info 페이지는 배경이 사진(구름/캐릭터)이라 mix-blend-mode:difference가 그대로 걸리면
+     nav 글자가 배경 색에 물들어 보임 — jjaejae 로고(blend-mode 없는 순수 검정 이미지)와
+     같은 톤/투명도로 보이도록 Info 페이지에서만 blend-mode를 끄고 로고와 같은 색을 씀
+     (nav button 자체의 opacity:.85까지 곱해지면 로고의 .4보다 더 옅어지므로 1로 초기화) */
+  body.info-open #site-header{ mix-blend-mode:normal; color:var(--fg); }
+  body.info-open #site-header nav button{ opacity:1; }
   #site-header *{pointer-events:auto;}
   #site-header nav{display:flex; gap:22px;}
   #site-header nav button{opacity:.85; font-weight:700;}
