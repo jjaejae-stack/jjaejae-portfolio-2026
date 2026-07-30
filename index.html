@@ -141,6 +141,9 @@
   body.past-hero .frame-item{opacity:1; pointer-events:auto;}
   body.project-open .frame-item, body.info-open .frame-item{opacity:.4; pointer-events:auto;}
   body.project-open .frame-item:hover, body.info-open .frame-item:hover{opacity:1;}
+  /* 헤더/로고와 같은 이유 — Info 페이지의 컬러풀한 배경 위에서 mix-blend-mode:difference가
+     날짜/시계/IG/Top 글자를 배경색에 물들여 보이게 하므로, 로고와 같은 톤으로 맞춤 */
+  body.info-open .frame-item{ mix-blend-mode:normal; color:var(--fg); }
   #frame-day{ left:28px; top:50%; transform:translateY(-50%); }
   #frame-clock{ right:28px; top:50%; transform:translateY(-50%); font-variant-numeric:tabular-nums; }
   #frame-ig{ left:28px; bottom:22px; }
