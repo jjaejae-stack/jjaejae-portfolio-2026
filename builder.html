@@ -729,6 +729,21 @@
     const col = i % cols, row = Math.floor(i / cols);
     return { x: col * w, y: row * h, w: w, h: h };
   }
+  /* "1장 크게 + 나머지 모아보기" free-layout preset — first photo spans the full width
+     across the top, the rest fill an even grid underneath. Still just produces plain
+     Free-mode positions, so it reuses the exact same rendering (preview + published
+     site) as manually dragging photos into that shape would. */
+  function heroGridFreePos(i, total){
+    if(total <= 1) return { x:0, y:0, w:100, h:100 };
+    const heroH = 60;
+    if(i === 0) return { x:0, y:0, w:100, h:heroH };
+    const restTotal = total - 1, restIndex = i - 1;
+    const cols = Math.min(4, restTotal);
+    const rows = Math.max(1, Math.ceil(restTotal / cols));
+    const w = 100 / cols, h = (100 - heroH) / rows;
+    const col = restIndex % cols, row = Math.floor(restIndex / cols);
+    return { x: col * w, y: heroH + row * h, w: w, h: h };
+  }
   function layoutSummaryText(block){
     const mode = block.galleryMode || "1";
     if(mode === "free") return "Free (자유 배치)";
@@ -2689,6 +2704,7 @@
   const layoutDirectionToggle = document.getElementById("layout-direction-toggle");
   const layoutPreviewEl = document.getElementById("layout-preview");
   const layoutHint = document.getElementById("layout-hint");
+  const layoutPresetRow = document.getElementById("layout-preset-row");
 
   let layoutTargetBlockId = null;
   let layoutDraft = null; // { mode, direction, free: {imageId: {x,y,w,h}} }
@@ -2721,6 +2737,7 @@
     const showDirection = layoutDraft.mode !== "1" && layoutDraft.mode !== "free";
     layoutDirectionRow.style.display = showDirection ? "block" : "none";
     layoutHint.style.display = layoutDraft.mode === "free" ? "block" : "none";
+    layoutPresetRow.style.display = layoutDraft.mode === "free" ? "block" : "none";
     renderLayoutPreview();
   }
   function renderLayoutPreview(){
@@ -3113,6 +3130,12 @@
     const cropImageBtn = e.target.closest('[data-action="crop-image"]');
     if(cropImageBtn){
       openCropModal(cropImageBtn.dataset.imageId);
+      return;
+    }
+
+    const zoomThumb = e.target.closest('[data-action="zoom-image"]');
+    if(zoomThumb){
+      openEditorLightbox(zoomThumb.dataset.blockId, zoomThumb.dataset.imageId);
       return;
     }
 
