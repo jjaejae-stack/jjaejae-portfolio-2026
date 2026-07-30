@@ -2192,7 +2192,7 @@
    그리드 전체가 하나의 큰 원통에 감긴 종이처럼 보임(개별 카드가 따로 튕기지 않음).
    OGL(경량 WebGL 라이브러리)을 CDN에서 바로 import — 이 파일은 빌드 과정이 없는
    완전 자체완결형 정적 HTML이라 이게 유일한 외부 의존성. */
-import { Renderer, Camera, Transform, Plane, Program, Mesh, Texture } from "https://cdn.jsdelivr.net/npm/ogl/+esm";
+import { Renderer, Camera, Transform, Plane, Program, Mesh, Texture } from "https://cdn.jsdelivr.net/npm/ogl@1.0.11/+esm";
 
 (function initGridBend(){
   const listView = document.getElementById("list-view");
@@ -2204,10 +2204,14 @@ import { Renderer, Camera, Transform, Plane, Program, Mesh, Texture } from "http
   try {
     renderer = new Renderer({ canvas: canvasEl, alpha: true, antialias: true, dpr: Math.min(window.devicePixelRatio || 1, 2) });
   } catch(e){ return; } // WebGL 미지원 브라우저 — img 폴백으로 그대로 둠
+  if(!renderer.gl) return; // Renderer는 컨텍스트 생성 실패 시 예외 대신 gl:null만 남김
   const gl = renderer.gl;
   gl.clearColor(0, 0, 0, 0);
 
-  const camera = new Camera(gl, { fov: 35 });
+  /* far를 넉넉히 잡음 — 카메라 거리(fitCamera)가 "월드 1단위=1px" 기준이라 뷰포트 높이가
+     클수록 camera.position.z가 수천 단위까지 커지는데, OGL Camera 기본 far:100으로는
+     평면이 far 클리핑 평면 밖으로 나가 아예 안 보이게 됨 */
+  const camera = new Camera(gl, { fov: 35, near: 1, far: 20000 });
   const scene = new Transform();
 
   const vertex = `
