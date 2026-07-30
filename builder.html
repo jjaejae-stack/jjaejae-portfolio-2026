@@ -267,6 +267,18 @@
   .layout-preview.free-canvas .layout-frame{position:absolute; cursor:move; border:1px solid rgba(255,255,255,.4); box-sizing:border-box;}
   .layout-frame .resize-handle{position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:#fff; border:1.5px solid var(--accent); border-radius:50%; cursor:nwse-resize; z-index:2;}
 
+  /* ---------- editor image lightbox (click a photo thumbnail in the 사진 목록 to zoom) ---------- */
+  #editor-lightbox{display:none; position:fixed; inset:0; z-index:970; align-items:center; justify-content:center; background:rgba(10,10,10,.92);}
+  #editor-lightbox.open{display:flex;}
+  #editor-lightbox img{max-width:88vw; max-height:88vh; width:auto; height:auto; object-fit:contain; border-radius:12px; user-select:none; -webkit-user-drag:none;}
+  #editor-lightbox-close{position:absolute; top:22px; right:28px; z-index:2; font-size:14px; letter-spacing:.02em; color:#fff; opacity:.75; transition:opacity .2s; background:none; border:0; cursor:pointer;}
+  #editor-lightbox-close:hover{opacity:1;}
+  #editor-lightbox-prev, #editor-lightbox-next{position:absolute; top:50%; transform:translateY(-50%); z-index:2; font-size:34px; line-height:1; color:#fff; opacity:.6; padding:14px 18px; transition:opacity .2s; background:none; border:0; cursor:pointer;}
+  #editor-lightbox-prev{left:6px;}
+  #editor-lightbox-next{right:6px;}
+  #editor-lightbox-prev:hover, #editor-lightbox-next:hover{opacity:1;}
+  .image-row .thumb{cursor:zoom-in;}
+
   @media (max-width:1200px){
     #app{grid-template-columns:220px 1fr 1fr;}
   }
@@ -569,11 +581,22 @@
         <div class="layout-preview" id="layout-preview"></div>
       </div>
       <p class="hint" id="layout-hint">Free 모드에서는 사진을 드래그해서 위치를, 우하단 모서리를 드래그해서 크기를 자유롭게 조절할 수 있습니다.</p>
+      <div class="field-group" id="layout-preset-row" style="display:none;">
+        <label class="field-label">프리셋</label>
+        <button type="button" class="btn-sm" id="layout-preset-hero">1장 크게 + 나머지 모아보기</button>
+      </div>
       <div class="modal-actions">
         <button class="btn-sm" id="layout-cancel">Cancel</button>
         <button class="btn-primary" id="layout-confirm">완료</button>
       </div>
     </div>
+  </div>
+
+  <div id="editor-lightbox">
+    <button type="button" id="editor-lightbox-close" aria-label="Close">✕</button>
+    <button type="button" id="editor-lightbox-prev" aria-label="Previous">&lt;</button>
+    <img id="editor-lightbox-img" src="" alt="">
+    <button type="button" id="editor-lightbox-next" aria-label="Next">&gt;</button>
   </div>
 
 <script>
@@ -1083,6 +1106,10 @@
   ====================================================================== */
   const editorEl = document.getElementById("editor");
   let dragItem = null;
+  /* set instead of null when the picked-up row is one of several checkbox-selected
+     photos in the same block — the whole selected set then moves together as one
+     contiguous group instead of just the row actually grabbed. */
+  let dragGroup = null;
 
   /* [data-sort-item] cards only carry `draggable="true"` while the mouse is actually
      held down on their ⠿ handle — not permanently. A permanently-draggable card would
@@ -1103,7 +1130,9 @@
   });
 
   function getDragAfterElement(scope, y){
-    const items = Array.from(scope.children).filter(el => el.matches("[data-sort-item]") && el !== dragItem);
+    const items = Array.from(scope.children).filter(el =>
+      el.matches("[data-sort-item]") && el !== dragItem && !(dragGroup && dragGroup.includes(el))
+    );
     return items.reduce((closest, child) => {
       const box = child.getBoundingClientRect();
       const offset = y - box.top - box.height/2;
@@ -1118,6 +1147,17 @@
     if(mode !== "info") snapshot();
     dragItem = item;
     item.classList.add("dragging");
+    dragGroup = null;
+    if(item.matches(".image-row") && selectedImages.size > 1 && selectedImages.has(item.dataset.itemId)){
+      const scope = item.closest("[data-sort-scope]");
+      const groupEls = scope
+        ? Array.from(scope.children).filter(el => el.matches("[data-sort-item]") && selectedImages.has(el.dataset.itemId))
+        : [];
+      if(groupEls.length > 1){
+        dragGroup = groupEls;
+        groupEls.forEach(el => el.classList.add("dragging"));
+      }
+    }
     e.dataTransfer.effectAllowed = "move";
     try{ e.dataTransfer.setData("text/plain", ""); }catch(err){}
   });
@@ -1127,14 +1167,21 @@
     if(!scope) return;
     e.preventDefault();
     const afterEl = getDragAfterElement(scope, e.clientY);
-    if(afterEl == null) scope.appendChild(dragItem);
+    if(dragGroup){
+      const frag = document.createDocumentFragment();
+      dragGroup.forEach(el => frag.appendChild(el));
+      if(afterEl == null) scope.appendChild(frag);
+      else scope.insertBefore(frag, afterEl);
+    } else if(afterEl == null) scope.appendChild(dragItem);
     else scope.insertBefore(dragItem, afterEl);
   });
   editorEl.addEventListener("dragend", () => {
     if(!dragItem) return;
     dragItem.classList.remove("dragging");
+    if(dragGroup) dragGroup.forEach(el => el.classList.remove("dragging"));
     const scope = dragItem.closest("[data-sort-scope]");
     dragItem = null;
+    dragGroup = null;
     if(scope) syncOrderFromDOM(scope);
   });
 
@@ -1770,7 +1817,7 @@
     const isVideo = isVideoPath(im.relPath || im.name);
     const thumb = isVideo
       ? '<div class="thumb video-thumb">🎬</div>'
-      : '<img class="thumb" src="' + im.url + '" alt="">';
+      : '<img class="thumb" src="' + im.url + '" alt="" data-action="zoom-image" data-block-id="' + blockId + '" data-image-id="' + im.id + '">';
     const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
     const revertBtn = im.original ? '<button class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + im.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '';
     const isSelected = selectedBlockId === blockId && selectedImages.has(im.id);
@@ -2741,6 +2788,50 @@
     renderEditor();
     saveAndRefresh();
     closeLayoutModal();
+  });
+
+  /* ---- editor image lightbox — click a photo thumbnail in a block's 사진 목록 to zoom.
+     Separate from the simulated-site lightbox inside PREVIEW_RUNTIME_JS (that one only
+     exists inside the preview iframe's own document and mimics the real published page;
+     this one is the builder's own chrome, for previewing photos while editing). ---- */
+  const editorLightboxEl = document.getElementById("editor-lightbox");
+  const editorLightboxImg = document.getElementById("editor-lightbox-img");
+  let editorLightboxList = [];
+  let editorLightboxIndex = 0;
+
+  function showEditorLightboxFrame(){
+    const im = editorLightboxList[editorLightboxIndex];
+    editorLightboxImg.src = im ? im.url : "";
+  }
+  function openEditorLightbox(blockId, imageId){
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === blockId);
+    if(!block) return;
+    const photos = (block.images || []).filter(im => !isVideoPath(im.relPath || im.name));
+    if(!photos.length) return;
+    editorLightboxList = photos;
+    editorLightboxIndex = Math.max(0, photos.findIndex(im => im.id === imageId));
+    showEditorLightboxFrame();
+    editorLightboxEl.classList.add("open");
+  }
+  function closeEditorLightbox(){
+    editorLightboxEl.classList.remove("open");
+    editorLightboxImg.src = "";
+  }
+  function editorLightboxNav(dir){
+    if(!editorLightboxList.length) return;
+    editorLightboxIndex = (editorLightboxIndex + dir + editorLightboxList.length) % editorLightboxList.length;
+    showEditorLightboxFrame();
+  }
+  document.getElementById("editor-lightbox-close").addEventListener("click", closeEditorLightbox);
+  document.getElementById("editor-lightbox-prev").addEventListener("click", (e) => { e.stopPropagation(); editorLightboxNav(-1); });
+  document.getElementById("editor-lightbox-next").addEventListener("click", (e) => { e.stopPropagation(); editorLightboxNav(1); });
+  editorLightboxEl.addEventListener("click", (e) => { if(e.target === editorLightboxEl) closeEditorLightbox(); });
+  document.addEventListener("keydown", (e) => {
+    if(!editorLightboxEl.classList.contains("open")) return;
+    if(e.key === "Escape") closeEditorLightbox();
+    if(e.key === "ArrowLeft") editorLightboxNav(-1);
+    if(e.key === "ArrowRight") editorLightboxNav(1);
   });
 
   layoutPreviewEl.addEventListener("mousedown", (e) => {
