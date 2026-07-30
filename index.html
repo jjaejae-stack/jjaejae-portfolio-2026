@@ -2250,9 +2250,11 @@
   }
 
   buildCards();
-  /* 필터 탭 전환 시 renderGrid()가 .work-card DOM을 통째로 새로 그리므로,
-     그때마다 감지해서 띠를 다시 구성함 */
-  new MutationObserver(buildCards).observe(listGrid, { childList: true, subtree: true });
+  /* 필터 탭 전환 시 renderGrid()가 .list-col(listGrid의 직계 자식)을 통째로 새로 그리므로
+     그것만 감지하면 충분함 — subtree:true를 쓰면 buildStrips()가 .thumb 안쪽 깊숙이
+     추가/삭제하는 .curl-strip 자체도 mutation으로 잡혀서 buildCards()가 끝없이 재호출되는
+     무한 루프에 빠짐(페이지 멈춤의 원인이었음) */
+  new MutationObserver(buildCards).observe(listGrid, { childList: true });
   window.addEventListener("resize", buildCards);
 
   function frame(){
