@@ -82,6 +82,15 @@ GENERATE_SCHEMA = {
     "required": ["title", "tag", "meta", "heading", "paragraphs"]
 }
 
+INFO_GENERATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lead": {"type": "string"},
+        "paragraphs": {"type": "array", "items": {"type": "string"}}
+    },
+    "required": ["lead", "paragraphs"]
+}
+
 TRANSLATE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -411,6 +420,59 @@ def build_prompt(title, tag, meta, direction=None):
     )
 
 
+def build_info_generate_prompt(mode, lead, paragraphs, draft, note):
+    """`mode` is 'new' (write the INFO page bio from scratch) or 'polish'
+    (rewrite a draft the user already wrote, in the learned voice, without
+    inventing new content)."""
+    voice = load_voice_rulebook()
+    examples, examples_source = load_voice_examples()
+
+    voice_block = ""
+    if voice:
+        voice_block = (
+            "\n\n## 문체 규칙 (반드시 지킬 것)\n"
+            "아래는 내 실제 글에서 관찰한 문체 규칙이다. 이 규칙을 예외 없이 따라서 써라:\n\n"
+            + voice + "\n"
+        )
+    examples_block = ""
+    if examples:
+        examples_block = (
+            "\n\n## 문체 예시 (출처: %s — 표현을 그대로 베끼지 말고 톤·리듬만 따라할 것)\n\n%s\n"
+            % (examples_source, examples)
+        )
+
+    note = (note or "").strip()
+    note_line = ("\n- 이번에 특별히 반영할 것: %s" % note) if note else ""
+
+    if mode == "polish":
+        return (
+            "너는 광고 에이전시 아트디렉터 본인이야. 아래는 네가 포트폴리오 사이트 INFO 페이지(자기소개)에 쓰려고 "
+            "직접 쓴 초안이야:\n\n---\n" + draft + "\n---\n"
+            + voice_block + examples_block +
+            "\n\n위 문체 규칙과 예시의 톤·리듬을 참고해서, 이 초안의 내용과 의미는 그대로 유지한 채 문장만 다듬어줘. "
+            "새로운 사실이나 내용을 지어내지 말고, 표현과 리듬만 손봐." + note_line + "\n\n"
+            "다음 필드를 JSON으로 반환해:\n"
+            "- lead: 도입부로 쓸 인사말 1~2줄 (초안에 도입부가 있으면 그것을 다듬어서, 없으면 초안 중 도입에 어울리는 부분으로)\n"
+            "- paragraphs: 나머지 내용을 다듬은 문단들의 배열 (초안의 문단 구성을 최대한 존중, 순서 유지)"
+        )
+
+    context = ""
+    if lead or paragraphs:
+        context = (
+            "\n\n## 참고 — 지금까지 써둔 내용 (톤 참고용일 뿐, 그대로 베끼지 말고 새로 써)\n인사말: %s\n본문: %s\n"
+            % (lead or "(없음)", "\n".join(paragraphs) if paragraphs else "(없음)")
+        )
+
+    return (
+        "너는 광고 에이전시 아트디렉터 본인이야. 자기 포트폴리오 사이트의 INFO 페이지(자기소개)에 들어갈 "
+        "인사말과 짧은 자기소개 글을 새로 써줘."
+        + context + voice_block + examples_block + note_line +
+        "\n\n다음 필드를 JSON으로 반환해:\n"
+        "- lead: 도입부로 쓸 인사말 1~2줄\n"
+        "- paragraphs: 이어지는 자기소개 문단들의 배열 (3~5개, 너무 길지 않게)"
+    )
+
+
 def build_translate_prompt(direction, data):
     src_lang = "한국어" if direction == "ko-en" else "영어"
     dst_lang = "영어" if direction == "ko-en" else "한국어"
@@ -709,7 +771,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/translate", "/publish", "/publish-info", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -805,6 +867,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             images = list_images(folder) if folder else []
             structured["images"] = images
             structured["imageFolder"] = folder
+            self._send_json(200, structured)
+            return
+
+        if parsed.path == "/generate-info":
+            mode = payload.get("mode") if payload.get("mode") in ("new", "polish") else "new"
+            lead = payload.get("lead") or ""
+            paragraphs = payload.get("paragraphs") if isinstance(payload.get("paragraphs"), list) else []
+            draft = (payload.get("draft") or "").strip()
+            note = payload.get("note") or ""
+            if mode == "polish" and not draft:
+                self._send_json(400, {"error": "다듬을 글을 입력해주세요."})
+                return
+            try:
+                prompt = build_info_generate_prompt(mode, lead, paragraphs, draft, note)
+                structured = run_claude(prompt, INFO_GENERATE_SCHEMA)
+            except subprocess.TimeoutExpired:
+                self._send_json(504, {"error": "claude CLI timed out"})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+                return
             self._send_json(200, structured)
             return
 

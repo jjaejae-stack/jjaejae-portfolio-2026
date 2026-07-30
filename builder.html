@@ -216,6 +216,13 @@
   #direction-modal textarea.field{min-height:64px;}
   #short-lines-row input{max-width:100px;}
 
+  /* ---------- INFO page generate modal ---------- */
+  #info-generate-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #info-generate-modal.open{display:flex;}
+  #info-generate-modal .modal-box{width:min(640px,92vw); max-height:88vh;}
+  #info-generate-modal textarea.field{min-height:64px;}
+  #info-generate-draft-row textarea.field{font-family:inherit; white-space:pre-wrap;}
+
   /* ---------- crop modal ---------- */
   #crop-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
   #crop-modal.open{display:flex;}
@@ -375,6 +382,36 @@
       <div class="modal-actions">
         <button class="btn-sm" id="direction-cancel">취소</button>
         <button class="btn-primary" id="direction-confirm">생성</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="info-generate-modal">
+    <div class="modal-box">
+      <h3>INFO 페이지 GENERATE</h3>
+      <p class="hint">문체 학습 규칙(voice.md)을 참고해서 인사말·본문 문단을 씁니다. 이미 써둔 초안이 있다면 "내 글 다듬기"로 골라 붙여넣으면, 내용은 그대로 두고 학습된 문체로만 다듬어줍니다.</p>
+
+      <div class="field-group">
+        <label class="field-label">모드</label>
+        <div class="view-toggle" data-group="mode">
+          <button type="button" data-value="new">새로 쓰기</button>
+          <button type="button" data-value="polish">내 글 다듬기</button>
+        </div>
+      </div>
+
+      <div class="field-group" id="info-generate-draft-row" style="display:none;">
+        <label class="field-label">다듬을 글 (여러 문단이면 줄바꿈으로 구분)</label>
+        <textarea class="field" id="info-generate-draft" style="min-height:160px;" placeholder="여기에 초안을 붙여넣으세요"></textarea>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">방향 메모 (선택)</label>
+        <textarea class="field" id="info-generate-note" placeholder="예: 조금 더 담백하게, 유머 살짝 섞어서"></textarea>
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn-sm" id="info-generate-cancel">취소</button>
+        <button class="btn-primary" id="info-generate-confirm">생성</button>
       </div>
     </div>
   </div>
@@ -1200,6 +1237,7 @@
       return;
     }
     if(e.target.closest('[data-action="publish-info"]')){ runPublishInfo(); return; }
+    if(e.target.closest('[data-action="generate-info"]')){ openInfoGenerateModal(); return; }
   }
 
   function infoParagraphRowHTML(p, i){
@@ -1233,8 +1271,10 @@
       : '<div class="image-list-empty">아직 링크가 없습니다.</div>';
     editorEl.innerHTML = ''
       + '<div class="btn-row">'
+      +   '<button class="btn-primary" id="generate-info-btn" data-action="generate-info">GENERATE</button>'
       +   '<button class="btn-primary" id="publish-info-btn" data-action="publish-info">PUBLISH</button>'
       + '</div>'
+      + '<p id="info-generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<p id="info-publish-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<div class="field-group"><label class="field-label">인사말 (첫 문단, 줄바꿈 그대로 유지)</label>'
       +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea></div>'
@@ -1277,6 +1317,112 @@
       if(status) status.style.display = "none";
     }finally{
       setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "PUBLISH"; } }, 1800);
+    }
+  }
+
+  /* ---- INFO GENERATE modal — same voice.md/문체예시 pipeline as the project
+     GENERATE button, in two modes: "new" (write from scratch) or "polish"
+     (rewrite a draft the user pastes in, keeping its content but applying
+     the learned style). ---- */
+  const INFO_GENERATE_DEFAULTS = { mode: "new", note: "" };
+  let infoGenerateSettings = loadInfoGenerateSettings();
+
+  function loadInfoGenerateSettings(){
+    try{
+      const saved = JSON.parse(localStorage.getItem("pf-builder-info-generate") || "{}");
+      return Object.assign({}, INFO_GENERATE_DEFAULTS, saved);
+    }catch(e){ return Object.assign({}, INFO_GENERATE_DEFAULTS); }
+  }
+  function saveInfoGenerateSettings(){
+    localStorage.setItem("pf-builder-info-generate", JSON.stringify(infoGenerateSettings));
+  }
+
+  const infoGenerateModal = document.getElementById("info-generate-modal");
+  const infoGenerateDraftRow = document.getElementById("info-generate-draft-row");
+  const infoGenerateDraftEl = document.getElementById("info-generate-draft");
+  const infoGenerateNoteEl = document.getElementById("info-generate-note");
+
+  function renderInfoGenerateModal(){
+    infoGenerateModal.querySelectorAll(".view-toggle").forEach(group => {
+      const key = group.dataset.group;
+      group.querySelectorAll("button").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.value === infoGenerateSettings[key]);
+      });
+    });
+    infoGenerateDraftRow.style.display = infoGenerateSettings.mode === "polish" ? "block" : "none";
+    infoGenerateNoteEl.value = infoGenerateSettings.note;
+  }
+  function openInfoGenerateModal(){
+    renderInfoGenerateModal();
+    infoGenerateDraftEl.value = "";
+    infoGenerateModal.classList.add("open");
+  }
+  infoGenerateModal.addEventListener("click", (e) => {
+    const toggleBtn = e.target.closest(".view-toggle button");
+    if(toggleBtn){
+      const key = toggleBtn.closest(".view-toggle").dataset.group;
+      infoGenerateSettings[key] = toggleBtn.dataset.value;
+      renderInfoGenerateModal();
+      return;
+    }
+    if(e.target.id === "info-generate-cancel"){ infoGenerateModal.classList.remove("open"); return; }
+    if(e.target.id === "info-generate-confirm"){
+      const mode = infoGenerateSettings.mode;
+      const draft = infoGenerateDraftEl.value.trim();
+      if(mode === "polish" && !draft){
+        alert("다듬을 글을 먼저 입력해주세요.");
+        return;
+      }
+      infoGenerateSettings.note = infoGenerateNoteEl.value.trim();
+      saveInfoGenerateSettings();
+      infoGenerateModal.classList.remove("open");
+      runInfoGenerate(mode, draft, infoGenerateSettings.note);
+      return;
+    }
+  });
+
+  async function runInfoGenerate(mode, draft, note){
+    const btn = document.getElementById("generate-info-btn");
+    const status = document.getElementById("info-generate-status");
+    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
+    if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
+
+    try{
+      const res = await fetch(GENERATE_SERVER + "/generate-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: mode,
+          lead: infoData.lead,
+          paragraphs: infoData.paragraphs.map(p => p.text),
+          draft: draft,
+          note: note
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      if(data.lead) infoData.lead = data.lead;
+      if(Array.isArray(data.paragraphs) && data.paragraphs.length){
+        infoData.paragraphs = data.paragraphs.map(text => ({ id: uid(), type:"body", text: text }));
+      }
+      if(status){
+        status.textContent = mode === "polish"
+          ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 태그라인으로 바꿀 문단이 있으면 직접 골라주세요."
+          : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 태그라인으로 바꿀 문단이 있으면 직접 골라주세요.";
+      }
+      renderEditor();
+      saveInfoAndRefresh();
+    }catch(e){
+      alert(
+        "Generate 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(status) status.style.display = "none";
+    }finally{
+      setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "GENERATE"; } }, 800);
     }
   }
 
