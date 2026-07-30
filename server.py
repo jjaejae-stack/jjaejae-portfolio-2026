@@ -15,6 +15,7 @@ API key needed, it shells out to the `claude` CLI using your existing
 Claude Code login.)
 """
 import base64
+import html as html_lib
 import http.server
 import io
 import json
@@ -570,6 +571,77 @@ def publish_project(project_id, code):
     return action
 
 
+def _find_matching_div_close(text, start_idx):
+    """`start_idx` is right after the opening <div ...> tag's closing '>'.
+    Returns the index of the matching '</div>' tag's start, counting nested
+    <div> opens/closes in between."""
+    depth = 1
+    tag_re = re.compile(r"<div\b|</div\s*>")
+    for m in tag_re.finditer(text, start_idx):
+        if m.group(0).startswith("<div"):
+            depth += 1
+        else:
+            depth -= 1
+            if depth == 0:
+                return m.start()
+    raise RuntimeError("matching </div>를 찾을 수 없습니다.")
+
+
+def _info_text_to_html(text):
+    return html_lib.escape(text or "", quote=False).replace("\n", "<br>")
+
+
+def render_info_content_html(data):
+    """Render builder.html's INFO edit form data back into the exact markup
+    shape index.html's #info-view expects (see its `.info-content` block)."""
+    lead = data.get("lead") or ""
+    paragraphs = data.get("paragraphs") or []
+    links = data.get("links") or []
+
+    parts = ['<p class="info-lead">' + _info_text_to_html(lead) + "</p>"]
+    for p in paragraphs:
+        text = (p.get("text") or "").strip()
+        if not text:
+            continue
+        ptype = "tagline" if p.get("type") == "tagline" else "body"
+        parts.append('<p class="info-%s">%s</p>' % (ptype, _info_text_to_html(text)))
+
+    link_parts = []
+    for l in links:
+        label = (l.get("label") or "").strip()
+        url = (l.get("url") or "").strip()
+        if not label or not url:
+            continue
+        target = ' target="_blank" rel="noopener"' if url.startswith("http") else ""
+        link_parts.append(
+            '<a href="%s"%s>%s</a>' % (html_lib.escape(url, quote=True), target, html_lib.escape(label, quote=False))
+        )
+    parts.append('<div class="links">\n          ' + "\n          ".join(link_parts) + "\n        </div>")
+
+    return "\n\n        ".join(parts)
+
+
+def publish_info(data):
+    """Replace the contents of index.html's `<div class="info-content">...
+    </div>` block (the INFO page overlay's text) with builder.html's INFO
+    edit form data."""
+    with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    marker = '<div class="info-content">'
+    marker_idx = content.find(marker)
+    if marker_idx == -1:
+        raise RuntimeError('index.html에서 \'<div class="info-content">\'를 찾을 수 없습니다.')
+    inner_start = marker_idx + len(marker)
+    close_idx = _find_matching_div_close(content, inner_start)
+
+    rendered = render_info_content_html(data)
+    new_content = content[:inner_start] + "\n        " + rendered + "\n      " + content[close_idx:]
+
+    with open(INDEX_HTML_PATH, "w", encoding="utf-8") as f:
+        f.write(new_content)
+
+
 def _run_git(args):
     return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True)
 
@@ -637,7 +709,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/translate", "/publish", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/translate", "/publish", "/publish-info", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -692,6 +764,24 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 })
                 return
             result = {"action": action}
+            result.update(git_result)
+            self._send_json(200, result)
+            return
+
+        if parsed.path == "/publish-info":
+            try:
+                publish_info(payload)
+            except Exception as e:
+                self._send_json(500, {"error": "index.html 업데이트 실패: %s" % e})
+                return
+            try:
+                git_result = git_commit_and_push("Info page")
+            except Exception as e:
+                self._send_json(500, {
+                    "error": "%s (index.html은 이미 수정되었습니다 — 직접 git commit/push 하거나, 문제를 해결한 뒤 다시 Publish 하세요.)" % e
+                })
+                return
+            result = {"action": "updated"}
             result.update(git_result)
             self._send_json(200, result)
             return

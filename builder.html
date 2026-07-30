@@ -57,6 +57,13 @@
     background:var(--surface); box-shadow:var(--card-shadow);
   }
   #new-project-btn:hover{border-color:var(--accent); color:var(--accent);}
+  #info-nav-btn{
+    width:100%; padding:10px; border:1px solid var(--line-strong);
+    font-weight:600; text-align:left; margin-bottom:14px;
+    background:var(--surface); box-shadow:var(--card-shadow);
+  }
+  #info-nav-btn:hover{border-color:var(--accent); color:var(--accent);}
+  #info-nav-btn.active{background:var(--fg); color:var(--bg);}
   .project-item{
     display:flex; align-items:center; gap:10px; padding:10px 8px;
     border:1px solid var(--line-strong); background:var(--surface); box-shadow:var(--card-shadow);
@@ -150,6 +157,14 @@
   .image-list{display:flex; flex-direction:column; gap:12px; margin:14px 0;}
   .image-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line-strong); padding:6px 8px; background:var(--surface); box-shadow:var(--card-shadow); cursor:grab;}
   .image-row.dragging{opacity:.35;}
+  .image-row.selected{background:color-mix(in srgb, var(--accent) 14%, var(--surface)); border-color:var(--accent);}
+  .image-row .image-select{flex:0 0 auto; width:15px; height:15px; cursor:pointer;}
+  .selection-toolbar{
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px; margin-top:10px;
+    padding:8px 10px; border:1px solid var(--line-strong); background:var(--surface); box-shadow:var(--card-shadow);
+  }
+  .selection-toolbar .sel-count{font-size:12px; font-weight:600; margin-right:2px;}
+  .selection-toolbar select{width:auto; padding:6px 8px; font-size:12px;}
   .image-row .thumb{width:44px; height:44px; object-fit:cover; background:var(--fg); flex:0 0 auto;}
   .image-row .fname{flex:1; min-width:0; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .fname{font-size:12px; color:var(--fg);}
@@ -263,6 +278,7 @@
 
   <div id="app">
     <aside id="sidebar">
+      <button type="button" id="info-nav-btn">INFO 페이지 편집</button>
       <div class="view-toggle" id="category-tabs">
         <button type="button" data-category="work" class="active">Work</button>
         <button type="button" data-category="play">Play</button>
@@ -725,6 +741,7 @@
   ====================================================================== */
   let projects = [];
   let currentId = null;
+  let mode = "project"; // "project" (editing a PROJECTS entry) | "info" (editing the site's INFO page)
   /* collapsible sections (e.g. typography) re-render their whole HTML on every
      edit, which would otherwise reset them to collapsed each time — track open
      state here instead of relying on the DOM class surviving a re-render. */
@@ -766,6 +783,8 @@
     hydrateProject(snap);
     projects[idx] = snap;
     if(currentId !== snap.id) currentId = snap.id;
+    selectedImages = new Set();
+    selectedBlockId = null;
     renderSidebar();
     renderEditor();
     refreshPreview();
@@ -809,9 +828,13 @@
   const categoryTabs = document.getElementById("category-tabs");
   let activeCategory = "work";
 
+  document.getElementById("info-nav-btn").addEventListener("click", openInfoEditor);
+
   function projectCategory(p){ return p.category === "play" ? "play" : "work"; }
 
   function renderSidebar(){
+    const infoNavBtn = document.getElementById("info-nav-btn");
+    if(infoNavBtn) infoNavBtn.classList.toggle("active", mode === "info");
     const visible = projects.filter(p => projectCategory(p) === activeCategory)
       .sort((a,b) => (a.order!=null?a.order:0) - (b.order!=null?b.order:0));
     if(!visible.length){
@@ -820,7 +843,7 @@
       return;
     }
     sidebarList.innerHTML = visible.map(p => {
-      const active = p.id === currentId ? " active" : "";
+      const active = (mode === "project" && p.id === currentId) ? " active" : "";
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
       return '<div class="project-item' + active + '" draggable="true" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
@@ -927,6 +950,16 @@
 
   function selectProject(id){
     currentId = id;
+    mode = "project";
+    selectedImages = new Set();
+    selectedBlockId = null;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+  }
+
+  function openInfoEditor(){
+    mode = "info";
     renderSidebar();
     renderEditor();
     refreshPreview();
@@ -951,7 +984,7 @@
   editorEl.addEventListener("dragstart", (e) => {
     const item = e.target.closest("[data-sort-item]");
     if(!item) return;
-    snapshot();
+    if(mode !== "info") snapshot();
     dragItem = item;
     item.classList.add("dragging");
     e.dataTransfer.effectAllowed = "move";
@@ -984,6 +1017,11 @@
       });
       return;
     }
+    if(kind === "info-paragraphs"){
+      infoData.paragraphs = ids.map(id => infoData.paragraphs.find(p => p.id === id)).filter(Boolean);
+      saveInfoAndRefresh();
+      return;
+    }
     const project = getCurrentProject();
     if(!project) return;
     if(kind === "blocks"){
@@ -1004,6 +1042,242 @@
       }
     }
     saveAndRefresh();
+  }
+
+  /* ---- photo multi-select move (checkbox + toolbar, as an alternative to
+     drag-and-drop when the list is long enough that dragging would require
+     scrolling). Selection is scoped to a single block at a time — checking a
+     photo in a different block replaces the previous selection. ---- */
+  let selectedImages = new Set();
+  let selectedBlockId = null;
+
+  function toggleImageSelection(blockId, imageId){
+    if(selectedBlockId !== blockId){ selectedImages = new Set(); selectedBlockId = blockId; }
+    if(selectedImages.has(imageId)) selectedImages.delete(imageId);
+    else selectedImages.add(imageId);
+    if(selectedImages.size === 0) selectedBlockId = null;
+    renderEditor();
+  }
+
+  function clearImageSelection(){
+    selectedImages = new Set();
+    selectedBlockId = null;
+    renderEditor();
+  }
+
+  function moveSelectedImages(blockId, position){
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === blockId);
+    if(!block || !selectedImages.size) return;
+    snapshot();
+    const selected = block.images.filter(im => selectedImages.has(im.id));
+    const rest = block.images.filter(im => !selectedImages.has(im.id));
+    block.images = position === "top" ? selected.concat(rest) : rest.concat(selected);
+    renderEditor();
+    saveAndRefresh();
+  }
+
+  function moveSelectedImagesToBlock(fromBlockId, toBlockId){
+    if(fromBlockId === toBlockId) return;
+    const project = getCurrentProject();
+    const fromBlock = project && project.blocks.find(b => b.id === fromBlockId);
+    const toBlock = project && project.blocks.find(b => b.id === toBlockId);
+    if(!fromBlock || !toBlock || !selectedImages.size) return;
+    snapshot();
+    const moving = fromBlock.images.filter(im => selectedImages.has(im.id));
+    fromBlock.images = fromBlock.images.filter(im => !selectedImages.has(im.id));
+    toBlock.images = toBlock.images.concat(moving);
+    selectedImages = new Set();
+    selectedBlockId = null;
+    renderEditor();
+    saveAndRefresh();
+  }
+
+  /* ======================================================================
+     5b. INFO page (index.html's #info-view overlay) — edited independently
+     of PROJECTS/IndexedDB, since it's a single site-wide page rather than a
+     project. Persisted in localStorage (text-only, no File blobs, so no
+     need for IndexedDB here), and published straight into index.html via
+     /publish-info (see server.py).
+  ====================================================================== */
+  const INFO_STORAGE_KEY = "pf-builder-info";
+
+  function defaultInfo(){
+    return {
+      lead: "안녕하세요!\n아트디렉터 최재훈입니다.",
+      paragraphs: [
+        { id: uid(), type:"body", text:"jjaejae(째재)\n이것은 어릴적 친구들이 내 이름을 부르던 방식입니다.\n그들은 '최재'라고 부르기 시작해 어느새 '째재'로 불렀습니다." },
+        { id: uid(), type:"tagline", text:"A RAW NAME FOR SHARP IDEAS" },
+        { id: uid(), type:"body", text:"이름은 아주 즉흥적이게, 날 것으로 태어났지만\n정교한 크리에이티브와 결과물을 만든다." },
+        { id: uid(), type:"body", text:"jjae / jae — 비슷한 음절의 반복\n새로운 크리에이티브는 전에 없던 것이 아니라\n익숙한 것을 다시 보게 만드는 것이라 믿는다." },
+        { id: uid(), type:"body", text:"그것이 곧 새로운 것이 되고, 보고싶은 콘텐츠가 되며,\n사람들이 다시 보게 만든다." },
+        { id: uid(), type:"tagline", text:"LOOK AGAIN" },
+        { id: uid(), type:"body", text:"사람들이 다시 한번 보게 만드는 아이디어를 낸다.\n브랜드와 브랜드, 브랜드와 사람 사이를 새로운 관점으로 본다." }
+      ],
+      links: [
+        { label:"Instagram ↗", url:"https://www.instagram.com/jjaejae__/" },
+        { label:"Email", url:"mailto:hello@jaehoonchoi.com" }
+      ]
+    };
+  }
+
+  function loadInfo(){
+    let data = null;
+    try{
+      const raw = localStorage.getItem(INFO_STORAGE_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        if(parsed && Array.isArray(parsed.paragraphs) && Array.isArray(parsed.links)) data = parsed;
+      }
+    }catch(e){}
+    if(!data) data = defaultInfo();
+    data.paragraphs.forEach(p => { if(!p.id) p.id = uid(); });
+    return data;
+  }
+
+  let infoData = loadInfo();
+
+  function saveInfo(){
+    try{ localStorage.setItem(INFO_STORAGE_KEY, JSON.stringify(infoData)); }
+    catch(e){ console.error("info save failed", e); }
+  }
+  const scheduleSaveInfo = debounce(saveInfo, 400);
+  function saveInfoAndRefresh(){ scheduleSaveInfo(); refreshPreview(); }
+
+  function handleInfoField(el){
+    if(el.hasAttribute("data-info-field") && el.dataset.infoField === "lead"){
+      infoData.lead = el.value;
+    } else if(el.hasAttribute("data-info-paragraph-text")){
+      const idx = parseInt(el.dataset.index, 10);
+      if(infoData.paragraphs[idx]) infoData.paragraphs[idx].text = el.value;
+    } else if(el.hasAttribute("data-info-link-field")){
+      const idx = parseInt(el.dataset.index, 10);
+      const field = el.dataset.infoLinkField;
+      if(infoData.links[idx]) infoData.links[idx][field] = el.value;
+    } else {
+      return;
+    }
+    saveInfoAndRefresh();
+  }
+
+  function handleInfoEditorClick(e){
+    const typeToggle = e.target.closest('[data-info-type-toggle] button');
+    if(typeToggle){
+      const idx = parseInt(typeToggle.closest('[data-info-type-toggle]').dataset.index, 10);
+      if(infoData.paragraphs[idx]){
+        infoData.paragraphs[idx].type = typeToggle.dataset.value === "tagline" ? "tagline" : "body";
+        renderEditor();
+        saveInfoAndRefresh();
+      }
+      return;
+    }
+    const removeParaBtn = e.target.closest('[data-action="remove-info-paragraph"]');
+    if(removeParaBtn){
+      const idx = parseInt(removeParaBtn.dataset.index, 10);
+      infoData.paragraphs.splice(idx, 1);
+      renderEditor();
+      saveInfoAndRefresh();
+      return;
+    }
+    if(e.target.closest('[data-action="add-info-paragraph"]')){
+      infoData.paragraphs.push({ id: uid(), type:"body", text:"" });
+      renderEditor();
+      saveInfoAndRefresh();
+      return;
+    }
+    const removeLinkBtn = e.target.closest('[data-action="remove-info-link"]');
+    if(removeLinkBtn){
+      const idx = parseInt(removeLinkBtn.dataset.index, 10);
+      infoData.links.splice(idx, 1);
+      renderEditor();
+      saveInfoAndRefresh();
+      return;
+    }
+    if(e.target.closest('[data-action="add-info-link"]')){
+      infoData.links.push({ label:"", url:"" });
+      renderEditor();
+      saveInfoAndRefresh();
+      return;
+    }
+    if(e.target.closest('[data-action="publish-info"]')){ runPublishInfo(); return; }
+  }
+
+  function infoParagraphRowHTML(p, i){
+    return '<div class="block-card" draggable="true" data-sort-item data-item-id="' + p.id + '" style="padding:10px 12px; margin-bottom:12px;">'
+      + '<div class="block-card-head">'
+      +   '<span class="drag-handle">⠿</span>'
+      +   '<div class="view-toggle" data-info-type-toggle data-index="' + i + '" style="flex:1;">'
+      +     '<button type="button" data-value="body"' + (p.type!=="tagline"?' class="active"':'') + '>본문</button>'
+      +     '<button type="button" data-value="tagline"' + (p.type==="tagline"?' class="active"':'') + '>태그라인</button>'
+      +   '</div>'
+      +   '<button class="icon-btn" data-action="remove-info-paragraph" data-index="' + i + '">삭제</button>'
+      + '</div>'
+      + '<textarea class="field" data-info-paragraph-text data-index="' + i + '" placeholder="줄바꿈 = 줄바꿈으로 그대로 표시됩니다">' + escapeHTML(p.text||"") + '</textarea>'
+      + '</div>';
+  }
+
+  function infoLinkRowHTML(l, i){
+    return '<div class="credit-row">'
+      + '<input class="field-inline" data-info-link-field="label" data-index="' + i + '" placeholder="라벨 (예: Instagram ↗)" value="' + escapeHTML(l.label||"") + '">'
+      + '<input class="field-inline" data-info-link-field="url" data-index="' + i + '" placeholder="URL (예: https://... 또는 mailto:...)" value="' + escapeHTML(l.url||"") + '">'
+      + '<button class="icon-btn" data-action="remove-info-link" data-index="' + i + '">✕</button>'
+      + '</div>';
+  }
+
+  function renderInfoEditor(){
+    const paragraphsHTML = infoData.paragraphs.length
+      ? infoData.paragraphs.map((p,i) => infoParagraphRowHTML(p,i)).join("")
+      : '<div class="image-list-empty">아직 문단이 없습니다.</div>';
+    const linksHTML = infoData.links.length
+      ? infoData.links.map((l,i) => infoLinkRowHTML(l,i)).join("")
+      : '<div class="image-list-empty">아직 링크가 없습니다.</div>';
+    editorEl.innerHTML = ''
+      + '<div class="btn-row">'
+      +   '<button class="btn-primary" id="publish-info-btn" data-action="publish-info">PUBLISH</button>'
+      + '</div>'
+      + '<p id="info-publish-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
+      + '<div class="field-group"><label class="field-label">인사말 (첫 문단, 줄바꿈 그대로 유지)</label>'
+      +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea></div>'
+      + '<div class="section">'
+      +   '<div class="section-head">본문 문단 (드래그로 순서 변경) <button class="btn-sm" data-action="add-info-paragraph">+ 문단 추가</button></div>'
+      +   '<div id="info-paragraph-list" data-sort-scope="info-paragraphs">' + paragraphsHTML + '</div>'
+      + '</div>'
+      + '<div class="section">'
+      +   '<div class="section-head">링크 <button class="btn-sm" data-action="add-info-link">+ 링크 추가</button></div>'
+      +   '<div id="info-link-list">' + linksHTML + '</div>'
+      + '</div>';
+  }
+
+  async function runPublishInfo(){
+    if(!confirm("INFO 페이지를 실제 사이트에 반영(Publish)할까요?\n\nindex.html이 수정되고 GitHub에 푸시되어 Vercel이 재배포합니다.")) return;
+
+    const btn = document.getElementById("publish-info-btn");
+    const status = document.getElementById("info-publish-status");
+    if(btn){ btn.disabled = true; btn.textContent = "PUBLISHING..."; }
+    if(status){ status.style.display = "block"; status.textContent = "index.html에 반영하고 GitHub에 푸시하는 중... (최대 1분)"; }
+
+    try{
+      const res = await fetch(GENERATE_SERVER + "/publish-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(infoData)
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
+
+      if(status) status.textContent = "완료 — " + (data.note || "");
+      if(btn) btn.textContent = "PUBLISHED ✓";
+    }catch(e){
+      alert(
+        "Publish 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지, GitHub 연동이 되어 있는지 확인해주세요.\n" +
+        "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
+        "  python3 server.py\n"
+      );
+      if(status) status.style.display = "none";
+    }finally{
+      setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "PUBLISH"; } }, 1800);
+    }
   }
 
   /* ======================================================================
@@ -1047,14 +1321,16 @@
     ).join("");
   }
 
-  function imageRowHTML(im){
+  function imageRowHTML(im, blockId){
     const isVideo = isVideoPath(im.relPath || im.name);
     const thumb = isVideo
       ? '<div class="thumb video-thumb">🎬</div>'
       : '<img class="thumb" src="' + im.url + '" alt="">';
     const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
     const revertBtn = im.original ? '<button class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + im.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '';
-    return '<div class="image-row" draggable="true" data-sort-item data-item-id="' + im.id + '">'
+    const isSelected = selectedBlockId === blockId && selectedImages.has(im.id);
+    return '<div class="image-row' + (isSelected ? ' selected' : '') + '" draggable="true" data-sort-item data-item-id="' + im.id + '">'
+      + '<input type="checkbox" class="image-select" data-action="toggle-select-image" data-block-id="' + blockId + '" data-image-id="' + im.id + '"' + (isSelected ? ' checked' : '') + '>'
       + '<span class="drag-handle">⠿</span>'
       + thumb
       + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
@@ -1064,9 +1340,23 @@
       + '</div>';
   }
 
+  function selectionToolbarHTML(block, project){
+    if(selectedBlockId !== block.id || !selectedImages.size) return '';
+    const otherBlocks = project.blocks.filter(b => b.id !== block.id);
+    const options = '<option value="">다른 블록으로 이동…</option>'
+      + otherBlocks.map(b => '<option value="' + b.id + '">' + escapeHTML(b.label || "제목 없는 블록") + '</option>').join("");
+    return '<div class="selection-toolbar">'
+      +   '<span class="sel-count">' + selectedImages.size + '장 선택됨</span>'
+      +   '<button type="button" class="btn-sm" data-action="move-selected-top" data-block-id="' + block.id + '">맨 위로</button>'
+      +   '<button type="button" class="btn-sm" data-action="move-selected-bottom" data-block-id="' + block.id + '">맨 아래로</button>'
+      +   (otherBlocks.length ? '<select data-action="move-selected-to-block" data-block-id="' + block.id + '">' + options + '</select>' : '')
+      +   '<button type="button" class="btn-sm" data-action="clear-selection">선택 해제</button>'
+      + '</div>';
+  }
+
   function blockCardHTML(block, project){
     const rows = (block.images||[]).length
-      ? block.images.map(imageRowHTML).join("")
+      ? block.images.map(im => imageRowHTML(im, block.id)).join("")
       : '<div class="image-list-empty">아직 사진이 없습니다.</div>';
     return '<div class="block-card" draggable="true" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
       + '<div class="block-card-head">'
@@ -1081,7 +1371,8 @@
       + '<div class="field-group"><label class="field-label">사진 레이아웃</label>'
       +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">사진 레이아웃 — ' + layoutSummaryText(block) + '</button>'
       + '</div>'
-      + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경)</label>'
+      + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경, 체크박스로 여러 장 선택 후 한번에 이동 가능)</label>'
+      + selectionToolbarHTML(block, project)
       + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
       + '<div class="block-actions">'
       +   '<button class="btn-sm" data-action="add-folder" data-block-id="' + block.id + '">폴더에서 불러오기</button>'
@@ -1100,6 +1391,7 @@
   }
 
   function renderEditor(){
+    if(mode === "info"){ renderInfoEditor(); return; }
     const project = getCurrentProject();
     if(!project){
       editorEl.innerHTML = '<div class="empty-state">왼쪽에서 프로젝트를 선택하거나<br>새 프로젝트를 만들어주세요.</div>';
@@ -1311,10 +1603,22 @@
     if(el) snapshot();
   });
   editorEl.addEventListener("input", (e) => {
+    if(mode === "info"){
+      const infoEl = e.target.closest("[data-info-field], [data-info-paragraph-text], [data-info-link-field]");
+      if(infoEl) handleInfoField(infoEl);
+      return;
+    }
     const el = e.target.closest("[data-field]");
     if(el) handleField(el);
   });
   editorEl.addEventListener("change", (e) => {
+    if(mode === "info") return;
+    const moveSelect = e.target.closest('[data-action="move-selected-to-block"]');
+    if(moveSelect){
+      const toBlockId = moveSelect.value;
+      if(toBlockId) moveSelectedImagesToBlock(moveSelect.dataset.blockId, toBlockId);
+      return;
+    }
     const el = e.target.closest("[data-field]");
     if(el) handleField(el);
   });
@@ -2155,6 +2459,7 @@
   }
 
   editorEl.addEventListener("click", (e) => {
+    if(mode === "info"){ handleInfoEditorClick(e); return; }
     const project = getCurrentProject();
     if(!project) return;
 
@@ -2252,10 +2557,24 @@
       return;
     }
 
+    const toggleSelectCb = e.target.closest('[data-action="toggle-select-image"]');
+    if(toggleSelectCb){
+      toggleImageSelection(toggleSelectCb.dataset.blockId, toggleSelectCb.dataset.imageId);
+      return;
+    }
+    const moveTopBtn = e.target.closest('[data-action="move-selected-top"]');
+    if(moveTopBtn){ moveSelectedImages(moveTopBtn.dataset.blockId, "top"); return; }
+    const moveBottomBtn = e.target.closest('[data-action="move-selected-bottom"]');
+    if(moveBottomBtn){ moveSelectedImages(moveBottomBtn.dataset.blockId, "bottom"); return; }
+    const clearSelBtn = e.target.closest('[data-action="clear-selection"]');
+    if(clearSelBtn){ clearImageSelection(); return; }
+
     const removeImageBtn = e.target.closest('[data-action="remove-image"]');
     if(removeImageBtn){
       snapshot();
       const imageId = removeImageBtn.dataset.imageId;
+      selectedImages.delete(imageId);
+      if(!selectedImages.size) selectedBlockId = null;
       project.blocks.forEach(b => {
         const idx = b.images.findIndex(im => im.id === imageId);
         if(idx > -1){
@@ -2285,6 +2604,7 @@
         snapshot();
         const block = project.blocks.find(b => b.id === blockId);
         if(block) block.images.forEach(im => { try{ URL.revokeObjectURL(im.url); }catch(err){} });
+        if(selectedBlockId === blockId){ selectedImages = new Set(); selectedBlockId = null; }
         project.blocks = project.blocks.filter(b => b.id !== blockId);
         renderEditor(); saveAndRefresh();
       }
@@ -2668,10 +2988,55 @@
     return "@font-face{font-family:'ProjectTitleFont'; src:url(" + project.titleFont.dataUrl + ");}";
   }
 
+  /* ---- INFO page preview — a stripped-down copy of index.html's #info-view
+     styling (background, grain, lead/body/tagline typography, links), since
+     that overlay is never rendered by the project-detail preview above. ---- */
+  const INFO_PREVIEW_CSS = `
+    body{background:#f3f2ee;}
+    .info-page-preview{position:relative; min-height:100vh; overflow:hidden;}
+    .info-page-preview .info-bg{position:absolute; inset:0; z-index:0; background-image:url("info-bg.jpg"); background-size:cover; background-position:center 35%;}
+    .info-page-preview .info-grain{position:absolute; inset:0; z-index:1; opacity:.09; mix-blend-mode:overlay; pointer-events:none; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+    .info-page-preview .info-inner{position:relative; z-index:2; display:flex; align-items:center; min-height:100vh; padding:150px 6vw 100px;}
+    .info-page-preview .info-content{max-width:760px;}
+    .info-page-preview .info-lead{font-size:clamp(1.4rem, 3.2vw, 2.3rem); font-weight:700; line-height:1.36; color:#15171c;}
+    .info-page-preview .info-body{margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:500; line-height:1.6; color:#2b2f36;}
+    .info-page-preview .info-tagline{margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:800; color:#15171c;}
+    .info-page-preview .links{margin-top:44px; display:flex; gap:26px; font-size:15px; font-weight:700;}
+    .info-page-preview .links a{border-bottom:2px solid rgba(17,17,17,.5); padding-bottom:2px;}
+  `;
+
+  function textToBrHTML(t){ return escapeHTML(t||"").replace(/\n/g, "<br>"); }
+
+  function buildInfoPreviewBodyHTML(info){
+    const paras = (info.paragraphs||[]).map(p =>
+      '<p class="info-' + (p.type==="tagline"?"tagline":"body") + '">' + textToBrHTML(p.text) + '</p>'
+    ).join("");
+    const links = (info.links||[]).map(l =>
+      '<a href="' + escapeHTML(l.url||"#") + '">' + escapeHTML(l.label||"") + '</a>'
+    ).join("");
+    return '<div class="info-page-preview">'
+      + '<div class="info-bg"></div><div class="info-grain"></div>'
+      + '<div class="info-inner"><div class="info-content">'
+      +   '<p class="info-lead">' + textToBrHTML(info.lead) + '</p>'
+      +   paras
+      +   '<div class="links">' + links + '</div>'
+      + '</div></div>'
+      + '</div>';
+  }
+
   const previewFrame = document.getElementById("preview-frame");
   const EMPTY_DOC = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;">프로젝트를 선택하세요</body></html>';
 
   const refreshPreview = debounce(function(){
+    if(mode === "info"){
+      const infoDoc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
+        + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
+        + "<style>" + INFO_PREVIEW_CSS + "</style></head><body>"
+        + buildInfoPreviewBodyHTML(infoData)
+        + "</body></html>";
+      previewFrame.srcdoc = infoDoc;
+      return;
+    }
     const project = getCurrentProject();
     if(!project){ previewFrame.srcdoc = EMPTY_DOC; return; }
     const doc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
