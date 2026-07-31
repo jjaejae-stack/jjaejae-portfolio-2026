@@ -89,10 +89,12 @@
   .project-item:hover{background:color-mix(in srgb, var(--fg) 6%, var(--bg));}
   .project-item.active{background:var(--fg); color:var(--bg);}
   .project-item.dragging{opacity:.35;}
-  .project-item-main{display:flex; align-items:center; gap:10px;}
-  .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong);}
+  .project-item-main{display:flex; align-items:flex-start; gap:10px;}
+  .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong); margin-top:4px;}
+  .project-item .drag-handle{margin-top:2px;}
+  .project-item .del{flex:0 0 auto; margin-top:1px;}
   .project-item .info{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
-  .project-item .p-title{display:block; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .project-item .p-title{display:block; font-size:13px; font-weight:600; white-space:normal; overflow-wrap:break-word; line-height:1.3;}
   .project-item .p-sub{display:block; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .project-item.active .p-sub{opacity:.65;}
   .project-item-actions{display:flex; gap:8px; padding-left:34px;}
