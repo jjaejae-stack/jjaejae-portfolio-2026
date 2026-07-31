@@ -2352,10 +2352,45 @@
     heroFileInput.value = "";
     if(!project || !file) return;
     snapshot();
-    project.heroImage = { id: uid(), file: file, relPath: file.name, name: file.name, url: URL.createObjectURL(file) };
+    const im = { id: uid(), file: file, relPath: file.name, name: file.name, url: URL.createObjectURL(file) };
+    project.heroImage = im;
     renderEditor();
     saveAndRefresh();
+    persistHeroFileToDisk(project, im, file);
   });
+  /* A plain <input type=file> gives no folder info at all (unlike the folder/
+     multi-file picker used for block images, whose webkitRelativePath tells us
+     exactly where the file already lives on disk) — even if the user picks a
+     photo that happens to already sit inside the project folder, relPath would
+     stay a bare filename and 404 once published. Round-trip the bytes through
+     the server so the file is guaranteed to actually exist on disk at the
+     relPath we end up recording. Runs in the background; the local blob URL
+     keeps working in the meantime, and if the server call fails (e.g. server
+     not running) the hero photo simply stays as a local-only preview. */
+  function persistHeroFileToDisk(project, im, file){
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try{
+        const res = await fetch(GENERATE_SERVER + "/upload-project-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataUrl: reader.result, folder: inferProjectFolder(project), filename: file.name })
+        });
+        const data = await res.json().catch(() => ({}));
+        if(!res.ok || !data.ok) return;
+        const current = getCurrentProject();
+        if(!current || current.heroImage !== im) return;
+        try{ URL.revokeObjectURL(im.url); }catch(err){}
+        im.relPath = data.relPath;
+        im.name = data.relPath.split("/").pop();
+        im.url = data.relPath;
+        delete im.file;
+        renderEditor();
+        saveAndRefresh();
+      }catch(err){ /* offline/server down — local blob preview keeps working */ }
+    };
+    reader.readAsDataURL(file);
+  }
 
   /* ---- INFO page background photo — unlike project images (referenced by relPath,
      expected to already exist on disk), this one is written to disk immediately via
