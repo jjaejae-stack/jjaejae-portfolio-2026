@@ -163,6 +163,18 @@ def _unique_path(out_dir, name_noext, ext, suffix="-crop"):
     return candidate
 
 
+def _unique_plain_path(out_dir, name_noext, ext):
+    """Like _unique_path but keeps the original filename when there's no
+    collision, only appending "-2", "-3", ... if something else is already
+    sitting at that exact name."""
+    candidate = name_noext + ext
+    n = 2
+    while os.path.exists(os.path.join(out_dir, candidate)):
+        candidate = name_noext + "-" + str(n) + ext
+        n += 1
+    return candidate
+
+
 def crop_image(payload):
     """Crop an image on disk (or freshly-uploaded bytes) and save the result
     as a new file next to the source, so the original is never overwritten.
@@ -888,6 +900,47 @@ def save_info_bg_image(payload):
     return {"ok": True}
 
 
+def save_project_image(payload):
+    """Write an uploaded photo (e.g. a hero image picked via a plain file input)
+    into a project's asset folder on disk, returning the relPath it was saved
+    under. A plain <input type=file> gives the browser no folder information at
+    all — unlike the folder/multi-file picker used for block images, whose
+    webkitRelativePath tells us exactly where the file already lives — so without
+    this round trip the picked photo's relPath would default to a bare filename
+    that 404s once published, even if the file happens to already exist on disk
+    somewhere. This guarantees the file actually exists at the relPath recorded."""
+    data_url = payload.get("dataUrl") or ""
+    if "," not in data_url:
+        raise ValueError("dataUrl이 올바르지 않습니다.")
+    raw = base64.b64decode(data_url.split(",", 1)[1])
+    img = Image.open(io.BytesIO(raw))
+    folder = (payload.get("folder") or "").strip().strip("/")
+    base_name = (payload.get("filename") or "image.jpg").strip() or "image.jpg"
+    name_noext, ext = os.path.splitext(base_name)
+    if not ext:
+        ext = ".jpg"
+
+    out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    out_name = _unique_plain_path(out_dir, name_noext, ext)
+    out_abs = os.path.join(out_dir, out_name)
+    out_rel = (folder + "/" + out_name) if folder else out_name
+
+    if img.format == "GIF" and getattr(img, "is_animated", False):
+        img.save(out_abs, save_all=True)
+    else:
+        save_kwargs = {}
+        if ext.lower() in (".jpg", ".jpeg"):
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            save_kwargs["quality"] = 92
+        elif ext.lower() == ".webp":
+            save_kwargs["quality"] = 92
+        img.save(out_abs, **save_kwargs)
+
+    return {"relPath": out_rel}
+
+
 def _run_git(args):
     return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True)
 
@@ -955,7 +1008,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -1064,6 +1117,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send_json(500, {"error": "배경 사진 저장 실패: %s" % e})
                 return
             self._send_json(200, result)
+            return
+
+        if parsed.path == "/upload-project-image":
+            try:
+                result = save_project_image(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "이미지 저장 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
             return
 
         if parsed.path == "/generate":
