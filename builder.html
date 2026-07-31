@@ -77,30 +77,42 @@
   }
   #info-nav-btn:hover{border-color:var(--accent); color:var(--accent);}
   #info-nav-btn.active{background:var(--fg); color:var(--bg);}
+  /* two rows: .project-item-main (drag handle/color dot/title/delete) on top,
+     .project-item-actions (숨기기/Play pills) underneath — splitting them out
+     like this, instead of cramming everything into one row, is what keeps the
+     project title from getting squeezed out by 3 action buttons. */
   .project-item{
-    display:flex; align-items:center; gap:10px; padding:10px 8px;
+    display:flex; flex-direction:column; gap:8px; padding:10px 8px;
     border:1px solid var(--line-strong); background:var(--surface); box-shadow:var(--card-shadow);
     cursor:pointer; margin-bottom:16px;
   }
   .project-item:hover{background:color-mix(in srgb, var(--fg) 6%, var(--bg));}
   .project-item.active{background:var(--fg); color:var(--bg);}
   .project-item.dragging{opacity:.35;}
+  .project-item-main{display:flex; align-items:center; gap:10px;}
   .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong);}
   .project-item .info{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
   .project-item .p-title{display:block; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .project-item .p-sub{display:block; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .project-item.active .p-sub{opacity:.65;}
-  .project-item .move{opacity:0; font-size:10px; color:var(--muted); flex:0 0 auto; border:1px solid var(--line-strong); border-radius:10px; padding:2px 7px; white-space:nowrap;}
-  .project-item:hover .move{opacity:1;}
-  .project-item.active .move{opacity:.85; border-color:currentColor;}
-  .project-item .move:hover{color:var(--accent); border-color:var(--accent);}
-  .project-item .hide-toggle{opacity:0; font-size:10px; color:var(--muted); flex:0 0 auto; border:1px solid var(--line-strong); border-radius:10px; padding:2px 7px; white-space:nowrap;}
-  .project-item:hover .hide-toggle{opacity:1;}
-  .project-item.active .hide-toggle{opacity:.85; border-color:currentColor;}
+  .project-item-actions{display:flex; gap:8px; padding-left:34px;}
+  .project-item .move,
+  .project-item .hide-toggle{
+    font-size:11px; color:var(--muted); flex:0 0 auto; border:1px solid var(--line-strong);
+    border-radius:12px; padding:4px 10px; white-space:nowrap; background:var(--surface);
+  }
+  .project-item.active .move,
+  .project-item.active .hide-toggle{background:transparent; border-color:currentColor; color:inherit;}
+  .project-item .move:hover,
   .project-item .hide-toggle:hover{color:var(--accent); border-color:var(--accent);}
   .project-item.project-hidden{opacity:.5;}
-  .project-item.project-hidden .hide-toggle{opacity:1; border-color:var(--accent); color:var(--accent);}
-  .hidden-badge{font-size:9px; font-weight:600; color:var(--accent); border:1px solid currentColor; border-radius:8px; padding:1px 5px; vertical-align:middle; white-space:nowrap;}
+  .project-item.project-hidden .hide-toggle{border-color:var(--accent); color:var(--accent);}
+  /* --accent happens to equal --fg (near-black) in the mono/blue themes, which
+     would be invisible against .active's own near-black background — so when a
+     project is BOTH hidden AND currently selected, fall back to the same
+     inherited (active-row) text color instead of --accent. */
+  .project-item.active.project-hidden .hide-toggle{border-color:currentColor; color:inherit;}
+  .hidden-badge{font-size:9px; font-weight:600; color:var(--accent); border:1px solid currentColor; border-radius:8px; padding:1px 5px; vertical-align:middle; white-space:nowrap; flex:0 0 auto;}
   .project-item .del{opacity:0; font-size:12px; color:var(--muted); flex:0 0 auto;}
   .project-item:hover .del{opacity:1;}
   .project-item.active .del{opacity:.7;}
@@ -1037,15 +1049,19 @@
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
       return '<div class="project-item' + active + hiddenClass + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
-        + '<span class="drag-handle">⠿</span>'
-        + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
-        + '<span class="info">'
-        +   '<span class="p-title">' + escapeHTML(p.title || "Untitled") + (p.hidden ? ' <span class="hidden-badge">숨김</span>' : '') + '</span>'
-        +   '<span class="p-sub">' + escapeHTML([p.tag, p.year].filter(Boolean).join(" · ") || "—") + '</span>'
-        + '</span>'
-        + '<button class="hide-toggle" data-action="toggle-hide-project" data-project-id="' + p.id + '" title="' + (p.hidden ? "사이트에 다시 보이게" : "사이트에서 숨기기") + '">' + (p.hidden ? "🙈 보이기" : "👁 숨기기") + '</button>'
-        + '<button class="move" data-action="move-project" data-project-id="' + p.id + '" data-target="' + otherCategory + '" title="' + otherLabel + '(으)로 옮기기">→ ' + otherLabel + '</button>'
-        + '<button class="del" data-action="delete-project" data-project-id="' + p.id + '" title="삭제">✕</button>'
+        + '<div class="project-item-main">'
+        +   '<span class="drag-handle">⠿</span>'
+        +   '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
+        +   '<span class="info">'
+        +     '<span class="p-title">' + escapeHTML(p.title || "Untitled") + '</span>'
+        +     '<span class="p-sub">' + escapeHTML([p.tag, p.year].filter(Boolean).join(" · ") || "—") + (p.hidden ? ' <span class="hidden-badge">숨김</span>' : '') + '</span>'
+        +   '</span>'
+        +   '<button class="del" data-action="delete-project" data-project-id="' + p.id + '" title="삭제">✕</button>'
+        + '</div>'
+        + '<div class="project-item-actions">'
+        +   '<button class="hide-toggle" data-action="toggle-hide-project" data-project-id="' + p.id + '" title="' + (p.hidden ? "사이트에 다시 보이게" : "사이트에서 숨기기") + '">' + (p.hidden ? "🙈 보이기" : "👁 숨기기") + '</button>'
+        +   '<button class="move" data-action="move-project" data-project-id="' + p.id + '" data-target="' + otherCategory + '" title="' + otherLabel + '(으)로 옮기기">→ ' + otherLabel + '</button>'
+        + '</div>'
         + '</div>';
     }).join("");
   }
