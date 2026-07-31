@@ -419,8 +419,12 @@
     transition:transform .65s cubic-bezier(.65,0,.35,1);
   }
   .gallery-frame{flex:0 0 auto; height:100%; position:relative;}
-  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; -webkit-user-drag:none; user-select:none;}
-  .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000;}
+  /* img/video get explicit inline px width/height from JS (sizeGalleryFrame), which snaps
+     instantly — while .gallery's own height above animates over .65s. Without a matching
+     transition here, the media (sized to its final, often-taller height) would visibly
+     poke out of/get clipped by the container mid-animation until it catches up. */
+  .gallery-frame img{height:100%; width:auto; max-width:none; display:block; -webkit-user-drag:none; user-select:none; transition:width .65s cubic-bezier(.65,0,.35,1), height .65s cubic-bezier(.65,0,.35,1);}
+  .gallery-frame video{height:100%; width:auto; max-width:none; display:block; background:#000; transition:width .65s cubic-bezier(.65,0,.35,1), height .65s cubic-bezier(.65,0,.35,1);}
   .gallery-frame iframe{height:100%; width:auto; aspect-ratio:16/9; max-width:none; display:block; border:0; background:#000;}
   /* 사진 우상단의 작은 확대 버튼 — 사진 자체를 누르면 갤러리가 넘어가므로(롤링/페이지 넘기기),
      확대는 이 버튼을 눌러야만 열림 */
@@ -2036,10 +2040,12 @@
       width = availWidth;
       height = width / ratio;
     }
-    /* landscape/square photos narrower than the block should stretch to fill it (matches
-       how the block's own width reads) — portrait photos are left at their natural
-       height-based width instead of being stretched absurdly tall to reach full width. */
-    else if(availWidth > 0 && ratio >= 1 && width < availWidth){
+    /* clearly-landscape photos/videos narrower than the block stretch to fill it (matches
+       how the block's own width reads) — portrait AND near-square media (ratio <= 1.1) are
+       left at their natural height-based width instead of being blown up to reach full
+       width. Growing past baseHeight here is safe: activateGalleryFrame() below also lifts
+       the gallery's CSS max-height to match, so the taller box is never clipped/cropped. */
+    else if(availWidth > 0 && ratio > 1.1 && width < availWidth){
       width = availWidth;
       height = width / ratio;
     }
@@ -2071,8 +2077,32 @@
         });
       });
       const size = sizeGalleryFrame(gallery, frame) || { height: parseFloat(gallery.dataset.baseHeight || 280), width: parseFloat(gallery.dataset.baseHeight || 280) };
-      gallery.style.height = size.height + "px";
-      gallery.style.width = size.width + "px";
+      /* CSS caps .gallery at max-height:640px for the common case — a photo/video sized
+         taller than that would otherwise get cropped by the container's overflow:hidden
+         even though the media itself was sized correctly. */
+      /* The img/video itself is already sized to its FINAL height the instant it's
+         (pre-)loaded — it has no transition of its own — while .gallery's height/max-height
+         animate over .65s. Whenever the new height is TALLER than whatever height the
+         container is currently rendered at (could be a still-unset frame's min-height
+         floor, a previous frame's shorter height, anything), the media would visibly
+         poke out of the container for most of that .65s until the animation catches up.
+         Comparing against the container's actual current rendered height (not just this
+         frame's own baseHeight) catches that regardless of why the gap exists. Shrinking
+         never needs this — a shorter box never exposes an oversized image. */
+      const currentHeight = gallery.getBoundingClientRect().height;
+      if(size.height > currentHeight + 1){
+        const prevTransition = gallery.style.transition;
+        gallery.style.transition = "none";
+        gallery.style.height = size.height + "px";
+        gallery.style.maxHeight = size.height + "px";
+        gallery.style.width = size.width + "px";
+        void gallery.offsetHeight; // force a reflow so the "none" transition is committed before restoring it
+        gallery.style.transition = prevTransition;
+      }else{
+        gallery.style.height = size.height + "px";
+        gallery.style.maxHeight = size.height + "px";
+        gallery.style.width = size.width + "px";
+      }
       gallery.querySelector(".gallery-track").style.transform = `translateX(-${frame.offsetLeft}px)`;
     };
     waitMediaReady(media, apply);
