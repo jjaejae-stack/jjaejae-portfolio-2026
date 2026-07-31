@@ -164,6 +164,7 @@
 
   /* ---------- intro: language marquee ---------- */
   #intro{
+    height:100vh; /* fallback for browsers/displays without svh support — see comment below */
     height:100svh;
     display:flex; flex-direction:column;
     position:relative;
@@ -184,6 +185,7 @@
   }
   .lang-row.reverse .lang-track{animation-direction:reverse;}
   .lang-track span{
+    font-size:clamp(2.6rem, 16vh, 9rem); /* fallback — clamp() as a whole is invalid if the svh version below isn't supported */
     font-size:clamp(2.6rem, 16svh, 9rem);
     font-weight:800;
     line-height:1;
@@ -314,6 +316,7 @@
   #project-view.open{display:block;}
 
   .p-main{
+    height:100vh; /* fallback for browsers/displays without svh support */
     height:100svh;
     position:relative;
     overflow:hidden;
@@ -388,7 +391,7 @@
   }
 
   .p-detail{padding:112px 6vw 40px;}
-  .p-block{max-width:920px; margin:0 auto 96px;}
+  .p-block{max-width:1380px; margin:0 auto 96px;}
   .gallery{
     position:relative;
     overflow:hidden;
@@ -503,7 +506,7 @@
   .p-block .gallery{margin-top:26px;}
   .p-block .gallery-video-stack{margin-top:26px;}
 
-  .p-credits{max-width:1080px; margin:0 auto 100px; padding-top:8px;}
+  .p-credits{max-width:1620px; margin:0 auto 100px; padding-top:8px;}
   .p-credits h3{
     font-size:13px; letter-spacing:.16em; text-transform:uppercase;
     color:var(--muted);
@@ -1392,15 +1395,15 @@
           heading:"We Created 112 GIF STICKERS with 7 ILLUSTRATORS",
           galleryMode:"free",
           images:[
-            "0e407d84922005.5d80a30c15eaf.gif",
-            "1ab28484922005.5d80a30c13342.gif",
-            "4e1a2884922005.5d80a30c12ac2.gif",
-            "25b0b384922005.5d80a30c16a29.gif",
-            "205f3684922005.5d80a30c14b0a.gif",
-            "892e1284922005.5d80a30c17365.gif",
-            "33823584922005.5d80a30c13f2f.gif",
-            "bb99a284922005.5d80a30c15458.gif",
-            "bfd10484922005.5d80a30c120f3.gif",
+            "NIKE 2019/0e407d84922005.5d80a30c15eaf.gif",
+            "NIKE 2019/1ab28484922005.5d80a30c13342.gif",
+            "NIKE 2019/4e1a2884922005.5d80a30c12ac2.gif",
+            "NIKE 2019/25b0b384922005.5d80a30c16a29.gif",
+            "NIKE 2019/205f3684922005.5d80a30c14b0a.gif",
+            "NIKE 2019/892e1284922005.5d80a30c17365.gif",
+            "NIKE 2019/33823584922005.5d80a30c13f2f.gif",
+            "NIKE 2019/bb99a284922005.5d80a30c15458.gif",
+            "NIKE 2019/bfd10484922005.5d80a30c120f3.gif",
           ],
           freeLayout:[
             {x:0.00,y:0.00,w:33.33,h:33.33},
@@ -1419,9 +1422,9 @@
           label:"Design",
           images:[
             "NIKE 2019/9aea8384922005.5d81fa58afb15.webp",
-            "d2ada284922005.5d6cc40705f36.gif",
+            "NIKE 2019/d2ada284922005.5d6cc40705f36.gif",
             "NIKE 2019/08f8ad84922005.5d6cc4070526f.webp",
-            "c4c9f684922005.6152fc9411455.gif",
+            "NIKE 2019/c4c9f684922005.6152fc9411455.gif",
             "NIKE 2019/20b1a484922005.5d6cc40704da6.webp",
           ],
           paragraphs:["We made GIF Messages, Swipe Film, User Tutorial Film(How to participation the phenomenal challenge) and Web&SNS Design"]
@@ -2331,12 +2334,15 @@
     });
   });
 
-  /* header stays hidden while the greeting marquee fills the screen,
-     and fades in once the visitor scrolls past it into Work */
-  const introEl = document.getElementById("intro");
+  /* header stays hidden while the greeting marquee fills the screen, and fades in once
+     the visitor scrolls into Work/Play. Watches #work-play ENTERING the viewport rather
+     than #intro fully EXITING it — on a tall/short-aspect monitor, #intro (100vh) can be
+     taller than #work-play + the footer combined, in which case max scroll can never
+     push #intro's last pixel out of view and an exit-based trigger would never fire,
+     permanently hiding the header/corner nav even once scrolled all the way down. */
   new IntersectionObserver((entries) => {
-    entries.forEach(entry => document.body.classList.toggle("past-hero", !entry.isIntersecting));
-  }, { threshold:0 }).observe(introEl);
+    entries.forEach(entry => document.body.classList.toggle("past-hero", entry.isIntersecting));
+  }, { threshold:0, rootMargin:"0px 0px -20% 0px" }).observe(document.getElementById("work-play"));
 
   /* 커스텀 커서는 헤더보다 더 일찍 등장시킴 — WORK/PLAY 글자가 화면 하단에 살짝
      보이기 시작하는 시점부터 바로 나타남. rootMargin으로 40px만큼 여유를 둬서
@@ -2347,7 +2353,7 @@
   }, { threshold:0, rootMargin:"0px 0px -40px 0px" }).observe(document.getElementById("work-play"));
 
   // clicking the greeting marquee cycles its 5-row color palette (scrolling still reveals Work below)
-  introEl.addEventListener("click", () => applyPalette(paletteIndex + 1));
+  document.getElementById("intro").addEventListener("click", () => applyPalette(paletteIndex + 1));
 
   /* 커서에 가까운 글자일수록 세로로 길어지는 효과 — 글자를 span 단위로 쪼갠 뒤 mousemove에서
      각 글자 중심과 커서 사이의 가로 거리를 재서 scaleY를 적용함(거리가 멀수록 1에 가깝게, 커서
