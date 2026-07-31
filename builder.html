@@ -460,8 +460,8 @@
   <div id="direction-modal">
     <div class="modal-box">
       <div id="direction-settings-view">
-        <h3>생성 방향 설정</h3>
-        <p class="hint">아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.</p>
+        <h3 id="direction-modal-title">생성 방향 설정</h3>
+        <p class="hint" id="direction-modal-hint">아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.</p>
 
         <div class="field-group">
           <label class="field-label">모드</label>
@@ -536,13 +536,15 @@
         <h3>생성 결과 미리보기</h3>
         <p class="hint">마음에 들면 적용을 눌러주세요. 적용 전까지는 프로젝트에 반영되지 않습니다. 필요하면 아래에서 직접 수정한 뒤 적용해도 됩니다.</p>
 
-        <div class="field-row field-group">
-          <div><label class="field-label">프로젝트명</label><input class="field" id="direction-preview-title"></div>
-          <div><label class="field-label">카테고리</label><input class="field" id="direction-preview-tag"></div>
+        <div id="direction-preview-project-fields">
+          <div class="field-row field-group">
+            <div><label class="field-label">프로젝트명</label><input class="field" id="direction-preview-title"></div>
+            <div><label class="field-label">카테고리</label><input class="field" id="direction-preview-tag"></div>
+          </div>
+          <div class="field-group"><label class="field-label">클라이언트 / 에이전시</label><input class="field" id="direction-preview-meta"></div>
         </div>
-        <div class="field-group"><label class="field-label">클라이언트 / 에이전시</label><input class="field" id="direction-preview-meta"></div>
         <div class="field-group"><label class="field-label">헤딩</label><input class="field" id="direction-preview-heading"></div>
-        <div class="field-group"><label class="field-label">본문 (문단 사이 빈 줄로 구분)</label>
+        <div class="field-group"><label class="field-label">본문 (줄바꿈으로 문단 구분)</label>
           <textarea class="field" id="direction-preview-paragraphs" style="min-height:220px; white-space:pre-wrap;"></textarea>
         </div>
 
@@ -593,7 +595,7 @@
         <div class="field-group"><label class="field-label">인사말</label>
           <textarea class="field" id="info-generate-preview-lead" style="min-height:80px;"></textarea>
         </div>
-        <div class="field-group"><label class="field-label">본문 (문단 사이 빈 줄로 구분)</label>
+        <div class="field-group"><label class="field-label">본문 (줄바꿈으로 문단 구분)</label>
           <textarea class="field" id="info-generate-preview-paragraphs" style="min-height:220px; white-space:pre-wrap;"></textarea>
         </div>
 
@@ -1850,7 +1852,7 @@
   function showInfoGeneratePreview(mode, data){
     pendingInfoGenerateResult = { mode: mode, data: data };
     document.getElementById("info-generate-preview-lead").value = data.lead || "";
-    document.getElementById("info-generate-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n\n");
+    document.getElementById("info-generate-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n");
     infoGenerateSettingsView.style.display = "none";
     infoGeneratePreviewView.style.display = "block";
   }
@@ -1928,7 +1930,7 @@
     const mode = pendingInfoGenerateResult.mode;
     const lead = document.getElementById("info-generate-preview-lead").value.trim();
     const paragraphs = document.getElementById("info-generate-preview-paragraphs").value
-      .split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+      .split("\n").map(p => p.trim()).filter(Boolean);
 
     infoGenerateUndo = { lead: infoData.lead, paragraphs: JSON.parse(JSON.stringify(infoData.paragraphs)) };
     if(lead) infoData.lead = lead;
@@ -2041,6 +2043,7 @@
       + '<div class="block-card-head">'
       +   '<span class="drag-handle">⠿</span>'
       +   '<input class="field-inline" data-field="label" data-block-id="' + block.id + '" placeholder="블록 이름 (예: Brand Film)" value="' + escapeHTML(block.label||"") + '">'
+      +   '<button class="icon-btn" data-action="generate-block" data-block-id="' + block.id + '" title="이 블록의 헤드라인·본문만 GENERATE">GENERATE</button>'
       +   '<button class="icon-btn" data-action="remove-block" data-block-id="' + block.id + '">블록 삭제</button>'
       + '</div>'
       + '<div class="field-group"><label class="field-label">헤드라인 (선택)</label>'
@@ -2512,6 +2515,7 @@
   };
   let directionSettings = loadDirectionSettings();
   let pendingDirectionResult = null; // holds the last /generate response until the user applies or discards it
+  let generateTargetBlockId = null; // null = whole-project GENERATE (title/tag/meta + first block); set = single-block GENERATE
 
   function loadDirectionSettings(){
     try{
@@ -2547,21 +2551,34 @@
     shortLinesInput.value = directionSettings.shortLines;
     directionNoteEl.value = directionSettings.note;
   }
-  function openDirectionModal(){
+  function openDirectionModal(blockId){
+    generateTargetBlockId = blockId || null;
     pendingDirectionResult = null;
     directionSettingsView.style.display = "block";
     directionPreviewView.style.display = "none";
     renderDirectionModal();
     directionDraftEl.value = "";
+    const project = getCurrentProject();
+    const block = generateTargetBlockId && project ? project.blocks.find(b => b.id === generateTargetBlockId) : null;
+    const titleEl = document.getElementById("direction-modal-title");
+    const hintEl = document.getElementById("direction-modal-hint");
+    if(block){
+      titleEl.textContent = "블록 GENERATE — " + (block.label || "이름 없는 블록");
+      hintEl.textContent = "이 블록의 헤드라인·본문만 새로 씁니다. 프로젝트명/카테고리/클라이언트 정보는 바뀌지 않습니다.";
+    }else{
+      titleEl.textContent = "생성 방향 설정";
+      hintEl.textContent = "아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.";
+    }
     directionModal.classList.add("open");
   }
   function showDirectionPreview(data){
     pendingDirectionResult = data;
+    document.getElementById("direction-preview-project-fields").style.display = generateTargetBlockId ? "none" : "block";
     document.getElementById("direction-preview-title").value = data.title || "";
     document.getElementById("direction-preview-tag").value = data.tag || "";
     document.getElementById("direction-preview-meta").value = data.meta || "";
     document.getElementById("direction-preview-heading").value = data.heading || "";
-    document.getElementById("direction-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n\n");
+    document.getElementById("direction-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n");
     directionSettingsView.style.display = "none";
     directionPreviewView.style.display = "block";
   }
@@ -3238,6 +3255,7 @@
     if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
     if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
 
+    const targetBlock = generateTargetBlockId ? project.blocks.find(b => b.id === generateTargetBlockId) : null;
     try{
       const res = await fetch(GENERATE_SERVER + "/generate", {
         method: "POST",
@@ -3246,7 +3264,8 @@
           title: project.title, tag: project.tag, meta: project.meta,
           direction: directionSettings,
           mode: directionSettings.mode,
-          draft: directionSettings.mode === "polish" ? directionDraftEl.value.trim() : ""
+          draft: directionSettings.mode === "polish" ? directionDraftEl.value.trim() : "",
+          section: targetBlock ? (targetBlock.label || "") : ""
         })
       });
       if(!res.ok){
@@ -3273,19 +3292,26 @@
     const project = getCurrentProject();
     if(!project || !pendingDirectionResult) return;
     const data = pendingDirectionResult;
-    const title = document.getElementById("direction-preview-title").value.trim();
-    const tag = document.getElementById("direction-preview-tag").value.trim();
-    const meta = document.getElementById("direction-preview-meta").value.trim();
     const heading = document.getElementById("direction-preview-heading").value.trim();
     const paragraphs = document.getElementById("direction-preview-paragraphs").value
-      .split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+      .split("\n").map(p => p.trim()).filter(Boolean);
 
     snapshot();
-    if(title) project.title = title;
-    if(tag) project.tag = tag;
-    if(meta) project.meta = meta;
-    if(!project.blocks.length) project.blocks.push(newBlock());
-    const block = project.blocks[0];
+
+    let block;
+    if(generateTargetBlockId){
+      block = project.blocks.find(b => b.id === generateTargetBlockId);
+      if(!block) return;
+    }else{
+      const title = document.getElementById("direction-preview-title").value.trim();
+      const tag = document.getElementById("direction-preview-tag").value.trim();
+      const meta = document.getElementById("direction-preview-meta").value.trim();
+      if(title) project.title = title;
+      if(tag) project.tag = tag;
+      if(meta) project.meta = meta;
+      if(!project.blocks.length) project.blocks.push(newBlock());
+      block = project.blocks[0];
+    }
     if(heading) block.heading = heading;
     if(paragraphs.length) block.paragraphs = paragraphs;
 
@@ -3297,18 +3323,19 @@
         block.images.push({ id: uid(), relPath: relPath, name: name, url: relPath });
         addedImages++;
       });
-      if(!project.heroImage && block.images[0]) project.heroImage = cloneAsHeroImage(block.images[0]);
+      if(!generateTargetBlockId && !project.heroImage && block.images[0]) project.heroImage = cloneAsHeroImage(block.images[0]);
     }
 
     directionModal.classList.remove("open");
     pendingDirectionResult = null;
+    generateTargetBlockId = null;
 
     const status = document.getElementById("generate-status");
     if(status){
       status.style.display = "block";
       status.textContent = addedImages
         ? ("완료 — \"" + data.imageFolder + "\" 폴더에서 사진 " + addedImages + "장을 불러왔습니다.")
-        : "완료 — 글은 채웠지만, 이름이 일치하는 사진 폴더를 찾지 못했어요. 사진은 직접 추가해주세요.";
+        : "완료 — 글을 채웠습니다.";
     }
     renderEditor();
     saveAndRefresh();
@@ -3634,7 +3661,9 @@
       return;
     }
 
-    if(e.target.closest('[data-action="generate"]')){ openDirectionModal(); return; }
+    if(e.target.closest('[data-action="generate"]')){ openDirectionModal(null); return; }
+    const generateBlockBtn = e.target.closest('[data-action="generate-block"]');
+    if(generateBlockBtn){ openDirectionModal(generateBlockBtn.dataset.blockId); return; }
     if(e.target.closest('[data-action="undo-edit"]')){ undo(); return; }
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
