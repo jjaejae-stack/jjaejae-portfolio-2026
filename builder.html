@@ -1941,6 +1941,8 @@
     infoGenerateModal.classList.remove("open");
     pendingInfoGenerateResult = null;
 
+    renderEditor();
+    saveInfoAndRefresh();
     const status = document.getElementById("info-generate-status");
     if(status){
       status.style.display = "block";
@@ -1948,8 +1950,6 @@
         ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요."
         : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요.";
     }
-    renderEditor();
-    saveInfoAndRefresh();
   }
 
   function undoInfoGenerate(){
@@ -2044,6 +2044,8 @@
       +   '<span class="drag-handle">⠿</span>'
       +   '<input class="field-inline" data-field="label" data-block-id="' + block.id + '" placeholder="블록 이름 (예: Brand Film)" value="' + escapeHTML(block.label||"") + '">'
       +   '<button class="icon-btn" data-action="generate-block" data-block-id="' + block.id + '" title="이 블록의 헤드라인·본문만 GENERATE">GENERATE</button>'
+      +   '<button class="icon-btn" data-action="translate-block-ko-en" data-block-id="' + block.id + '" title="이 블록만 한국어 → 영어로 번역">KR → EN</button>'
+      +   '<button class="icon-btn" data-action="translate-block-en-ko" data-block-id="' + block.id + '" title="이 블록만 영어 → 한국어로 번역">EN → KR</button>'
       +   '<button class="icon-btn" data-action="remove-block" data-block-id="' + block.id + '">블록 삭제</button>'
       + '</div>'
       + '<div class="field-group"><label class="field-label">헤드라인 (선택)</label>'
@@ -3330,6 +3332,8 @@
     pendingDirectionResult = null;
     generateTargetBlockId = null;
 
+    renderEditor();
+    saveAndRefresh();
     const status = document.getElementById("generate-status");
     if(status){
       status.style.display = "block";
@@ -3337,8 +3341,6 @@
         ? ("완료 — \"" + data.imageFolder + "\" 폴더에서 사진 " + addedImages + "장을 불러왔습니다.")
         : "완료 — 글을 채웠습니다.";
     }
-    renderEditor();
-    saveAndRefresh();
   }
 
   async function runSave(){
@@ -3474,9 +3476,63 @@
           if(Array.isArray(b.paragraphs)) project.blocks[i].paragraphs = b.paragraphs;
         });
       }
-      if(status) status.textContent = "완료 — " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
       renderEditor();
       saveAndRefresh();
+      const status2 = document.getElementById("generate-status");
+      if(status2){
+        status2.style.display = "block";
+        status2.textContent = "완료 — " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      }
+    }catch(e){
+      alert(
+        "번역 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py)."
+      );
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  async function runTranslateBlock(direction, blockId, btn){
+    const project = getCurrentProject();
+    if(!project) return;
+    const block = project.blocks.find(b => b.id === blockId);
+    if(!block) return;
+    const status = document.getElementById("generate-status");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "로컬 서버에서 이 블록을 번역하는 중..."; }
+
+    try{
+      const payload = {
+        direction: direction,
+        title: "", tag: "", meta: "",
+        blocks: [{ heading: block.heading || "", paragraphs: block.paragraphs || [] }]
+      };
+      const res = await fetch(GENERATE_SERVER + "/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+      const translated = Array.isArray(data.blocks) ? data.blocks[0] : null;
+      if(!translated) throw new Error("번역 결과가 비어있습니다.");
+
+      snapshot();
+      if(translated.heading != null) block.heading = translated.heading;
+      if(Array.isArray(translated.paragraphs)) block.paragraphs = translated.paragraphs;
+
+      renderEditor();
+      saveAndRefresh();
+      const status2 = document.getElementById("generate-status");
+      if(status2){
+        status2.style.display = "block";
+        status2.textContent = "완료 — 이 블록을 " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      }
     }catch(e){
       alert(
         "번역 실패: " + e.message + "\n\n" +
@@ -3668,6 +3724,10 @@
     if(e.target.closest('[data-action="save"]')){ runSave(); return; }
     if(e.target.closest('[data-action="translate-ko-en"]')){ runTranslate("ko-en"); return; }
     if(e.target.closest('[data-action="translate-en-ko"]')){ runTranslate("en-ko"); return; }
+    const translateBlockKoEnBtn = e.target.closest('[data-action="translate-block-ko-en"]');
+    if(translateBlockKoEnBtn){ runTranslateBlock("ko-en", translateBlockKoEnBtn.dataset.blockId, translateBlockKoEnBtn); return; }
+    const translateBlockEnKoBtn = e.target.closest('[data-action="translate-block-en-ko"]');
+    if(translateBlockEnKoBtn){ runTranslateBlock("en-ko", translateBlockEnKoBtn.dataset.blockId, translateBlockEnKoBtn); return; }
     if(e.target.closest('[data-action="publish"]')){ runPublish(); return; }
 
     const toggleHead = e.target.closest('[data-toggle]');
