@@ -213,12 +213,14 @@
   @keyframes bob{0%,100%{transform:translateY(0);}50%{transform:translateY(5px);}}
 
   /* ---------- work / play landing: scroll down to just these two words ---------- */
-  /* min-height를 100vh가 아니라 90vh로 살짝 줄여서(+ 아래 footer 여백 확보), 스크롤을 끝까지
-     내려도 WORK/PLAY 글자가 상단 로고 자리까지, footer 문구가 하단 IG·Top 자리까지 닿지
-     않게 여백을 미리 확보함 (실기기 높이 667~932px 범위로 실측 후 값 결정) */
+  /* min-height는 #intro(100vh)와 반드시 같거나 커야 함 — #work-play + footer 합이
+     #intro보다 짧으면, 문서를 끝까지 스크롤해도 #intro의 마지막 몇 픽셀이 뷰포트
+     위쪽에 계속 걸쳐 보이는 문제가 생김(최대 스크롤 거리가 #intro 높이보다 짧아지므로).
+     WORK/PLAY 글자는 flex로 항상 세로 중앙 정렬되므로 min-height를 늘려도 헤더 로고나
+     하단 IG·Top 자리와 겹치지 않고, 오히려 여백만 더 넉넉해짐. */
   #work-play{
     display:flex;
-    min-height:90vh;
+    min-height:100vh;
   }
   #work-play .wp-link{
     flex:1;
@@ -748,7 +750,7 @@
 
         <div class="links">
           <a href="https://www.instagram.com/jjaejae__/" target="_blank" rel="noopener">Instagram ↗</a>
-          <a href="mailto:chlwogns7942@gmail.com">Email</a>
+          <a href="mailto:chlwogns7942@gmail.com">Email : chlwogns7942@gmail.com</a>
         </div>
       </div>
     </div></div>
