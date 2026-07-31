@@ -468,8 +468,13 @@
   /* mode-multi: JS(layoutFrames)가 각 프레임을 자기 원본 비율대로 한 행(또는 한 열)에 채워 넣음
      (공유 높이/너비 기준, 절대 잘리거나 레터박스 되지 않음) — 단일 이미지 모드와 같은 원칙을
      여러 프레임에 동시에 적용한 것. */
-  .gallery.mode-multi .gallery-frame{display:none; flex:0 0 auto;}
-  .gallery.mode-multi .gallery-frame.visible{display:block;}
+  .gallery.mode-multi .gallery-frame{display:block; flex:0 0 auto;}
+  /* row direction slides the whole track (see showGalleryPageRow) so every frame stays
+     laid out side by side and just gets clipped by .gallery's overflow:hidden — only
+     column direction still swaps pages via display:none/block (there's no sensible
+     "slide" axis to animate when it's a vertical stack). */
+  .gallery.mode-multi.direction-column .gallery-frame{display:none;}
+  .gallery.mode-multi.direction-column .gallery-frame.visible{display:block;}
   .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video, .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; display:block; border:0;}
   .gallery.mode-multi .gallery-track{gap:2px;}
   .gallery.direction-column .gallery-track{flex-direction:column;}
@@ -2258,18 +2263,96 @@
     mediaEls.forEach(m => waitMediaReady(m, onReady));
   }
 
+  function updateMultiCounter(gallery, page, perPage, visibleCount, total){
+    const start = page*perPage + 1;
+    const end = page*perPage + visibleCount;
+    const counter = gallery.querySelector(".gallery-counter");
+    if(counter) counter.textContent = `${end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")} / ${String(total).padStart(2,"0")}`;
+  }
+  /* row-direction mode-multi: every frame stays laid out side by side (never
+     display:none) sized from its own natural ratio, sharing one height per PAGE —
+     paging just slides .gallery-track's transform to bring the next page's frames
+     into the (overflow:hidden) viewport, reusing the same transform transition the
+     single-photo gallery already uses, so advancing pages animates smoothly left/
+     right instead of an abrupt display:none/block swap. */
+  function computeMultiPageLayout(gallery, frames, perPage){
+    const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
+    const ratios = mediaEls.map(mediaRatio);
+    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
+    const baseHeight = parseFloat(gallery.dataset.baseHeight);
+    const availWidth = gallery.parentElement.clientWidth;
+    const frameSizes = [];
+    const pageOffsets = [];
+    const pageSizes = [];
+    let cumulative = 0;
+    for(let i = 0; i < frames.length; i += perPage){
+      const idxs = [];
+      for(let j = i; j < Math.min(i + perPage, frames.length); j++) idxs.push(j);
+      let height = baseHeight;
+      let totalWidth = idxs.reduce((sum, idx) => sum + height*ratios[idx], 0);
+      if(availWidth > 0 && totalWidth > availWidth){
+        height = height * (availWidth / totalWidth);
+        totalWidth = availWidth;
+      }
+      idxs.forEach(idx => { frameSizes[idx] = { width: height*ratios[idx], height: height }; });
+      pageOffsets.push(cumulative);
+      pageSizes.push({ width: totalWidth, height: height, count: idxs.length });
+      cumulative += totalWidth;
+    }
+    return { frameSizes, pageOffsets, pageSizes };
+  }
+  function showGalleryPageRow(gallery, page){
+    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
+    const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
+    const total = frames.length;
+    gallery.dataset.page = page;
+    const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
+    let remaining = mediaEls.length;
+    const onReady = () => { remaining--; if(remaining <= 0) apply(); };
+    function apply(){
+      const { frameSizes, pageOffsets, pageSizes } = computeMultiPageLayout(gallery, frames, perPage);
+      frames.forEach((f, i) => {
+        const sz = frameSizes[i]; if(!sz) return;
+        f.style.width = sz.width + "px";
+        f.style.height = sz.height + "px";
+        const media = mediaEls[i];
+        if(media){ media.style.width = sz.width + "px"; media.style.height = sz.height + "px"; }
+      });
+      const pageSize = pageSizes[page] || { width: gallery.clientWidth, height: parseFloat(gallery.dataset.baseHeight || 280), count: 0 };
+      const offset = pageOffsets[page] || 0;
+      const currentHeight = gallery.getBoundingClientRect().height;
+      const setSize = () => {
+        gallery.style.height = pageSize.height + "px";
+        gallery.style.maxHeight = pageSize.height + "px";
+        gallery.style.width = pageSize.width + "px";
+      };
+      if(pageSize.height > currentHeight + 1){
+        const prevTransition = gallery.style.transition;
+        gallery.style.transition = "none";
+        setSize();
+        void gallery.offsetHeight;
+        gallery.style.transition = prevTransition;
+      } else {
+        setSize();
+      }
+      gallery.querySelector(".gallery-track").style.transform = `translateX(-${offset}px)`;
+      updateMultiCounter(gallery, page, perPage, pageSize.count, total);
+    }
+    mediaEls.forEach(m => waitMediaReady(m, onReady));
+  }
   function showGalleryPage(gallery, page){
     const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
+    if((gallery.dataset.direction || "row") !== "column"){
+      showGalleryPageRow(gallery, page);
+      return;
+    }
     const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
     const total = frames.length;
     gallery.dataset.page = page;
     frames.forEach((f, i) => f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage));
     const visible = frames.filter(f => f.classList.contains("visible"));
-    const start = page*perPage + 1;
-    const end = page*perPage + visible.length;
-    const counter = gallery.querySelector(".gallery-counter");
-    if(counter) counter.textContent = `${end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")} / ${String(total).padStart(2,"0")}`;
-    layoutFrames(gallery, visible, gallery.dataset.direction || "row");
+    updateMultiCounter(gallery, page, perPage, visible.length, total);
+    layoutFrames(gallery, visible, "column");
   }
 
   /* 클릭하지 않고도 사진을 좌우로 넘겨볼 수 있도록 하는 드래그/스와이프 — 트랙을 손가락/마우스를
@@ -2354,8 +2437,10 @@
       if(mode === "1"){
         g.querySelectorAll(".gallery-frame").forEach(f => delete f.dataset.sized);
         activateGalleryFrame(g, parseInt(g.dataset.index, 10));
+      } else if((g.dataset.direction || "row") !== "column"){
+        showGalleryPage(g, parseInt(g.dataset.page || "0", 10));
       } else {
-        layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame.visible")), g.dataset.direction || "row");
+        layoutFrames(g, Array.from(g.querySelectorAll(".gallery-frame.visible")), "column");
       }
     });
   });

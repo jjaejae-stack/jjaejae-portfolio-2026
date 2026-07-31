@@ -3854,8 +3854,9 @@
     .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
     .gallery:hover .gallery-hint{opacity:1;}
     @media (max-width:760px){ .gallery{min-height:0;} }
-    .gallery.mode-multi .gallery-frame{display:none;flex:0 0 auto;}
-    .gallery.mode-multi .gallery-frame.visible{display:block;}
+    .gallery.mode-multi .gallery-frame{display:block;flex:0 0 auto;}
+    .gallery.mode-multi.direction-column .gallery-frame{display:none;}
+    .gallery.mode-multi.direction-column .gallery-frame.visible{display:block;}
     .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video,.gallery.mode-multi .gallery-frame iframe{width:100%;height:100%;display:block;border:0;}
     .gallery.mode-multi .gallery-track{gap:2px;}
     .gallery.direction-column .gallery-track{flex-direction:column;}
@@ -4017,18 +4018,85 @@
     '  }',
     '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
+    'function updateMultiCounter(gallery, page, perPage, visibleCount, total){',
+    '  var start = page*perPage + 1;',
+    '  var end = page*perPage + visibleCount;',
+    '  var counter = gallery.querySelector(".gallery-counter");',
+    '  if(counter) counter.textContent = (end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")) + " / " + String(total).padStart(2,"0");',
+    '}',
+    'function computeMultiPageLayout(gallery, frames, perPage){',
+    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
+    '  var ratios = mediaEls.map(mediaRatio);',
+    '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
+    '  var baseHeight = parseFloat(gallery.dataset.baseHeight);',
+    '  var availWidth = gallery.parentElement.clientWidth;',
+    '  var frameSizes = [];',
+    '  var pageOffsets = [];',
+    '  var pageSizes = [];',
+    '  var cumulative = 0;',
+    '  for(var i = 0; i < frames.length; i += perPage){',
+    '    var idxs = [];',
+    '    for(var j = i; j < Math.min(i + perPage, frames.length); j++) idxs.push(j);',
+    '    var height = baseHeight;',
+    '    var totalWidth = idxs.reduce(function(sum, idx){ return sum + height*ratios[idx]; }, 0);',
+    '    if(availWidth > 0 && totalWidth > availWidth){',
+    '      height = height * (availWidth / totalWidth);',
+    '      totalWidth = availWidth;',
+    '    }',
+    '    idxs.forEach(function(idx){ frameSizes[idx] = { width: height*ratios[idx], height: height }; });',
+    '    pageOffsets.push(cumulative);',
+    '    pageSizes.push({ width: totalWidth, height: height, count: idxs.length });',
+    '    cumulative += totalWidth;',
+    '  }',
+    '  return { frameSizes: frameSizes, pageOffsets: pageOffsets, pageSizes: pageSizes };',
+    '}',
+    'function showGalleryPageRow(gallery, page){',
+    '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
+    '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
+    '  var total = frames.length;',
+    '  gallery.dataset.page = page;',
+    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
+    '  var remaining = mediaEls.length;',
+    '  function onReady(){ remaining--; if(remaining <= 0) apply(); }',
+    '  function apply(){',
+    '    var layout = computeMultiPageLayout(gallery, frames, perPage);',
+    '    frames.forEach(function(f, i){',
+    '      var sz = layout.frameSizes[i]; if(!sz) return;',
+    '      f.style.width = sz.width + "px";',
+    '      f.style.height = sz.height + "px";',
+    '      var media = mediaEls[i];',
+    '      if(media){ media.style.width = sz.width + "px"; media.style.height = sz.height + "px"; }',
+    '    });',
+    '    var pageSize = layout.pageSizes[page] || { width: gallery.clientWidth, height: parseFloat(gallery.dataset.baseHeight || 280), count: 0 };',
+    '    var offset = layout.pageOffsets[page] || 0;',
+    '    var currentHeight = gallery.getBoundingClientRect().height;',
+    '    function setSize(){',
+    '      gallery.style.height = pageSize.height + "px";',
+    '      gallery.style.maxHeight = pageSize.height + "px";',
+    '      gallery.style.width = pageSize.width + "px";',
+    '    }',
+    '    if(pageSize.height > currentHeight + 1){',
+    '      var prevTransition = gallery.style.transition;',
+    '      gallery.style.transition = "none";',
+    '      setSize();',
+    '      void gallery.offsetHeight;',
+    '      gallery.style.transition = prevTransition;',
+    '    } else { setSize(); }',
+    '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + offset + "px)";',
+    '    updateMultiCounter(gallery, page, perPage, pageSize.count, total);',
+    '  }',
+    '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
+    '}',
     'function showGalleryPage(gallery, page){',
     '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
+    '  if((gallery.dataset.direction || "row") !== "column"){ showGalleryPageRow(gallery, page); return; }',
     '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
     '  var total = frames.length;',
     '  gallery.dataset.page = page;',
     '  frames.forEach(function(f, i){ f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage); });',
     '  var visible = frames.filter(function(f){ return f.classList.contains("visible"); });',
-    '  var start = page*perPage + 1;',
-    '  var end = page*perPage + visible.length;',
-    '  var counter = gallery.querySelector(".gallery-counter");',
-    '  if(counter) counter.textContent = (end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")) + " / " + String(total).padStart(2,"0");',
-    '  layoutFrames(gallery, visible, gallery.dataset.direction || "row");',
+    '  updateMultiCounter(gallery, page, perPage, visible.length, total);',
+    '  layoutFrames(gallery, visible, "column");',
     '}',
     'function initGallery(g){',
     '  var mode = g.dataset.mode || "1";',
@@ -4080,7 +4148,8 @@
     '    delete g.dataset.baseHeight;',
     '    g.style.height = "";',
     '    if(mode === "1"){ g.querySelectorAll(".gallery-frame").forEach(function(f){ delete f.dataset.sized; }); activateGalleryFrame(g, parseInt(g.dataset.index, 10)); }',
-    '    else { layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame.visible")), g.dataset.direction || "row"); }',
+    '    else if((g.dataset.direction || "row") !== "column"){ showGalleryPage(g, parseInt(g.dataset.page || "0", 10)); }',
+    '    else { layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame.visible")), "column"); }',
     '  });',
     '});'
   ].join("\n");
@@ -4403,6 +4472,55 @@
       projects.push(sample);
       try{ await dbPut(sample); }catch(e){ console.error("sample save failed", e); }
     }
+    /* one-off repair: SSF SHOP's hero + 4 block images, and 9 Neo QLED 8K gifs, were
+       saved with a wrong/missing folder prefix (same root cause as the earlier NIKE
+       gif fix and the hero-upload bug fixed in persistHeroFileToDisk — 2026-07-31),
+       so every time either project got Published the live site broke again. Runs
+       once per load and is harmless to re-run since it only touches relPath values
+       that still exactly match the known-bad string. */
+    (function repairKnownBadRelPaths(){
+      const FIXES = {
+        "ssf-shop": [
+          ["db9b30133531421.61c03f0c4ef2d.jpg", "SSF SHOP/-/db9b30133531421.61c03f0c4ef2d.jpg"],
+          ["SSF SHOP/Capture/7bfd63133531421.61c042663719d.webp", "SSF SHOP/-/7bfd63133531421.61c042663719d.webp"],
+          ["SSF SHOP/Capture/816073133531421.61c1669ba4090.gif", "SSF SHOP/-/816073133531421.61c1669ba4090.gif"],
+          ["SSF SHOP/Capture/1e97f5133531421.61c166990841d.gif", "SSF SHOP/-/1e97f5133531421.61c166990841d.gif"],
+          ["SSF SHOP/Capture/a68ba2133531421.61c16699089de.gif", "SSF SHOP/-/a68ba2133531421.61c16699089de.gif"],
+        ],
+        "neo-qled-8k": [
+          ["cea0b9174932955.64abaaf25bfbe.gif", "Neo QLED 8K Digital/cea0b9174932955.64abaaf25bfbe.gif"],
+          ["37e21d174932955.64abaaf25cde3.gif", "Neo QLED 8K Digital/37e21d174932955.64abaaf25cde3.gif"],
+          ["c9ccab174932955.64abbc0db432b.gif", "Neo QLED 8K Digital/c9ccab174932955.64abbc0db432b.gif"],
+          ["01b01a174932955.64abbc0eb8234.gif", "Neo QLED 8K Digital/01b01a174932955.64abbc0eb8234.gif"],
+          ["66935b174932955.64abbc0eb74b4.gif", "Neo QLED 8K Digital/66935b174932955.64abbc0eb74b4.gif"],
+          ["99ca68174932955.64abbc0eb8ecb.gif", "Neo QLED 8K Digital/99ca68174932955.64abbc0eb8ecb.gif"],
+          ["c3bdf4174932955.64abbc0f86426.gif", "Neo QLED 8K Digital/c3bdf4174932955.64abbc0f86426.gif"],
+          ["ab7e99174932955.64abbc0f8778c.gif", "Neo QLED 8K Digital/ab7e99174932955.64abbc0f8778c.gif"],
+          ["916ab4174932955.64abbc0f855d0.gif", "Neo QLED 8K Digital/916ab4174932955.64abbc0f855d0.gif"],
+        ],
+      };
+      function fixImage(im, map){
+        if(!im) return 0;
+        const hit = map.find(pair => im.relPath === pair[0]);
+        if(!hit) return 0;
+        const good = hit[1];
+        if(im.url === im.relPath) im.url = good;
+        im.relPath = good;
+        im.name = good.split("/").pop();
+        return 1;
+      }
+      projects.forEach(p => {
+        const map = FIXES[p.id];
+        if(!map) return;
+        let fixed = 0;
+        fixed += fixImage(p.heroImage, map);
+        (p.blocks || []).forEach(b => (b.images || []).forEach(im => { fixed += fixImage(im, map); }));
+        if(fixed){
+          dbPut(p).catch(e => console.error("relPath repair save failed", e));
+          console.log("[relPath repair]", p.id, "-", fixed, "path(s) fixed");
+        }
+      });
+    })();
     /* migrate: projects saved before drag-reordering existed have no `order` —
        give them one (grouped by category, in whatever order dbGetAll() returned)
        so they sort consistently instead of jumping around once a peer gets reordered. */
