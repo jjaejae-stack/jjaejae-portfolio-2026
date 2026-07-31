@@ -1392,15 +1392,15 @@
           heading:"We Created 112 GIF STICKERS with 7 ILLUSTRATORS",
           galleryMode:"free",
           images:[
-            "NIKE 2019/0e407d84922005.5d80a30c15eaf.gif",
-            "NIKE 2019/1ab28484922005.5d80a30c13342.gif",
-            "NIKE 2019/4e1a2884922005.5d80a30c12ac2.gif",
-            "NIKE 2019/25b0b384922005.5d80a30c16a29.gif",
-            "NIKE 2019/205f3684922005.5d80a30c14b0a.gif",
-            "NIKE 2019/892e1284922005.5d80a30c17365.gif",
-            "NIKE 2019/33823584922005.5d80a30c13f2f.gif",
-            "NIKE 2019/bb99a284922005.5d80a30c15458.gif",
-            "NIKE 2019/bfd10484922005.5d80a30c120f3.gif",
+            "0e407d84922005.5d80a30c15eaf.gif",
+            "1ab28484922005.5d80a30c13342.gif",
+            "4e1a2884922005.5d80a30c12ac2.gif",
+            "25b0b384922005.5d80a30c16a29.gif",
+            "205f3684922005.5d80a30c14b0a.gif",
+            "892e1284922005.5d80a30c17365.gif",
+            "33823584922005.5d80a30c13f2f.gif",
+            "bb99a284922005.5d80a30c15458.gif",
+            "bfd10484922005.5d80a30c120f3.gif",
           ],
           freeLayout:[
             {x:0.00,y:0.00,w:33.33,h:33.33},
@@ -1419,9 +1419,9 @@
           label:"Design",
           images:[
             "NIKE 2019/9aea8384922005.5d81fa58afb15.webp",
-            "NIKE 2019/d2ada284922005.5d6cc40705f36.gif",
+            "d2ada284922005.5d6cc40705f36.gif",
             "NIKE 2019/08f8ad84922005.5d6cc4070526f.webp",
-            "NIKE 2019/c4c9f684922005.6152fc9411455.gif",
+            "c4c9f684922005.6152fc9411455.gif",
             "NIKE 2019/20b1a484922005.5d6cc40704da6.webp",
           ],
           paragraphs:["We made GIF Messages, Swipe Film, User Tutorial Film(How to participation the phenomenal challenge) and Web&SNS Design"]
@@ -1437,9 +1437,24 @@
             "NIKE 2019/c8de0884922005.6152fc940fe6d.webp",
           ],
           paragraphs:["We concluded the campaign with the launch of the Phenomenal Festival.", "We created the Phenomenal KIT and KakaoTalk emoticons to distribute to participants as rewards."]
+        },
+        {
+          label:"Result",
+          images:[
+            "https://vimeo.com/371521626?fl=pl&fe=sh",
+          ],
+          paragraphs:["The Nike #Choose Phenomenal Challenge campaign generated 21,250 campaign entries over a 3-week period. The hashtag participation reached 9,600+ mentions, and the GIF sticker garnered 657,900 views. Based on participation metrics, Nike Sports Bra donations reached the target goal of 3,000 units, enabling donations to female middle and high school track and soccer athletes and community organizations for healthier fitness participation.", "This momentum culminated in the Choose Phenomenal Festival, with 31,866 ticket applications and a successful campaign conclusion."]
         }
       ],
-      credits:null
+      credits:[
+        ["Client", "NIKE KOREA"],
+        ["Agency", "POSTVISUAL"],
+        ["Creative Director", "Hyunhee Park"],
+        ["Copy Writer", " Mira Oh"],
+        ["Art Director", "Jaehoon Choi, Yunju Hwang"],
+        ["Motiongrapher", "Kangrok Kim"],
+        ["Illustrator", "Sunny Studio(@sunnystudio.kr), Hyowon Park(@our_own_night), jangkoal(@jangkoal), moonk (@moonkwoo), Kyungchal Han(@hedaa2002), Baz_Bon(@baz_bon), 127(@ileechill)"],
+      ]
     }
     /* 다른 프로젝트는 SSF SHOP 포맷이 확정되면 이어서 추가합니다. */
   ];
@@ -1938,6 +1953,13 @@
     /* availWidth is 0 if this runs before layout is visible (e.g. a video-link frame that
        doesn't wait on a load event) — skip the shrink-to-fit rather than collapse to 0×0. */
     if(availWidth > 0 && width > availWidth){
+      width = availWidth;
+      height = width / ratio;
+    }
+    /* landscape/square photos narrower than the block should stretch to fill it (matches
+       how the block's own width reads) — portrait photos are left at their natural
+       height-based width instead of being stretched absurdly tall to reach full width. */
+    else if(availWidth > 0 && ratio >= 1 && width < availWidth){
       width = availWidth;
       height = width / ratio;
     }
