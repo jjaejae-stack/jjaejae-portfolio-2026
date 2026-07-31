@@ -633,20 +633,41 @@ def publish_project(project_id, code):
     return action
 
 
-_ORDER_FIELD_RE = re.compile(r"order\s*:\s*-?\d+(?:\.\d+)?\s*,?\s*")
+# Every trailing whitespace-consuming group below uses [ \t]* rather than \s* —
+# \s* would also swallow the newline that separates this field from the next
+# one, so replacing the match would jam the next field onto the same line
+# (e.g. "order:3,color:..." instead of "order:3,\n      color:...").
+_ORDER_FIELD_RE = re.compile(r"order\s*:\s*-?\d+(?:\.\d+)?\s*,?[ \t]*")
+_HIDDEN_FIELD_RE = re.compile(r"hidden\s*:\s*(?:true|false)\s*,?[ \t]*(?:/\*.*?\*/[ \t]*)?", re.S)
+# used only to fully DELETE the field (hidden -> false): also eats the leading
+# newline+indent so removing it doesn't leave a blank line behind.
+_HIDDEN_FIELD_REMOVE_RE = re.compile(r"\n?[ \t]*hidden\s*:\s*(?:true|false)\s*,?[ \t]*(?:/\*.*?\*/[ \t]*)?", re.S)
 _CATEGORY_FIELD_RE = re.compile(r'category\s*:\s*"[^"]*"\s*,')
 _ID_FIELD_RE = re.compile(r'id\s*:\s*"((?:[^"\\]|\\.)*)"')
 
 
-def publish_order(items):
-    """Update just the `order:` field of each listed project (by id) inside
-    index.html's `const PROJECTS = [...]` array, leaving every other field of
-    that project untouched. Backs builder.html's "순서 반영" button, which lets
-    a sidebar reorder reach the live Work/Play list without republishing each
-    affected project's full data individually.
+def _set_simple_field(segment, id_m, field_re, new_stmt):
+    """Replace `field_re`'s match in-place, or insert `new_stmt` right after
+    category:"...", (or after id:"...", as a fallback) if the field is missing."""
+    m = field_re.search(segment)
+    if m:
+        return segment[:m.start()] + new_stmt + segment[m.end():]
+    cat_m = _CATEGORY_FIELD_RE.search(segment)
+    insert_at = cat_m.end() if cat_m else id_m.end() + 1
+    return segment[:insert_at] + "\n      " + new_stmt + segment[insert_at:]
 
-    `items` is a list of {"id": ..., "order": ...} dicts. Returns how many
-    matching projects were actually updated."""
+
+def publish_order(items):
+    """Update just the `order:`/`hidden:` fields of each listed project (by id)
+    inside index.html's `const PROJECTS = [...]` array, leaving every other
+    field of that project untouched. Backs builder.html's "순서를 사이트에 반영"
+    button, which lets a sidebar reorder or hide/show toggle reach the live
+    Work/Play list without republishing each affected project's full data.
+
+    `items` is a list of {"id", "order", "hidden"} dicts ("hidden" optional —
+    only sent for projects where it's actually true, so omitted/False both
+    mean "make sure it's visible"). Returns how many matching projects were
+    actually updated."""
     with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
         html = f.read()
 
@@ -658,11 +679,7 @@ def publish_order(items):
     close_idx = _find_matching_bracket(html, open_idx)
 
     entries = _split_top_level_items(html, open_idx + 1, close_idx)
-    order_by_id = {
-        it.get("id"): it.get("order")
-        for it in items
-        if isinstance(it, dict) and it.get("id") is not None and it.get("order") is not None
-    }
+    by_id = {it.get("id"): it for it in items if isinstance(it, dict) and it.get("id") is not None}
 
     updated_count = 0
     pieces = []
@@ -672,15 +689,14 @@ def publish_order(items):
         segment = html[s:e]
         id_m = _ID_FIELD_RE.search(segment)
         pid = id_m.group(1) if id_m else None
-        if pid is not None and pid in order_by_id:
-            new_order_stmt = "order:%s," % order_by_id[pid]
-            om = _ORDER_FIELD_RE.search(segment)
-            if om:
-                segment = segment[:om.start()] + new_order_stmt + segment[om.end():]
+        it = by_id.get(pid) if pid is not None else None
+        if it is not None:
+            if it.get("order") is not None:
+                segment = _set_simple_field(segment, id_m, _ORDER_FIELD_RE, "order:%s," % it["order"])
+            if it.get("hidden"):
+                segment = _set_simple_field(segment, id_m, _HIDDEN_FIELD_RE, "hidden:true,")
             else:
-                cat_m = _CATEGORY_FIELD_RE.search(segment)
-                insert_at = cat_m.end() if cat_m else id_m.end() + 1
-                segment = segment[:insert_at] + "\n      " + new_order_stmt + segment[insert_at:]
+                segment = _HIDDEN_FIELD_REMOVE_RE.sub("", segment, count=1)
             updated_count += 1
         pieces.append(segment)
         cursor = e

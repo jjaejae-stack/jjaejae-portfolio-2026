@@ -94,6 +94,13 @@
   .project-item:hover .move{opacity:1;}
   .project-item.active .move{opacity:.85; border-color:currentColor;}
   .project-item .move:hover{color:var(--accent); border-color:var(--accent);}
+  .project-item .hide-toggle{opacity:0; font-size:10px; color:var(--muted); flex:0 0 auto; border:1px solid var(--line-strong); border-radius:10px; padding:2px 7px; white-space:nowrap;}
+  .project-item:hover .hide-toggle{opacity:1;}
+  .project-item.active .hide-toggle{opacity:.85; border-color:currentColor;}
+  .project-item .hide-toggle:hover{color:var(--accent); border-color:var(--accent);}
+  .project-item.project-hidden{opacity:.5;}
+  .project-item.project-hidden .hide-toggle{opacity:1; border-color:var(--accent); color:var(--accent);}
+  .hidden-badge{font-size:9px; font-weight:600; color:var(--accent); border:1px solid currentColor; border-radius:8px; padding:1px 5px; vertical-align:middle; white-space:nowrap;}
   .project-item .del{opacity:0; font-size:12px; color:var(--muted); flex:0 0 auto;}
   .project-item:hover .del{opacity:1;}
   .project-item.active .del{opacity:.7;}
@@ -397,7 +404,7 @@
         <button type="button" data-category="play">Play</button>
       </div>
       <button id="new-project-btn">+ 새 프로젝트</button>
-      <button type="button" id="sync-order-btn" title="사이드바에서 드래그로 바꾼 프로젝트 순서를 실제 Work/Play 리스트 페이지에도 반영합니다">↕ 순서를 사이트에 반영</button>
+      <button type="button" id="sync-order-btn" title="사이드바의 프로젝트 순서와 숨김 상태를 실제 Work/Play 리스트 페이지에도 반영합니다">↕ 순서·숨김 반영</button>
       <div id="project-list" data-sort-scope="projects"></div>
     </aside>
 
@@ -1026,15 +1033,17 @@
     }
     sidebarList.innerHTML = visible.map(p => {
       const active = (mode === "project" && p.id === currentId) ? " active" : "";
+      const hiddenClass = p.hidden ? " project-hidden" : "";
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
-      return '<div class="project-item' + active + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
+      return '<div class="project-item' + active + hiddenClass + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
         + '<span class="drag-handle">⠿</span>'
         + '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
         + '<span class="info">'
-        +   '<span class="p-title">' + escapeHTML(p.title || "Untitled") + '</span>'
+        +   '<span class="p-title">' + escapeHTML(p.title || "Untitled") + (p.hidden ? ' <span class="hidden-badge">숨김</span>' : '') + '</span>'
         +   '<span class="p-sub">' + escapeHTML([p.tag, p.year].filter(Boolean).join(" · ") || "—") + '</span>'
         + '</span>'
+        + '<button class="hide-toggle" data-action="toggle-hide-project" data-project-id="' + p.id + '" title="' + (p.hidden ? "사이트에 다시 보이게" : "사이트에서 숨기기") + '">' + (p.hidden ? "🙈 보이기" : "👁 숨기기") + '</button>'
         + '<button class="move" data-action="move-project" data-project-id="' + p.id + '" data-target="' + otherCategory + '" title="' + otherLabel + '(으)로 옮기기">→ ' + otherLabel + '</button>'
         + '<button class="del" data-action="delete-project" data-project-id="' + p.id + '" title="삭제">✕</button>'
         + '</div>';
@@ -1098,6 +1107,18 @@
       const p = projects.find(x => x.id === id);
       if(p && confirm('"' + p.title + '" 프로젝트를 삭제할까요? 되돌릴 수 없습니다.')){
         deleteProject(id);
+      }
+      return;
+    }
+    const hideBtn = e.target.closest('[data-action="toggle-hide-project"]');
+    if(hideBtn){
+      e.stopPropagation();
+      const p = projects.find(x => x.id === hideBtn.dataset.projectId);
+      if(p){
+        snapshot();
+        p.hidden = !p.hidden;
+        renderSidebar();
+        dbPut(p).catch(e2 => console.error("hide toggle save failed", e2));
       }
       return;
     }
@@ -3177,14 +3198,14 @@
      This sends just {id, order} for every project, so /publish-order can update
      only that one field per project without touching anything else. ---- */
   async function runSyncOrder(){
-    if(!confirm("사이드바의 현재 프로젝트 순서를 실제 Work/Play 리스트 페이지에도 반영할까요?\n\nindex.html이 수정되고 GitHub에 푸시되어 Vercel이 재배포합니다.")) return;
+    if(!confirm("사이드바의 현재 프로젝트 순서와 숨김 상태를 실제 사이트에도 반영할까요?\n\nindex.html이 수정되고 GitHub에 푸시되어 Vercel이 재배포합니다.")) return;
 
     const btn = document.getElementById("sync-order-btn");
     const origLabel = btn ? btn.textContent : "";
     if(btn){ btn.disabled = true; btn.textContent = "반영 중..."; }
 
     try{
-      const items = projects.map(p => ({ id: p.id, order: p.order != null ? p.order : 0 }));
+      const items = projects.map(p => ({ id: p.id, order: p.order != null ? p.order : 0, hidden: !!p.hidden }));
       const res = await fetch(GENERATE_SERVER + "/publish-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -3193,10 +3214,10 @@
       const data = await res.json().catch(() => ({}));
       if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
 
-      alert("순서 반영 완료 — " + (data.updated || 0) + "개 프로젝트 업데이트.\n" + (data.note || ""));
+      alert("순서/숨김 반영 완료 — " + (data.updated || 0) + "개 프로젝트 업데이트.\n" + (data.note || ""));
     }catch(e){
       alert(
-        "순서 반영 실패: " + e.message + "\n\n" +
+        "반영 실패: " + e.message + "\n\n" +
         "로컬 서버가 켜져 있는지, GitHub 연동이 되어 있는지 확인해주세요.\n" +
         "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
         "  python3 server.py\n"
@@ -3924,6 +3945,7 @@
     L.push("  title:" + JSON.stringify(project.title) + ",");
     L.push("  category:" + JSON.stringify(projectCategory(project)) + ",");
     L.push("  order:" + (project.order != null ? project.order : 0) + ", /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */");
+    if(project.hidden) L.push("  hidden:true, /* 빌더 사이드바엔 남아있지만 실제 사이트(Work/Play 리스트·직접 URL·이전/다음)에는 노출 안 됨 */");
     L.push("  color:" + JSON.stringify(project.color) + ",");
     L.push("  textColor:" + JSON.stringify(project.textColor||"#fff3ef") + ",");
     L.push("  titleLetterSpacing:" + (project.titleLetterSpacing!=null?project.titleLetterSpacing:-0.02) + ",");
