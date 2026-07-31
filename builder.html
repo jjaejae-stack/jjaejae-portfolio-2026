@@ -3873,6 +3873,7 @@
     '  var height = baseHeight;',
     '  var width = height * ratio;',
     '  if(availWidth > 0 && width > availWidth){ width = availWidth; height = width / ratio; }',
+    '  else if(availWidth > 0 && ratio >= 1 && width < availWidth){ width = availWidth; height = width / ratio; }',
     '  frame.style.width = width + "px";',
     '  frame.style.height = height + "px";',
     '  media.style.width = width + "px";',
