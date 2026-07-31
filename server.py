@@ -377,16 +377,7 @@ def build_direction_block(direction):
     ) % (tone, structure, length_label, photo_flow, note_line)
 
 
-def build_prompt(title, tag, meta, direction=None):
-    context_bits = []
-    if title:
-        context_bits.append('현재 프로젝트명: "%s"' % title)
-    if tag:
-        context_bits.append('현재 카테고리: "%s"' % tag)
-    if meta:
-        context_bits.append('현재 클라이언트/에이전시: "%s"' % meta)
-    context = "\n".join(context_bits) if context_bits else "(아직 입력된 내용 없음)"
-
+def build_prompt(title, tag, meta, direction=None, mode="new", draft=""):
     voice = load_voice_rulebook()
     examples, examples_source = load_voice_examples()
 
@@ -403,6 +394,31 @@ def build_prompt(title, tag, meta, direction=None):
             "\n\n## 문체 예시 (출처: %s — 표현을 그대로 베끼지 말고 톤·구조만 따라할 것)\n\n%s\n"
             % (examples_source, examples)
         )
+
+    if mode == "polish":
+        return (
+            "너는 광고 에이전시 아트디렉터 본인이야. 아래는 네가 포트폴리오 사이트에 올릴 프로젝트 소개글로 쓰려고 "
+            "직접 쓴 초안이야:\n\n---\n" + draft + "\n---\n"
+            + voice_block + examples_block +
+            "\n\n위 문체 규칙과 예시의 톤·리듬을 참고해서, 이 초안의 내용과 의미는 그대로 유지한 채 문장만 학습된 문체로 다듬어줘. "
+            "새로운 사실이나 에피소드를 지어내지 마.\n\n"
+            "다음 필드를 JSON으로 반환해:\n"
+            "- title: \"%s\" (그대로 유지, 빈 문자열이면 빈 문자열)\n"
+            "- tag: \"%s\" (그대로 유지, 빈 문자열이면 빈 문자열)\n"
+            "- meta: \"%s\" (그대로 유지, 빈 문자열이면 빈 문자열)\n"
+            "- heading: 초안에 슬로건/제목으로 보이는 부분이 있으면 다듬어서, 없으면 빈 문자열\n"
+            "- paragraphs: 초안을 다듬은 문단들의 배열 (초안의 문단 구성과 순서를 최대한 존중)"
+        ) % (title or "", tag or "", meta or "")
+
+    context_bits = []
+    if title:
+        context_bits.append('현재 프로젝트명: "%s"' % title)
+    if tag:
+        context_bits.append('현재 카테고리: "%s"' % tag)
+    if meta:
+        context_bits.append('현재 클라이언트/에이전시: "%s"' % meta)
+    context = "\n".join(context_bits) if context_bits else "(아직 입력된 내용 없음)"
+
     direction_block = build_direction_block(direction)
 
     return (
@@ -1035,8 +1051,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             tag = (payload.get("tag") or "").strip()
             meta = (payload.get("meta") or "").strip()
             direction = payload.get("direction") if isinstance(payload.get("direction"), dict) else None
+            mode = payload.get("mode") if payload.get("mode") in ("new", "polish") else "new"
+            draft = (payload.get("draft") or "").strip()
+            if mode == "polish" and not draft:
+                self._send_json(400, {"error": "다듬을 글을 입력해주세요."})
+                return
             try:
-                prompt = build_prompt(title, tag, meta, direction)
+                prompt = build_prompt(title, tag, meta, direction, mode, draft)
                 structured = run_claude(prompt, GENERATE_SCHEMA)
             except subprocess.TimeoutExpired:
                 self._send_json(504, {"error": "claude CLI timed out"})

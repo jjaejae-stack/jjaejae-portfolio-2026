@@ -459,88 +459,148 @@
 
   <div id="direction-modal">
     <div class="modal-box">
-      <h3>생성 방향 설정</h3>
-      <p class="hint">아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.</p>
+      <div id="direction-settings-view">
+        <h3>생성 방향 설정</h3>
+        <p class="hint">아래 설정에 맞춰 GENERATE가 글을 씁니다. 여기서 고른 설정은 다음 생성 때도 그대로 유지됩니다.</p>
 
-      <div class="field-group">
-        <label class="field-label">어투</label>
-        <div class="view-toggle" data-group="tone">
-          <button type="button" data-value="observer">관찰자 (1인칭 건조체)</button>
-          <button type="button" data-value="third-person">3인칭</button>
-          <button type="button" data-value="interview">인터뷰체</button>
+        <div class="field-group">
+          <label class="field-label">모드</label>
+          <div class="view-toggle" data-group="mode">
+            <button type="button" data-value="new">새로 쓰기</button>
+            <button type="button" data-value="polish">내 글 다듬기</button>
+          </div>
+        </div>
+
+        <div class="field-group" id="direction-draft-row" style="display:none;">
+          <label class="field-label">다듬을 글 (여러 문단이면 줄바꿈으로 구분)</label>
+          <textarea class="field" id="direction-draft" style="min-height:160px;" placeholder="여기에 초안을 붙여넣으세요"></textarea>
+        </div>
+
+        <div id="direction-scratch-fields">
+          <div class="field-group">
+            <label class="field-label">어투</label>
+            <div class="view-toggle" data-group="tone">
+              <button type="button" data-value="observer">관찰자 (1인칭 건조체)</button>
+              <button type="button" data-value="third-person">3인칭</button>
+              <button type="button" data-value="interview">인터뷰체</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">구조</label>
+            <div class="view-toggle" data-group="structure">
+              <button type="button" data-value="three-act">3막 (맥락→접근→결과)</button>
+              <button type="button" data-value="vignette">비네트 (장면별 단편)</button>
+              <button type="button" data-value="single-flow">단일 흐름</button>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">길이</label>
+            <div class="view-toggle" data-group="length">
+              <button type="button" data-value="short">짧게</button>
+              <button type="button" data-value="medium">중간</button>
+              <button type="button" data-value="long">길게</button>
+            </div>
+            <div id="short-lines-row" class="field-row field-group" style="display:none; margin-top:8px;">
+              <div><label class="field-label">짧게 = 몇 줄?</label>
+                <input class="field" type="number" id="short-lines-input" min="1" max="20" value="3"></div>
+            </div>
+          </div>
+
+          <div class="field-group">
+            <label class="field-label">사진 흐름</label>
+            <div class="view-toggle" data-group="photoFlow">
+              <button type="button" data-value="match-text">글에 맞춤</button>
+              <button type="button" data-value="chronological">시간순</button>
+              <button type="button" data-value="detail-to-wide">디테일 → 와이드</button>
+              <button type="button" data-value="wide-to-detail">와이드 → 디테일</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">방향 메모 (이번 글에서 강조할 것)</label>
+          <textarea class="field" id="direction-note" placeholder="예: 팀워크보다는 개인의 관찰력을 강조해줘"></textarea>
+        </div>
+
+        <p id="direction-status" style="display:none; font-size:12px; color:var(--muted); margin:-6px 0 14px;"></p>
+
+        <div class="modal-actions">
+          <button class="btn-sm" id="direction-cancel">취소</button>
+          <button class="btn-primary" id="direction-confirm">생성</button>
         </div>
       </div>
 
-      <div class="field-group">
-        <label class="field-label">구조</label>
-        <div class="view-toggle" data-group="structure">
-          <button type="button" data-value="three-act">3막 (맥락→접근→결과)</button>
-          <button type="button" data-value="vignette">비네트 (장면별 단편)</button>
-          <button type="button" data-value="single-flow">단일 흐름</button>
-        </div>
-      </div>
+      <div id="direction-preview-view" style="display:none;">
+        <h3>생성 결과 미리보기</h3>
+        <p class="hint">마음에 들면 적용을 눌러주세요. 적용 전까지는 프로젝트에 반영되지 않습니다. 필요하면 아래에서 직접 수정한 뒤 적용해도 됩니다.</p>
 
-      <div class="field-group">
-        <label class="field-label">길이</label>
-        <div class="view-toggle" data-group="length">
-          <button type="button" data-value="short">짧게</button>
-          <button type="button" data-value="medium">중간</button>
-          <button type="button" data-value="long">길게</button>
+        <div class="field-row field-group">
+          <div><label class="field-label">프로젝트명</label><input class="field" id="direction-preview-title"></div>
+          <div><label class="field-label">카테고리</label><input class="field" id="direction-preview-tag"></div>
         </div>
-        <div id="short-lines-row" class="field-row field-group" style="display:none; margin-top:8px;">
-          <div><label class="field-label">짧게 = 몇 줄?</label>
-            <input class="field" type="number" id="short-lines-input" min="1" max="20" value="3"></div>
+        <div class="field-group"><label class="field-label">클라이언트 / 에이전시</label><input class="field" id="direction-preview-meta"></div>
+        <div class="field-group"><label class="field-label">헤딩</label><input class="field" id="direction-preview-heading"></div>
+        <div class="field-group"><label class="field-label">본문 (문단 사이 빈 줄로 구분)</label>
+          <textarea class="field" id="direction-preview-paragraphs" style="min-height:220px; white-space:pre-wrap;"></textarea>
         </div>
-      </div>
 
-      <div class="field-group">
-        <label class="field-label">사진 흐름</label>
-        <div class="view-toggle" data-group="photoFlow">
-          <button type="button" data-value="match-text">글에 맞춤</button>
-          <button type="button" data-value="chronological">시간순</button>
-          <button type="button" data-value="detail-to-wide">디테일 → 와이드</button>
-          <button type="button" data-value="wide-to-detail">와이드 → 디테일</button>
+        <div class="modal-actions">
+          <button class="btn-sm" id="direction-preview-back">다시 생성</button>
+          <button class="btn-primary" id="direction-preview-apply">적용</button>
         </div>
-      </div>
-
-      <div class="field-group">
-        <label class="field-label">방향 메모 (이번 글에서 강조할 것)</label>
-        <textarea class="field" id="direction-note" placeholder="예: 팀워크보다는 개인의 관찰력을 강조해줘"></textarea>
-      </div>
-
-      <div class="modal-actions">
-        <button class="btn-sm" id="direction-cancel">취소</button>
-        <button class="btn-primary" id="direction-confirm">생성</button>
       </div>
     </div>
   </div>
 
   <div id="info-generate-modal">
     <div class="modal-box">
-      <h3>INFO 페이지 GENERATE</h3>
-      <p class="hint">문체 학습 규칙(voice.md)을 참고해서 인사말·본문 문단을 씁니다. 이미 써둔 초안이 있다면 "내 글 다듬기"로 골라 붙여넣으면, 내용은 그대로 두고 학습된 문체로만 다듬어줍니다.</p>
+      <div id="info-generate-settings-view">
+        <h3>INFO 페이지 GENERATE</h3>
+        <p class="hint">문체 학습 규칙(voice.md)을 참고해서 인사말·본문 문단을 씁니다. 이미 써둔 초안이 있다면 "내 글 다듬기"로 골라 붙여넣으면, 내용은 그대로 두고 학습된 문체로만 다듬어줍니다.</p>
 
-      <div class="field-group">
-        <label class="field-label">모드</label>
-        <div class="view-toggle" data-group="mode">
-          <button type="button" data-value="new">새로 쓰기</button>
-          <button type="button" data-value="polish">내 글 다듬기</button>
+        <div class="field-group">
+          <label class="field-label">모드</label>
+          <div class="view-toggle" data-group="mode">
+            <button type="button" data-value="new">새로 쓰기</button>
+            <button type="button" data-value="polish">내 글 다듬기</button>
+          </div>
+        </div>
+
+        <div class="field-group" id="info-generate-draft-row" style="display:none;">
+          <label class="field-label">다듬을 글 (여러 문단이면 줄바꿈으로 구분)</label>
+          <textarea class="field" id="info-generate-draft" style="min-height:160px;" placeholder="여기에 초안을 붙여넣으세요"></textarea>
+        </div>
+
+        <div class="field-group">
+          <label class="field-label">방향 메모 (선택)</label>
+          <textarea class="field" id="info-generate-note" placeholder="예: 조금 더 담백하게, 유머 살짝 섞어서"></textarea>
+        </div>
+
+        <p id="info-generate-modal-status" style="display:none; font-size:12px; color:var(--muted); margin:-6px 0 14px;"></p>
+
+        <div class="modal-actions">
+          <button class="btn-sm" id="info-generate-cancel">취소</button>
+          <button class="btn-primary" id="info-generate-confirm">생성</button>
         </div>
       </div>
 
-      <div class="field-group" id="info-generate-draft-row" style="display:none;">
-        <label class="field-label">다듬을 글 (여러 문단이면 줄바꿈으로 구분)</label>
-        <textarea class="field" id="info-generate-draft" style="min-height:160px;" placeholder="여기에 초안을 붙여넣으세요"></textarea>
-      </div>
+      <div id="info-generate-preview-view" style="display:none;">
+        <h3>생성 결과 미리보기</h3>
+        <p class="hint">마음에 들면 적용을 눌러주세요. 적용 전까지는 INFO 페이지에 반영되지 않습니다. 필요하면 아래에서 직접 수정한 뒤 적용해도 됩니다.</p>
 
-      <div class="field-group">
-        <label class="field-label">방향 메모 (선택)</label>
-        <textarea class="field" id="info-generate-note" placeholder="예: 조금 더 담백하게, 유머 살짝 섞어서"></textarea>
-      </div>
+        <div class="field-group"><label class="field-label">인사말</label>
+          <textarea class="field" id="info-generate-preview-lead" style="min-height:80px;"></textarea>
+        </div>
+        <div class="field-group"><label class="field-label">본문 (문단 사이 빈 줄로 구분)</label>
+          <textarea class="field" id="info-generate-preview-paragraphs" style="min-height:220px; white-space:pre-wrap;"></textarea>
+        </div>
 
-      <div class="modal-actions">
-        <button class="btn-sm" id="info-generate-cancel">취소</button>
-        <button class="btn-primary" id="info-generate-confirm">생성</button>
+        <div class="modal-actions">
+          <button class="btn-sm" id="info-generate-preview-back">다시 생성</button>
+          <button class="btn-primary" id="info-generate-preview-apply">적용</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1762,12 +1822,15 @@
   }
 
   const infoGenerateModal = document.getElementById("info-generate-modal");
+  const infoGenerateSettingsView = document.getElementById("info-generate-settings-view");
+  const infoGeneratePreviewView = document.getElementById("info-generate-preview-view");
   const infoGenerateDraftRow = document.getElementById("info-generate-draft-row");
   const infoGenerateDraftEl = document.getElementById("info-generate-draft");
   const infoGenerateNoteEl = document.getElementById("info-generate-note");
+  let pendingInfoGenerateResult = null; // { mode, data } — held until the user applies or discards it
 
   function renderInfoGenerateModal(){
-    infoGenerateModal.querySelectorAll(".view-toggle").forEach(group => {
+    infoGenerateSettingsView.querySelectorAll(".view-toggle").forEach(group => {
       const key = group.dataset.group;
       group.querySelectorAll("button").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.value === infoGenerateSettings[key]);
@@ -1777,9 +1840,19 @@
     infoGenerateNoteEl.value = infoGenerateSettings.note;
   }
   function openInfoGenerateModal(){
+    pendingInfoGenerateResult = null;
+    infoGenerateSettingsView.style.display = "block";
+    infoGeneratePreviewView.style.display = "none";
     renderInfoGenerateModal();
     infoGenerateDraftEl.value = "";
     infoGenerateModal.classList.add("open");
+  }
+  function showInfoGeneratePreview(mode, data){
+    pendingInfoGenerateResult = { mode: mode, data: data };
+    document.getElementById("info-generate-preview-lead").value = data.lead || "";
+    document.getElementById("info-generate-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n\n");
+    infoGenerateSettingsView.style.display = "none";
+    infoGeneratePreviewView.style.display = "block";
   }
   infoGenerateModal.addEventListener("click", (e) => {
     const toggleBtn = e.target.closest(".view-toggle button");
@@ -1799,16 +1872,25 @@
       }
       infoGenerateSettings.note = infoGenerateNoteEl.value.trim();
       saveInfoGenerateSettings();
-      infoGenerateModal.classList.remove("open");
       runInfoGenerate(mode, draft, infoGenerateSettings.note);
+      return;
+    }
+    if(e.target.id === "info-generate-preview-back"){
+      pendingInfoGenerateResult = null;
+      infoGeneratePreviewView.style.display = "none";
+      infoGenerateSettingsView.style.display = "block";
+      return;
+    }
+    if(e.target.id === "info-generate-preview-apply"){
+      applyInfoGenerateResult();
       return;
     }
   });
 
   async function runInfoGenerate(mode, draft, note){
-    const btn = document.getElementById("generate-info-btn");
-    const status = document.getElementById("info-generate-status");
-    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
+    const confirmBtn = document.getElementById("info-generate-confirm");
+    const status = document.getElementById("info-generate-modal-status");
+    if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
     if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
 
     try{
@@ -1826,18 +1908,8 @@
       const data = await res.json().catch(() => ({}));
       if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
 
-      infoGenerateUndo = { lead: infoData.lead, paragraphs: JSON.parse(JSON.stringify(infoData.paragraphs)) };
-      if(data.lead) infoData.lead = data.lead;
-      if(Array.isArray(data.paragraphs) && data.paragraphs.length){
-        infoData.paragraphs = data.paragraphs.map(text => ({ id: uid(), type:"body", text: text }));
-      }
-      if(status){
-        status.textContent = mode === "polish"
-          ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요."
-          : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요.";
-      }
-      renderEditor();
-      saveInfoAndRefresh();
+      if(status){ status.style.display = "none"; }
+      showInfoGeneratePreview(mode, data);
     }catch(e){
       alert(
         "Generate 실패: " + e.message + "\n\n" +
@@ -1847,8 +1919,35 @@
       );
       if(status) status.style.display = "none";
     }finally{
-      setTimeout(() => { if(btn){ btn.disabled = false; btn.textContent = "GENERATE"; } }, 800);
+      if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = "생성"; }
     }
+  }
+
+  function applyInfoGenerateResult(){
+    if(!pendingInfoGenerateResult) return;
+    const mode = pendingInfoGenerateResult.mode;
+    const lead = document.getElementById("info-generate-preview-lead").value.trim();
+    const paragraphs = document.getElementById("info-generate-preview-paragraphs").value
+      .split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+
+    infoGenerateUndo = { lead: infoData.lead, paragraphs: JSON.parse(JSON.stringify(infoData.paragraphs)) };
+    if(lead) infoData.lead = lead;
+    if(paragraphs.length){
+      infoData.paragraphs = paragraphs.map(text => ({ id: uid(), type:"body", text: text }));
+    }
+
+    infoGenerateModal.classList.remove("open");
+    pendingInfoGenerateResult = null;
+
+    const status = document.getElementById("info-generate-status");
+    if(status){
+      status.style.display = "block";
+      status.textContent = mode === "polish"
+        ? "완료 — 다듬은 글로 인사말·본문을 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요."
+        : "완료 — 인사말과 본문 문단을 새로 채웠습니다. 마음에 안 들면 위 되돌리기 버튼을 눌러주세요.";
+    }
+    renderEditor();
+    saveInfoAndRefresh();
   }
 
   function undoInfoGenerate(){
@@ -2408,10 +2507,11 @@
      structure/length/photo-flow/emphasis can be set. Persisted in localStorage
      so the last-used settings carry over to the next generation. ---- */
   const DIRECTION_DEFAULTS = {
-    tone: "observer", structure: "three-act", length: "medium",
+    mode: "new", tone: "observer", structure: "three-act", length: "medium",
     shortLines: 3, photoFlow: "match-text", note: ""
   };
   let directionSettings = loadDirectionSettings();
+  let pendingDirectionResult = null; // holds the last /generate response until the user applies or discards it
 
   function loadDirectionSettings(){
     try{
@@ -2424,24 +2524,46 @@
   }
 
   const directionModal = document.getElementById("direction-modal");
+  const directionSettingsView = document.getElementById("direction-settings-view");
+  const directionPreviewView = document.getElementById("direction-preview-view");
+  const directionDraftRow = document.getElementById("direction-draft-row");
+  const directionDraftEl = document.getElementById("direction-draft");
+  const directionScratchFields = document.getElementById("direction-scratch-fields");
   const shortLinesRow = document.getElementById("short-lines-row");
   const shortLinesInput = document.getElementById("short-lines-input");
   const directionNoteEl = document.getElementById("direction-note");
 
   function renderDirectionModal(){
-    directionModal.querySelectorAll(".view-toggle").forEach(group => {
+    directionSettingsView.querySelectorAll(".view-toggle").forEach(group => {
       const key = group.dataset.group;
       group.querySelectorAll("button").forEach(btn => {
         btn.classList.toggle("active", btn.dataset.value === directionSettings[key]);
       });
     });
-    shortLinesRow.style.display = directionSettings.length === "short" ? "block" : "none";
+    const isPolish = directionSettings.mode === "polish";
+    directionDraftRow.style.display = isPolish ? "block" : "none";
+    directionScratchFields.style.display = isPolish ? "none" : "block";
+    shortLinesRow.style.display = (!isPolish && directionSettings.length === "short") ? "block" : "none";
     shortLinesInput.value = directionSettings.shortLines;
     directionNoteEl.value = directionSettings.note;
   }
   function openDirectionModal(){
+    pendingDirectionResult = null;
+    directionSettingsView.style.display = "block";
+    directionPreviewView.style.display = "none";
     renderDirectionModal();
+    directionDraftEl.value = "";
     directionModal.classList.add("open");
+  }
+  function showDirectionPreview(data){
+    pendingDirectionResult = data;
+    document.getElementById("direction-preview-title").value = data.title || "";
+    document.getElementById("direction-preview-tag").value = data.tag || "";
+    document.getElementById("direction-preview-meta").value = data.meta || "";
+    document.getElementById("direction-preview-heading").value = data.heading || "";
+    document.getElementById("direction-preview-paragraphs").value = (Array.isArray(data.paragraphs) ? data.paragraphs : []).join("\n\n");
+    directionSettingsView.style.display = "none";
+    directionPreviewView.style.display = "block";
   }
   directionModal.addEventListener("click", (e) => {
     const btn = e.target.closest(".view-toggle button");
@@ -2453,11 +2575,24 @@
     }
     if(e.target.id === "direction-cancel"){ directionModal.classList.remove("open"); return; }
     if(e.target.id === "direction-confirm"){
+      if(directionSettings.mode === "polish" && !directionDraftEl.value.trim()){
+        alert("다듬을 글을 먼저 입력해주세요.");
+        return;
+      }
       directionSettings.shortLines = Math.max(1, parseInt(shortLinesInput.value, 10) || DIRECTION_DEFAULTS.shortLines);
       directionSettings.note = directionNoteEl.value.trim();
       saveDirectionSettings();
-      directionModal.classList.remove("open");
       runGenerate();
+      return;
+    }
+    if(e.target.id === "direction-preview-back"){
+      pendingDirectionResult = null;
+      directionPreviewView.style.display = "none";
+      directionSettingsView.style.display = "block";
+      return;
+    }
+    if(e.target.id === "direction-preview-apply"){
+      applyDirectionResult();
       return;
     }
   });
@@ -3098,50 +3233,29 @@
   async function runGenerate(){
     const project = getCurrentProject();
     if(!project) return;
-    const btn = document.getElementById("generate-btn");
-    const status = document.getElementById("generate-status");
-    if(btn){ btn.disabled = true; btn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
+    const confirmBtn = document.getElementById("direction-confirm");
+    const status = document.getElementById("direction-status");
+    if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = "생성 중... (문체 학습 때문에 최대 2~3분 걸릴 수 있어요)"; }
     if(status){ status.style.display = "block"; status.textContent = "로컬 서버(server.py)에 연결 중..."; }
 
     try{
       const res = await fetch(GENERATE_SERVER + "/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: project.title, tag: project.tag, meta: project.meta, direction: directionSettings })
+        body: JSON.stringify({
+          title: project.title, tag: project.tag, meta: project.meta,
+          direction: directionSettings,
+          mode: directionSettings.mode,
+          draft: directionSettings.mode === "polish" ? directionDraftEl.value.trim() : ""
+        })
       });
       if(!res.ok){
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
       }
       const data = await res.json();
-
-      snapshot();
-      if(data.title) project.title = data.title;
-      if(data.tag) project.tag = data.tag;
-      if(data.meta) project.meta = data.meta;
-      if(!project.blocks.length) project.blocks.push(newBlock());
-      const block = project.blocks[0];
-      if(data.heading) block.heading = data.heading;
-      if(Array.isArray(data.paragraphs) && data.paragraphs.length) block.paragraphs = data.paragraphs;
-
-      let addedImages = 0;
-      if(Array.isArray(data.images) && data.images.length){
-        data.images.forEach(relPath => {
-          if(block.images.some(im => im.relPath === relPath)) return;
-          const name = relPath.split("/").pop();
-          block.images.push({ id: uid(), relPath: relPath, name: name, url: relPath });
-          addedImages++;
-        });
-        if(!project.heroImage && block.images[0]) project.heroImage = cloneAsHeroImage(block.images[0]);
-      }
-
-      if(status){
-        status.textContent = addedImages
-          ? ("완료 — \"" + data.imageFolder + "\" 폴더에서 사진 " + addedImages + "장을 불러왔습니다.")
-          : "완료 — 글은 채웠지만, 이름이 일치하는 사진 폴더를 찾지 못했어요. 사진은 직접 추가해주세요.";
-      }
-      renderEditor();
-      saveAndRefresh();
+      if(status){ status.style.display = "none"; }
+      showDirectionPreview(data);
     }catch(e){
       alert(
         "Generate 실패: " + e.message + "\n\n" +
@@ -3149,9 +3263,55 @@
         "터미널에서 이 폴더로 이동한 뒤 아래 명령을 실행하고 다시 시도하세요:\n\n" +
         "  python3 server.py\n"
       );
-      if(btn){ btn.disabled = false; btn.textContent = "GENERATE"; }
       if(status){ status.style.display = "none"; }
+    }finally{
+      if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = "생성"; }
     }
+  }
+
+  function applyDirectionResult(){
+    const project = getCurrentProject();
+    if(!project || !pendingDirectionResult) return;
+    const data = pendingDirectionResult;
+    const title = document.getElementById("direction-preview-title").value.trim();
+    const tag = document.getElementById("direction-preview-tag").value.trim();
+    const meta = document.getElementById("direction-preview-meta").value.trim();
+    const heading = document.getElementById("direction-preview-heading").value.trim();
+    const paragraphs = document.getElementById("direction-preview-paragraphs").value
+      .split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+
+    snapshot();
+    if(title) project.title = title;
+    if(tag) project.tag = tag;
+    if(meta) project.meta = meta;
+    if(!project.blocks.length) project.blocks.push(newBlock());
+    const block = project.blocks[0];
+    if(heading) block.heading = heading;
+    if(paragraphs.length) block.paragraphs = paragraphs;
+
+    let addedImages = 0;
+    if(Array.isArray(data.images) && data.images.length){
+      data.images.forEach(relPath => {
+        if(block.images.some(im => im.relPath === relPath)) return;
+        const name = relPath.split("/").pop();
+        block.images.push({ id: uid(), relPath: relPath, name: name, url: relPath });
+        addedImages++;
+      });
+      if(!project.heroImage && block.images[0]) project.heroImage = cloneAsHeroImage(block.images[0]);
+    }
+
+    directionModal.classList.remove("open");
+    pendingDirectionResult = null;
+
+    const status = document.getElementById("generate-status");
+    if(status){
+      status.style.display = "block";
+      status.textContent = addedImages
+        ? ("완료 — \"" + data.imageFolder + "\" 폴더에서 사진 " + addedImages + "장을 불러왔습니다.")
+        : "완료 — 글은 채웠지만, 이름이 일치하는 사진 폴더를 찾지 못했어요. 사진은 직접 추가해주세요.";
+    }
+    renderEditor();
+    saveAndRefresh();
   }
 
   async function runSave(){
