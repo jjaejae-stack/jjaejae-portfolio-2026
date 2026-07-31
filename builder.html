@@ -810,6 +810,13 @@
     if(/^https?:\/\//i.test(src)) return true;
     return /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(src);
   }
+  /* File.name/webkitRelativePath can come back Unicode-decomposed (NFD) for non-Latin
+     filenames (seen with Korean folder names) even though the actual file on disk/in
+     git is precomposed (NFC) — visually identical but byte-different strings, so the
+     relPath we'd store wouldn't match the real filename and 404s on a case/byte-exact
+     host like Vercel even though it resolves fine locally on macOS. Normalize every
+     File-derived name to NFC before it ever becomes a relPath. */
+  function nfc(s){ return (s || "").normalize("NFC"); }
   /* im.url may be a blob: URL with no extension (freshly uploaded video), so video detection
      always runs against relPath/name — the url is only ever used as the actual playback src. */
   function galleryFrameInner(im){
@@ -2331,8 +2338,8 @@
        though the file is sitting right there in the project folder on disk. */
     const inferredFolder = inferProjectFolder(project);
     files.forEach(file => {
-      const relPath = file.webkitRelativePath || (inferredFolder ? inferredFolder + "/" + file.name : file.name);
-      const im = { id:uid(), file:file, relPath: relPath, name:file.name };
+      const relPath = nfc(file.webkitRelativePath || (inferredFolder ? inferredFolder + "/" + file.name : file.name));
+      const im = { id:uid(), file:file, relPath: relPath, name:nfc(file.name) };
       im.url = URL.createObjectURL(file);
       block.images.push(im);
       if(!project.heroImage) project.heroImage = cloneAsHeroImage(im);
@@ -2352,7 +2359,7 @@
     heroFileInput.value = "";
     if(!project || !file) return;
     snapshot();
-    const im = { id: uid(), file: file, relPath: file.name, name: file.name, url: URL.createObjectURL(file) };
+    const im = { id: uid(), file: file, relPath: nfc(file.name), name: nfc(file.name), url: URL.createObjectURL(file) };
     project.heroImage = im;
     renderEditor();
     saveAndRefresh();
@@ -2374,7 +2381,7 @@
         const res = await fetch(GENERATE_SERVER + "/upload-project-image", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl: reader.result, folder: inferProjectFolder(project), filename: file.name })
+          body: JSON.stringify({ dataUrl: reader.result, folder: inferProjectFolder(project), filename: nfc(file.name) })
         });
         const data = await res.json().catch(() => ({}));
         if(!res.ok || !data.ok) return;
@@ -2974,7 +2981,7 @@
         reader.onerror = () => reject(reader.error);
         reader.readAsDataURL(videoPendingFile);
       });
-      body = { mode: "upload", dataUrl: dataUrl, folder: inferProjectFolder(project), filename: videoPendingFile.name };
+      body = { mode: "upload", dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(videoPendingFile.name) };
     } else {
       const url = videoLinkInput.value.trim();
       if(!url){ alert("동영상 링크를 입력하세요."); return; }
