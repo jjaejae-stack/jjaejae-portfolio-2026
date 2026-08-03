@@ -848,6 +848,21 @@
     const col = i % cols, row = Math.floor(i / cols);
     return { x: col * w, y: row * h, w: w, h: h };
   }
+  /* Groups an evenly-columned free-grid's stored positions into row/col indexes
+     (by distinct y, then by x within that y) so layoutFreeGrid can lay each row
+     out at runtime from the photos' real aspect ratios instead of the fixed
+     percentage boxes (which only matter as a pre-JS fallback). Mirrors index.html —
+     keep both in sync. */
+  function gridPositionIndexes(positions){
+    const round2 = n => Math.round((n||0) * 100) / 100;
+    const ys = [...new Set(positions.map(p => round2(p.y)))].sort((a,b) => a-b);
+    const rows = positions.map(p => ys.indexOf(round2(p.y)));
+    const cols = positions.map((p, i) => {
+      const sameRowXs = [...new Set(positions.filter((_, j) => rows[j] === rows[i]).map(q => round2(q.x)))].sort((a,b) => a-b);
+      return sameRowXs.indexOf(round2(p.x));
+    });
+    return { rows, cols };
+  }
   /* "1장 크게 + 나머지 모아보기" free-layout preset — first photo spans the full width
      across the top, the rest fill an even grid underneath. Still just produces plain
      Free-mode positions, so it reuses the exact same rendering (preview + published
@@ -890,11 +905,16 @@
       : "";
     if(m === "free"){
       const count = photoIms.length || 1;
+      const positions = photoIms.map((im, i) => im.free || defaultFreePos(i, photoIms.length));
+      const isGrid = positions.every(p => Math.abs((p.w||0) - (positions[0].w||0)) < 0.5);
+      const rowClass = isGrid ? " mode-free-grid" : "";
+      const grid = isGrid ? gridPositionIndexes(positions) : null;
       const frames = photoIms.map((im, i) => {
-        const pos = im.free || defaultFreePos(i, photoIms.length);
-        return '<div class="gallery-frame" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;">' + galleryFrameInner(im) + '</div>';
+        const pos = positions[i];
+        const gridAttrs = isGrid ? ' data-row="' + grid.rows[i] + '" data-col="' + grid.cols[i] + '"' : "";
+        return '<div class="gallery-frame" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;"' + gridAttrs + '>' + galleryFrameInner(im) + '</div>';
       }).join("");
-      const photoHTML = '<div class="gallery mode-free" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
+      const photoHTML = '<div class="gallery mode-free' + rowClass + '" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
         + '<div class="gallery-track">' + frames + '</div>'
         + '</div>';
       return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
@@ -3940,6 +3960,7 @@
     .gallery.mode-multi.direction-column{height:auto!important;max-height:none!important;min-height:0;}
     .gallery.mode-multi.direction-column .gallery-track{height:auto;}
     .gallery.mode-free{position:relative;height:60vh;max-height:640px;min-height:280px;cursor:default;background:#111;}
+    .gallery.mode-free-grid{height:auto;max-height:none;min-height:0;}
     .gallery.mode-free .gallery-track{position:relative;height:100%;display:block;}
     .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
     .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
@@ -4061,6 +4082,51 @@
     '    tries++;',
     '    if(tries < 60) requestAnimationFrame(poll);',
     '  })();',
+    '}',
+    'function layoutFreeGrid(gallery){',
+    '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
+    '  if(!frames.length) return;',
+    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
+    '  var remaining = mediaEls.length;',
+    '  function onReady(){ remaining--; if(remaining <= 0) apply(); }',
+    '  function apply(){',
+    '    var rowsMap = {};',
+    '    frames.forEach(function(f, i){',
+    '      var r = f.dataset.row || "0";',
+    '      if(!rowsMap[r]) rowsMap[r] = [];',
+    '      rowsMap[r].push({ i: i, col: parseInt(f.dataset.col || "0", 10) });',
+    '    });',
+    '    var rowKeys = Object.keys(rowsMap).sort(function(a,b){ return parseInt(a,10) - parseInt(b,10); });',
+    '    var availWidth = gallery.parentElement.clientWidth;',
+    '    if(!gallery.dataset.baseRowHeight){',
+    '      gallery.dataset.baseRowHeight = (gallery.clientHeight || (280 * rowKeys.length)) / rowKeys.length;',
+    '    }',
+    '    var baseHeight = parseFloat(gallery.dataset.baseRowHeight);',
+    '    var top = 0;',
+    '    rowKeys.forEach(function(rk){',
+    '      var entries = rowsMap[rk].sort(function(a,b){ return a.col - b.col; });',
+    '      var ratios = entries.map(function(e){ return mediaRatio(mediaEls[e.i]); });',
+    '      var height = baseHeight;',
+    '      var totalWidth = ratios.reduce(function(sum, r){ return sum + height*r; }, 0);',
+    '      if(availWidth > 0 && totalWidth > 0){',
+    '        height = height * (availWidth / totalWidth);',
+    '        totalWidth = availWidth;',
+    '      }',
+    '      var left = 0;',
+    '      entries.forEach(function(e, j){',
+    '        var w = height * ratios[j];',
+    '        var f = frames[e.i];',
+    '        f.style.left = left + "px";',
+    '        f.style.top = top + "px";',
+    '        f.style.width = w + "px";',
+    '        f.style.height = height + "px";',
+    '        left += w;',
+    '      });',
+    '      top += height;',
+    '    });',
+    '    gallery.style.height = top + "px";',
+    '  }',
+    '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
     'function layoutFrames(gallery, frames, direction){',
     '  if(!frames.length) return;',
@@ -4202,7 +4268,7 @@
     'function initGallery(g){',
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
-    '  if(mode === "free") return;',
+    '  if(mode === "free"){ if(g.classList.contains("mode-free-grid")) layoutFreeGrid(g); return; }',
     '  if(mode !== "custom" && perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
     '  showGalleryPage(g, 0);',
     '  g.addEventListener("click", function(){',
@@ -4245,7 +4311,10 @@
     'window.addEventListener("resize", function(){',
     '  document.querySelectorAll(".gallery").forEach(function(g){',
     '    var mode = g.dataset.mode || "1";',
-    '    if(mode === "free") return;',
+    '    if(mode === "free"){',
+    '      if(g.classList.contains("mode-free-grid")){ delete g.dataset.baseRowHeight; layoutFreeGrid(g); }',
+    '      return;',
+    '    }',
     '    delete g.dataset.baseHeight;',
     '    g.style.height = "";',
     '    if(mode === "1"){ g.querySelectorAll(".gallery-frame").forEach(function(f){ delete f.dataset.sized; }); activateGalleryFrame(g, parseInt(g.dataset.index, 10)); }',
