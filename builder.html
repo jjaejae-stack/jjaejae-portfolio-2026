@@ -3955,7 +3955,6 @@
     .gallery.mode-multi.direction-column .gallery-frame{display:none;}
     .gallery.mode-multi.direction-column .gallery-frame.visible{display:block;}
     .gallery.mode-multi .gallery-frame img,.gallery.mode-multi .gallery-frame video,.gallery.mode-multi .gallery-frame iframe{width:100%;height:100%;display:block;border:0;}
-    .gallery.mode-multi .gallery-track{gap:2px;}
     .gallery.direction-column .gallery-track{flex-direction:column;}
     .gallery.mode-multi.direction-column{height:auto!important;max-height:none!important;min-height:0;}
     .gallery.mode-multi.direction-column .gallery-track{height:auto;}
@@ -3997,6 +3996,9 @@
   `;
 
   const PREVIEW_RUNTIME_JS = [
+    'function defaultBaseHeight(){',
+    '  return Math.max(280, Math.min(640, window.innerHeight * 0.6));',
+    '}',
     'function sizeGalleryFrame(gallery, frame){',
     '  var media = frame.querySelector("img, video, iframe");',
     '  if(!media || !isMediaReady(media)) return null;',
@@ -4099,7 +4101,7 @@
     '    var rowKeys = Object.keys(rowsMap).sort(function(a,b){ return parseInt(a,10) - parseInt(b,10); });',
     '    var availWidth = gallery.parentElement.clientWidth;',
     '    if(!gallery.dataset.baseRowHeight){',
-    '      gallery.dataset.baseRowHeight = (gallery.clientHeight || (280 * rowKeys.length)) / rowKeys.length;',
+    '      gallery.dataset.baseRowHeight = defaultBaseHeight() / rowKeys.length;',
     '    }',
     '    var baseHeight = parseFloat(gallery.dataset.baseRowHeight);',
     '    var top = 0;',
@@ -4147,7 +4149,7 @@
     '      gallery.style.width = width + "px";',
     '      gallery.style.height = totalHeight + "px";',
     '    } else {',
-    '      if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
+    '      if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = defaultBaseHeight(); }',
     '      var height = parseFloat(gallery.dataset.baseHeight);',
     '      var availWidth = gallery.parentElement.clientWidth;',
     '      var totalWidth = ratios.reduce(function(sum, r){ return sum + height*r; }, 0);',
@@ -4191,7 +4193,7 @@
     'function computeMultiPageLayout(gallery, frames){',
     '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
     '  var ratios = mediaEls.map(mediaRatio);',
-    '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
+    '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = defaultBaseHeight(); }',
     '  var baseHeight = parseFloat(gallery.dataset.baseHeight);',
     '  var availWidth = gallery.parentElement.clientWidth;',
     '  var groupSizes = getPageGroupSizes(gallery, frames.length);',

@@ -476,7 +476,11 @@
   .gallery.mode-multi.direction-column .gallery-frame{display:none;}
   .gallery.mode-multi.direction-column .gallery-frame.visible{display:block;}
   .gallery.mode-multi .gallery-frame img, .gallery.mode-multi .gallery-frame video, .gallery.mode-multi .gallery-frame iframe{width:100%; height:100%; display:block; border:0;}
-  .gallery.mode-multi .gallery-track{gap:2px;}
+  /* no gap here on purpose — showGalleryPageRow computes each page's slide offset
+     from cumulative frame WIDTHS only; a flex `gap` would silently drift the
+     track's actual layout away from that math (worse with every extra frame),
+     leaking a sliver of the neighboring frame at the edge of whichever page is
+     "visible" through the gallery's overflow:hidden clip. */
   .gallery.direction-column .gallery-track{flex-direction:column;}
   /* 단일(롤링) 갤러리용 고정 높이(60vh/최소 280px)가 mode-multi에도 그대로 상속되면, 여러 장을
      원본 비율대로 한 행/열에 채운 실제 콘텐츠 높이가 그보다 작을 때 아래쪽에 빈 공간(검은 여백)이
@@ -2121,6 +2125,19 @@
      each frame's real offsetLeft and shows two half-frames stuck together (the mobile
      swipe glitch) or a box that doesn't shrink to the next image (the "last photo"
      crop). Sizing each frame independently, once, removes that feedback loop. */
+  /* Mirrors the single-photo gallery's CSS (.gallery{height:60vh;max-height:640px;
+     min-height:280px}) as a JS formula, for containers whose CSS height is `auto`
+     (mode-multi/mode-free-grid) — their real gallery.clientHeight is meaningless as
+     a starting point before any frame has been sized yet: with every frame present
+     and unsized on first paint, an img/video with width/height:100% of an
+     indeterminate parent falls back to ITS OWN natural pixel size, so whichever
+     frame happens to have the tallest natural height (e.g. a real photo, easily
+     1500px+) gets captured as baseHeight — producing wildly oversized pages for
+     the rest of that gallery's life. sizeGalleryFrame below doesn't need this: its
+     .gallery keeps the explicit CSS height, so clientHeight is trustworthy there. */
+  function defaultBaseHeight(){
+    return Math.max(280, Math.min(640, window.innerHeight * 0.6));
+  }
   function sizeGalleryFrame(gallery, frame){
     const media = frame.querySelector("img, video, iframe");
     if(!media || !isMediaReady(media)) return null;
@@ -2271,7 +2288,7 @@
       const rowKeys = Object.keys(rowsMap).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
       const availWidth = gallery.parentElement.clientWidth;
       if(!gallery.dataset.baseRowHeight){
-        gallery.dataset.baseRowHeight = (gallery.clientHeight || (280 * rowKeys.length)) / rowKeys.length;
+        gallery.dataset.baseRowHeight = defaultBaseHeight() / rowKeys.length;
       }
       const baseHeight = parseFloat(gallery.dataset.baseRowHeight);
       let top = 0;
@@ -2323,7 +2340,7 @@
         gallery.style.width = width + "px";
         gallery.style.height = totalHeight + "px";
       } else {
-        if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
+        if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = defaultBaseHeight(); }
         let height = parseFloat(gallery.dataset.baseHeight);
         const availWidth = gallery.parentElement.clientWidth;
         let totalWidth = ratios.reduce((sum, r) => sum + height*r, 0);
@@ -2383,7 +2400,7 @@
   function computeMultiPageLayout(gallery, frames){
     const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
     const ratios = mediaEls.map(mediaRatio);
-    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
+    if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = defaultBaseHeight(); }
     const baseHeight = parseFloat(gallery.dataset.baseHeight);
     const availWidth = gallery.parentElement.clientWidth;
     const groupSizes = getPageGroupSizes(gallery, frames.length);
