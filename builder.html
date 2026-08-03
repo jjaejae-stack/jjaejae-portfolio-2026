@@ -291,6 +291,12 @@
   .layout-preview-wrap{background:color-mix(in srgb, var(--fg) 6%, var(--bg)); padding:16px; margin:14px 0;}
   .layout-preview{position:relative; width:100%; height:300px; background:#111; overflow:hidden; display:flex;}
   .layout-preview.free-canvas{display:block;}
+  .layout-preview.custom-strip{overflow-x:auto; overflow-y:hidden; align-items:stretch;}
+  .layout-preview.custom-strip .layout-frame{flex:0 0 110px; width:110px; height:100%;}
+  .layout-break{flex:0 0 28px; width:28px; height:100%; display:flex; align-items:center; justify-content:center; cursor:pointer; background:none; border:0; padding:0;}
+  .layout-break .bar{width:3px; height:60%; background:rgba(255,255,255,.3); border-radius:2px; transition:background .15s, width .15s;}
+  .layout-break.merged .bar{width:16px; height:16px; border-radius:50%; background:var(--accent);}
+  .layout-break:hover .bar{background:var(--accent);}
   .layout-frame{background:#000; overflow:hidden; min-width:0; min-height:0; display:flex; align-items:center; justify-content:center;}
   .layout-frame img{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; display:block;}
   .layout-frame .video-icon{display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#fff; font-size:20px; background:#222;}
@@ -672,6 +678,7 @@
         <button type="button" data-value="2">2</button>
         <button type="button" data-value="3">3</button>
         <button type="button" data-value="all">All</button>
+        <button type="button" data-value="custom">직접 지정</button>
         <button type="button" data-value="free">Free</button>
       </div>
       <div class="field-group" id="layout-direction-row" style="display:none;">
@@ -685,6 +692,7 @@
         <div class="layout-preview" id="layout-preview"></div>
       </div>
       <p class="hint" id="layout-hint">Free 모드에서는 사진을 드래그해서 위치를, 우하단 모서리를 드래그해서 크기를 자유롭게 조절할 수 있습니다.</p>
+      <p class="hint" id="layout-custom-hint" style="display:none;">사진 사이의 구분선을 클릭해서 묶고 나눌 수 있습니다 — 붙어있으면 한 페이지로 같이 보이고, 나뉘어 있으면 클릭할 때 다음 페이지로 넘어갑니다. (예: 1장 | 3장 3장 | → 1장은 혼자, 나머지는 3장씩 묶어서 보임)</p>
       <div class="field-group" id="layout-preset-row" style="display:none;">
         <label class="field-label">프리셋</label>
         <button type="button" class="btn-sm" id="layout-preset-hero">1장 크게 + 나머지 모아보기</button>
@@ -861,12 +869,13 @@
     const dirLabel = (block.galleryDirection === "column") ? "세로" : "가로";
     if(mode === "1") return "1장씩";
     if(mode === "all") return "한번에 모두 · " + dirLabel;
+    if(mode === "custom") return (Array.isArray(block.galleryGroups) && block.galleryGroups.length ? block.galleryGroups.join("+") + "장" : "직접 지정") + " · " + dirLabel;
     return mode + "장씩 · " + dirLabel;
   }
   /* mode: "1" (default, one at a time — original filmstrip behavior), "2"/"3" (N per page,
      click advances a page), "all" (every photo shown at once, no click needed), "free"
      (each photo freely positioned/sized via freeLayout, index-aligned with images). */
-  function galleryBlockHTML(images, blockKey, mode, direction){
+  function galleryBlockHTML(images, blockKey, mode, direction, groups){
     const m = mode || "1";
     const dir = direction === "column" ? "column" : "row";
     /* Video and photo items are always split apart — a block's galleryMode/
@@ -895,17 +904,19 @@
       return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
     }
     if(videoIms.length && photoIms.length){
-      const photoHTML = galleryBlockHTML(photoIms, blockKey + "-photos", m, dir);
+      const photoHTML = galleryBlockHTML(photoIms, blockKey + "-photos", m, dir, groups);
       return '<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>';
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
     const count = images.length || 1;
-    const perPage = m === "1" ? 1 : parseInt(m, 10);
-    const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
+    const isCustom = m === "custom" && Array.isArray(groups) && groups.length;
+    const perPage = isCustom ? (groups[0] || 1) : (m === "1" ? 1 : parseInt(m, 10));
+    const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
+    const groupsAttr = isCustom ? ' data-groups="' + JSON.stringify(groups.map(function(n){ return parseInt(n,10)||1; })) + '"' : "";
     const frames = images.map(galleryFrameHTML).join("");
     const counterEnd = Math.min(perPage, images.length || 1);
-    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '">'
+    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '"' + groupsAttr + '>'
       + '<div class="gallery-track">' + frames + '</div>'
       + '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>'
       + '<div class="gallery-hint">Click for next</div>'
@@ -3050,6 +3061,37 @@
   function layoutPhotoImages(block){
     return (block.images || []).filter(im => !isVideoPath(im.relPath || im.name));
   }
+  /* "직접 지정" (custom) mode lets each page mix different group sizes (e.g. one
+     photo alone, then the next three together) instead of one fixed N for the
+     whole block. Stored as block.galleryGroups (page sizes, e.g. [1,3,2]);
+     staged in the modal as `breaks` — a bool per gap between adjacent photos,
+     true = separate pages, false = merged into the same page — since toggling
+     one gap at a time in the UI is simpler than editing page-size numbers. */
+  function groupsToBreaks(groups, total){
+    const breaks = new Array(Math.max(0, total-1)).fill(true);
+    if(Array.isArray(groups) && groups.length){
+      let idx = 0;
+      groups.forEach(g => {
+        const count = Math.max(1, parseInt(g, 10) || 1);
+        for(let k = 1; k < count && idx+k-1 < breaks.length; k++){ breaks[idx+k-1] = false; }
+        idx += count;
+      });
+    }
+    return breaks;
+  }
+  function breaksToGroups(breaks){
+    const groups = [];
+    let count = 1;
+    breaks.forEach(b => { if(b){ groups.push(count); count = 1; } else { count++; } });
+    groups.push(count);
+    return groups;
+  }
+  function ensureBreaksLength(breaks, total){
+    const need = Math.max(0, total-1);
+    const arr = (breaks || []).slice(0, need);
+    while(arr.length < need) arr.push(true);
+    return arr;
+  }
   function openLayoutModal(blockId){
     const project = getCurrentProject();
     const block = project && project.blocks.find(b => b.id === blockId);
@@ -3058,7 +3100,8 @@
     const photoIms = layoutPhotoImages(block);
     const free = {};
     photoIms.forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, photoIms.length); });
-    layoutDraft = { mode: block.galleryMode || "1", direction: block.galleryDirection || "row", free: free };
+    const breaks = ensureBreaksLength(groupsToBreaks(block.galleryGroups, photoIms.length), photoIms.length);
+    layoutDraft = { mode: block.galleryMode || "1", direction: block.galleryDirection || "row", free: free, breaks: breaks };
     renderLayoutModal();
     layoutModal.classList.add("open");
   }
@@ -3074,6 +3117,7 @@
     layoutDirectionRow.style.display = showDirection ? "block" : "none";
     layoutHint.style.display = layoutDraft.mode === "free" ? "block" : "none";
     layoutPresetRow.style.display = layoutDraft.mode === "free" ? "block" : "none";
+    document.getElementById("layout-custom-hint").style.display = layoutDraft.mode === "custom" ? "block" : "none";
     const project = getCurrentProject();
     const block = project.blocks.find(b => b.id === layoutTargetBlockId);
     const hasVideo = (block.images || []).some(im => isVideoPath(im.relPath || im.name));
@@ -3108,6 +3152,20 @@
       return;
     }
     const mode = layoutDraft.mode;
+    if(mode === "custom"){
+      layoutPreviewEl.classList.add("custom-strip");
+      layoutDraft.breaks = ensureBreaksLength(layoutDraft.breaks, images.length);
+      const parts = [];
+      images.forEach((im, i) => {
+        parts.push('<div class="layout-frame">' + layoutPreviewThumb(im) + '</div>');
+        if(i < images.length - 1){
+          const merged = !layoutDraft.breaks[i];
+          parts.push('<button type="button" class="layout-break' + (merged ? " merged" : "") + '" data-break-index="' + i + '" title="' + (merged ? "클릭하면 나눔" : "클릭하면 합침") + '"><span class="bar"></span></button>');
+        }
+      });
+      layoutPreviewEl.innerHTML = parts.join("");
+      return;
+    }
     const perPage = mode === "all" ? images.length : parseInt(mode, 10);
     const shown = images.slice(0, perPage);
     const direction = layoutDraft.direction;
@@ -3126,6 +3184,14 @@
     if(!btn) return;
     layoutDraft.mode = btn.dataset.value;
     renderLayoutModal();
+  });
+  layoutPreviewEl.addEventListener("click", (e) => {
+    if(!layoutDraft || layoutDraft.mode !== "custom") return;
+    const btn = e.target.closest(".layout-break");
+    if(!btn) return;
+    const idx = parseInt(btn.dataset.breakIndex, 10);
+    layoutDraft.breaks[idx] = !layoutDraft.breaks[idx];
+    renderLayoutPreview();
   });
   layoutDirectionToggle.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -3155,6 +3221,10 @@
       layoutPhotoImages(block).forEach(im => {
         if(layoutDraft.free[im.id]) im.free = layoutDraft.free[im.id];
       });
+    }
+    if(layoutDraft.mode === "custom"){
+      const photoIms = layoutPhotoImages(block);
+      block.galleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, photoIms.length));
     }
     renderEditor();
     saveAndRefresh();
@@ -4025,25 +4095,50 @@
     '  }',
     '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
-    'function updateMultiCounter(gallery, page, perPage, visibleCount, total){',
-    '  var start = page*perPage + 1;',
-    '  var end = page*perPage + visibleCount;',
+    'function updateMultiCounter(gallery, startIndex, visibleCount, total){',
+    '  var start = startIndex + 1;',
+    '  var end = startIndex + visibleCount;',
     '  var counter = gallery.querySelector(".gallery-counter");',
     '  if(counter) counter.textContent = (end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")) + " / " + String(total).padStart(2,"0");',
     '}',
-    'function computeMultiPageLayout(gallery, frames, perPage){',
+    'function getPageGroupSizes(gallery, total){',
+    '  if(gallery.dataset.groups){',
+    '    try{',
+    '      var arr = JSON.parse(gallery.dataset.groups);',
+    '      if(Array.isArray(arr) && arr.length){',
+    '        var sizes = [];',
+    '        var consumed = 0;',
+    '        arr.forEach(function(n){',
+    '          var c = Math.max(1, Math.min(parseInt(n, 10) || 1, total - consumed));',
+    '          if(c > 0){ sizes.push(c); consumed += c; }',
+    '        });',
+    '        while(consumed < total){ sizes.push(1); consumed++; }',
+    '        if(sizes.length) return sizes;',
+    '      }',
+    '    }catch(e){}',
+    '  }',
+    '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
+    '  var sizes2 = [];',
+    '  for(var i = 0; i < total; i += perPage) sizes2.push(Math.min(perPage, total - i));',
+    '  return sizes2;',
+    '}',
+    'function computeMultiPageLayout(gallery, frames){',
     '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
     '  var ratios = mediaEls.map(mediaRatio);',
     '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }',
     '  var baseHeight = parseFloat(gallery.dataset.baseHeight);',
     '  var availWidth = gallery.parentElement.clientWidth;',
+    '  var groupSizes = getPageGroupSizes(gallery, frames.length);',
     '  var frameSizes = [];',
     '  var pageOffsets = [];',
     '  var pageSizes = [];',
-    '  var cumulative = 0;',
-    '  for(var i = 0; i < frames.length; i += perPage){',
+    '  var pageStarts = [];',
+    '  var cumulative = 0, cursor = 0;',
+    '  groupSizes.forEach(function(count){',
     '    var idxs = [];',
-    '    for(var j = i; j < Math.min(i + perPage, frames.length); j++) idxs.push(j);',
+    '    for(var j = cursor; j < Math.min(cursor + count, frames.length); j++) idxs.push(j);',
+    '    pageStarts.push(cursor);',
+    '    cursor += count;',
     '    var height = baseHeight;',
     '    var totalWidth = idxs.reduce(function(sum, idx){ return sum + height*ratios[idx]; }, 0);',
     '    if(availWidth > 0 && totalWidth > availWidth){',
@@ -4054,11 +4149,10 @@
     '    pageOffsets.push(cumulative);',
     '    pageSizes.push({ width: totalWidth, height: height, count: idxs.length });',
     '    cumulative += totalWidth;',
-    '  }',
-    '  return { frameSizes: frameSizes, pageOffsets: pageOffsets, pageSizes: pageSizes };',
+    '  });',
+    '  return { frameSizes: frameSizes, pageOffsets: pageOffsets, pageSizes: pageSizes, pageStarts: pageStarts };',
     '}',
     'function showGalleryPageRow(gallery, page){',
-    '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
     '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
     '  var total = frames.length;',
     '  gallery.dataset.page = page;',
@@ -4066,7 +4160,7 @@
     '  var remaining = mediaEls.length;',
     '  function onReady(){ remaining--; if(remaining <= 0) apply(); }',
     '  function apply(){',
-    '    var layout = computeMultiPageLayout(gallery, frames, perPage);',
+    '    var layout = computeMultiPageLayout(gallery, frames);',
     '    frames.forEach(function(f, i){',
     '      var sz = layout.frameSizes[i]; if(!sz) return;',
     '      f.style.width = sz.width + "px";',
@@ -4090,7 +4184,7 @@
     '      gallery.style.transition = prevTransition;',
     '    } else { setSize(); }',
     '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + offset + "px)";',
-    '    updateMultiCounter(gallery, page, perPage, pageSize.count, total);',
+    '    updateMultiCounter(gallery, layout.pageStarts[page] || 0, pageSize.count, total);',
     '  }',
     '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
@@ -4102,18 +4196,18 @@
     '  gallery.dataset.page = page;',
     '  frames.forEach(function(f, i){ f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage); });',
     '  var visible = frames.filter(function(f){ return f.classList.contains("visible"); });',
-    '  updateMultiCounter(gallery, page, perPage, visible.length, total);',
+    '  updateMultiCounter(gallery, page*perPage, visible.length, total);',
     '  layoutFrames(gallery, visible, "column");',
     '}',
     'function initGallery(g){',
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
     '  if(mode === "free") return;',
-    '  if(perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
+    '  if(mode !== "custom" && perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
     '  showGalleryPage(g, 0);',
     '  g.addEventListener("click", function(){',
     '    var total = parseInt(g.dataset.count, 10);',
-    '    var pages = Math.ceil(total / perPage);',
+    '    var pages = getPageGroupSizes(g, total).length;',
     '    var page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;',
     '    showGalleryPage(g, page);',
     '  });',
@@ -4174,7 +4268,7 @@
       return '<div class="p-block">'
         + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
         + heading + paras
-        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection) : "")
+        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.galleryGroups) : "")
         + '</div>';
     }).join("");
 
@@ -4373,6 +4467,7 @@
       if(b.heading) L.push("      heading:" + JSON.stringify(b.heading) + ",");
       if(b.galleryMode && b.galleryMode !== "1") L.push("      galleryMode:" + JSON.stringify(b.galleryMode) + ",");
       if(b.galleryDirection === "column") L.push("      galleryDirection:" + JSON.stringify(b.galleryDirection) + ",");
+      if(b.galleryMode === "custom" && Array.isArray(b.galleryGroups) && b.galleryGroups.length) L.push("      galleryGroups:" + JSON.stringify(b.galleryGroups) + ",");
       L.push("      images:[");
       b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
       L.push("      ],");
