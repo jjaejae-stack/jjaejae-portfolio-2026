@@ -2036,6 +2036,13 @@
     const videoHTML = videoSrcs.length
       ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src)}</div>`).join("")}</div>`
       : "";
+    /* Stack order follows the array: whichever type (photo or video) appears
+       first in the original images list renders on top. Only their relative
+       order matters here — layout/sizing stays fully separated as above. */
+    const firstVideoIdx = images.findIndex(isVideoSrc);
+    const firstPhotoIdx = images.findIndex(src => !isVideoSrc(src));
+    const photoFirst = firstPhotoIdx !== -1 && (firstVideoIdx === -1 || firstPhotoIdx < firstVideoIdx);
+    const stack = (a, b) => photoFirst ? b + a : a + b;
     if(m === "free"){
       const count = photoSrcs.length || 1;
       const positions = photoSrcs.map((src, i) => photoFreeLayout[i] || defaultFreePos(i, photoSrcs.length));
@@ -2059,15 +2066,15 @@
       <div class="gallery mode-free${rowClass}" data-block="${blockId}" data-count="${count}" data-mode="free">
         <div class="gallery-track">${frames}</div>
       </div>`;
-      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
+      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(m === "all"){
       const photoHTML = photoSrcs.length ? galleryHTML(photoSrcs, blockId + "-photos", "1", dir) : "";
-      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
+      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(videoSrcs.length && photoSrcs.length){
       const photoHTML = galleryHTML(photoSrcs, blockId + "-photos", m, dir, null, groups);
-      return `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>`;
+      return `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
