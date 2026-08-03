@@ -1924,7 +1924,7 @@
     return `<span class="social-icon-mask" style="-webkit-mask-image:url(${u("icons/"+file)});mask-image:url(${u("icons/"+file)});"></span>`;
   }
 
-  function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout){
+  function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout, groups){
     const m = galleryMode || "1";
     const dir = galleryDirection === "column" ? "column" : "row";
     /* Video and photo items are always split apart — a block's galleryMode/
@@ -1961,18 +1961,20 @@
       return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
     }
     if(videoSrcs.length && photoSrcs.length){
-      const photoHTML = galleryHTML(photoSrcs, blockId + "-photos", m, dir);
+      const photoHTML = galleryHTML(photoSrcs, blockId + "-photos", m, dir, null, groups);
       return `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>`;
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
     const count = images.length || 1;
-    const perPage = m === "1" ? 1 : parseInt(m, 10);
-    const modeClass = perPage > 1 ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
+    const isCustom = m === "custom" && Array.isArray(groups) && groups.length;
+    const perPage = isCustom ? (groups[0] || 1) : (m === "1" ? 1 : parseInt(m, 10));
+    const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
+    const groupsAttr = isCustom ? ` data-groups="${JSON.stringify(groups.map(n => parseInt(n,10)||1))}"` : "";
     const frames = images.map(mediaFrameHTML).join("");
     const counterEnd = Math.min(perPage, images.length || 1);
     return `
-      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}">
+      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}"${groupsAttr}>
         <div class="gallery-track">${frames}</div>
         <div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>
         <div class="gallery-hint">Click for next</div>
@@ -2040,7 +2042,7 @@
           </div>
           ${heading}
           ${paras}
-          ${block.images && block.images.length ? galleryHTML(block.images, blockId, block.galleryMode, block.galleryDirection, block.freeLayout) : ""}
+          ${block.images && block.images.length ? galleryHTML(block.images, blockId, block.galleryMode, block.galleryDirection, block.freeLayout, block.galleryGroups) : ""}
         </div>`;
     }).join("");
 
@@ -2263,11 +2265,37 @@
     mediaEls.forEach(m => waitMediaReady(m, onReady));
   }
 
-  function updateMultiCounter(gallery, page, perPage, visibleCount, total){
-    const start = page*perPage + 1;
-    const end = page*perPage + visibleCount;
+  function updateMultiCounter(gallery, startIndex, visibleCount, total){
+    const start = startIndex + 1;
+    const end = startIndex + visibleCount;
     const counter = gallery.querySelector(".gallery-counter");
     if(counter) counter.textContent = `${end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")} / ${String(total).padStart(2,"0")}`;
+  }
+  /* Custom per-page grouping (e.g. "1 photo alone, then the next 3 together") is
+     stored as gallery.dataset.groups — a JSON array of how many photos are on each
+     page, in order. Any photos left over once the array is exhausted just get a
+     page of their own rather than disappearing. Fixed "N per page" modes (2/3/...)
+     have no dataset.groups and fall back to uniform chunks of data-per-page. */
+  function getPageGroupSizes(gallery, total){
+    if(gallery.dataset.groups){
+      try{
+        const arr = JSON.parse(gallery.dataset.groups);
+        if(Array.isArray(arr) && arr.length){
+          const sizes = [];
+          let consumed = 0;
+          arr.forEach(n => {
+            const c = Math.max(1, Math.min(parseInt(n, 10) || 1, total - consumed));
+            if(c > 0){ sizes.push(c); consumed += c; }
+          });
+          while(consumed < total){ sizes.push(1); consumed++; }
+          if(sizes.length) return sizes;
+        }
+      }catch(e){ /* fall through to uniform perPage */ }
+    }
+    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
+    const sizes = [];
+    for(let i = 0; i < total; i += perPage) sizes.push(Math.min(perPage, total - i));
+    return sizes;
   }
   /* row-direction mode-multi: every frame stays laid out side by side (never
      display:none) sized from its own natural ratio, sharing one height per PAGE —
@@ -2275,19 +2303,23 @@
      into the (overflow:hidden) viewport, reusing the same transform transition the
      single-photo gallery already uses, so advancing pages animates smoothly left/
      right instead of an abrupt display:none/block swap. */
-  function computeMultiPageLayout(gallery, frames, perPage){
+  function computeMultiPageLayout(gallery, frames){
     const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
     const ratios = mediaEls.map(mediaRatio);
     if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = gallery.clientHeight || 280; }
     const baseHeight = parseFloat(gallery.dataset.baseHeight);
     const availWidth = gallery.parentElement.clientWidth;
+    const groupSizes = getPageGroupSizes(gallery, frames.length);
     const frameSizes = [];
     const pageOffsets = [];
     const pageSizes = [];
-    let cumulative = 0;
-    for(let i = 0; i < frames.length; i += perPage){
+    const pageStarts = [];
+    let cumulative = 0, cursor = 0;
+    groupSizes.forEach(count => {
       const idxs = [];
-      for(let j = i; j < Math.min(i + perPage, frames.length); j++) idxs.push(j);
+      for(let j = cursor; j < Math.min(cursor + count, frames.length); j++) idxs.push(j);
+      pageStarts.push(cursor);
+      cursor += count;
       let height = baseHeight;
       let totalWidth = idxs.reduce((sum, idx) => sum + height*ratios[idx], 0);
       if(availWidth > 0 && totalWidth > availWidth){
@@ -2298,11 +2330,10 @@
       pageOffsets.push(cumulative);
       pageSizes.push({ width: totalWidth, height: height, count: idxs.length });
       cumulative += totalWidth;
-    }
-    return { frameSizes, pageOffsets, pageSizes };
+    });
+    return { frameSizes, pageOffsets, pageSizes, pageStarts };
   }
   function showGalleryPageRow(gallery, page){
-    const perPage = parseInt(gallery.dataset.perPage, 10) || 1;
     const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
     const total = frames.length;
     gallery.dataset.page = page;
@@ -2310,7 +2341,7 @@
     let remaining = mediaEls.length;
     const onReady = () => { remaining--; if(remaining <= 0) apply(); };
     function apply(){
-      const { frameSizes, pageOffsets, pageSizes } = computeMultiPageLayout(gallery, frames, perPage);
+      const { frameSizes, pageOffsets, pageSizes, pageStarts } = computeMultiPageLayout(gallery, frames);
       frames.forEach((f, i) => {
         const sz = frameSizes[i]; if(!sz) return;
         f.style.width = sz.width + "px";
@@ -2336,7 +2367,7 @@
         setSize();
       }
       gallery.querySelector(".gallery-track").style.transform = `translateX(-${offset}px)`;
-      updateMultiCounter(gallery, page, perPage, pageSize.count, total);
+      updateMultiCounter(gallery, pageStarts[page] || 0, pageSize.count, total);
     }
     mediaEls.forEach(m => waitMediaReady(m, onReady));
   }
@@ -2351,7 +2382,7 @@
     gallery.dataset.page = page;
     frames.forEach((f, i) => f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage));
     const visible = frames.filter(f => f.classList.contains("visible"));
-    updateMultiCounter(gallery, page, perPage, visible.length, total);
+    updateMultiCounter(gallery, page*perPage, visible.length, total);
     layoutFrames(gallery, visible, "column");
   }
 
@@ -2407,7 +2438,7 @@
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
     if(mode === "free") return;
-    if(perPage <= 1){
+    if(mode !== "custom" && perPage <= 1){
       g.addEventListener("click", () => {
         if(g.dataset.dragged){ delete g.dataset.dragged; return; }
         rollGallery(g);
@@ -2422,7 +2453,7 @@
     showGalleryPage(g, 0);
     g.addEventListener("click", () => {
       const total = parseInt(g.dataset.count, 10);
-      const pages = Math.ceil(total / perPage);
+      const pages = getPageGroupSizes(g, total).length;
       const page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;
       showGalleryPage(g, page);
     });
