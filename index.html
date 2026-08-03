@@ -2291,19 +2291,35 @@
         gallery.dataset.baseRowHeight = defaultBaseHeight() / rowKeys.length;
       }
       const baseHeight = parseFloat(gallery.dataset.baseRowHeight);
-      let top = 0;
+      /* Filling every row's width exactly cancels baseHeight out of the height math
+         entirely (it's purely availWidth / that row's summed ratios) — fine for a
+         couple of wide rows, but a grid with several rows of narrow/square photos
+         can add up to a much taller block than any other gallery on the page. Cap
+         the GRID's total height (scaling every row/frame down together, so aspect
+         ratios and the "fills its row exactly" property both still hold) rather
+         than capping per row, which would just reintroduce side gaps. */
+      const rows = [];
+      let naturalTop = 0;
       rowKeys.forEach(rk => {
         const entries = rowsMap[rk].sort((a, b) => a.col - b.col);
         const ratios = entries.map(e => mediaRatio(mediaEls[e.i]));
         let height = baseHeight;
-        let totalWidth = ratios.reduce((sum, r) => sum + height*r, 0);
+        const totalWidth = ratios.reduce((sum, r) => sum + height*r, 0);
         if(availWidth > 0 && totalWidth > 0){
           height = height * (availWidth / totalWidth);
-          totalWidth = availWidth;
         }
+        rows.push({ entries, ratios, height, top: naturalTop });
+        naturalTop += height;
+      });
+      const maxTotalHeight = 640;
+      const scale = naturalTop > maxTotalHeight ? maxTotalHeight / naturalTop : 1;
+      const gridWidth = availWidth * scale;
+      let top = 0;
+      rows.forEach(row => {
+        const height = row.height * scale;
         let left = 0;
-        entries.forEach((e, j) => {
-          const w = height * ratios[j];
+        row.entries.forEach((e, j) => {
+          const w = height * row.ratios[j];
           const f = frames[e.i];
           f.style.left = left + "px";
           f.style.top = top + "px";
@@ -2313,6 +2329,7 @@
         });
         top += height;
       });
+      gallery.style.width = gridWidth + "px";
       gallery.style.height = top + "px";
     }
     mediaEls.forEach(m => waitMediaReady(m, onReady));
