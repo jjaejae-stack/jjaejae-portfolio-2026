@@ -903,6 +903,12 @@
     const videoHTML = videoIms.length
       ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
       : "";
+    /* Stack order follows the array: whichever type (photo or video) appears
+       first in the original images list renders on top. Mirrors index.html. */
+    const firstVideoIdx = images.findIndex(im => isVideoPath(im.relPath || im.name || im.url));
+    const firstPhotoIdx = images.findIndex(im => !isVideoPath(im.relPath || im.name || im.url));
+    const photoFirst = firstPhotoIdx !== -1 && (firstVideoIdx === -1 || firstPhotoIdx < firstVideoIdx);
+    const stack = function(a, b){ return photoFirst ? b + a : a + b; };
     if(m === "free"){
       const count = photoIms.length || 1;
       const positions = photoIms.map((im, i) => im.free || defaultFreePos(i, photoIms.length));
@@ -917,15 +923,15 @@
       const photoHTML = '<div class="gallery mode-free' + rowClass + '" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
         + '<div class="gallery-track">' + frames + '</div>'
         + '</div>';
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
     }
     if(m === "all"){
       const photoHTML = photoIms.length ? galleryBlockHTML(photoIms, blockKey + "-photos", "1", dir) : "";
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>') : photoHTML;
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
     }
     if(videoIms.length && photoIms.length){
       const photoHTML = galleryBlockHTML(photoIms, blockKey + "-photos", m, dir, groups);
-      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + videoHTML + photoHTML + '</div>';
+      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
