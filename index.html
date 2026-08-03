@@ -485,6 +485,10 @@
   .gallery.mode-multi{height:auto; max-height:none; min-height:0;}
   .gallery.mode-multi.direction-column .gallery-track{height:auto;}
   .gallery.mode-free{position:relative; height:60vh; max-height:640px; min-height:280px; cursor:default; background:#111;}
+  /* mode-free-grid: layoutFreeGrid (JS) sets each row's height at runtime from real
+     photo ratios, so the fixed 60vh/max-height above would just clip it — let the
+     content define the height instead, same principle as mode-multi. */
+  .gallery.mode-free-grid{height:auto; max-height:none; min-height:0;}
   .gallery.mode-free .gallery-track{position:relative; height:100%; display:block;}
   .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
   .gallery.mode-free .gallery-frame img, .gallery.mode-free .gallery-frame video{max-width:100%; max-height:100%; width:auto; height:auto; object-fit:contain; margin:auto; display:block;}
@@ -803,6 +807,20 @@
     const w = 100 / cols, h = 100 / rows;
     const col = i % cols, row = Math.floor(i / cols);
     return { x: col * w, y: row * h, w: w, h: h };
+  }
+  /* Groups an evenly-columned free-grid's stored positions into row/col indexes
+     (by distinct y, then by x within that y) so layoutFreeGrid can lay each row
+     out at runtime from the photos' real aspect ratios instead of the fixed
+     percentage boxes below (which only matter as a pre-JS/no-JS fallback). */
+  function gridPositionIndexes(positions){
+    const round2 = n => Math.round((n||0) * 100) / 100;
+    const ys = [...new Set(positions.map(p => round2(p.y)))].sort((a,b) => a-b);
+    const rows = positions.map(p => ys.indexOf(round2(p.y)));
+    const cols = positions.map((p, i) => {
+      const sameRowXs = [...new Set(positions.filter((_, j) => rows[j] === rows[i]).map(q => round2(q.x)))].sort((a,b) => a-b);
+      return sameRowXs.indexOf(round2(p.x));
+    });
+    return { rows, cols };
   }
 
   /* ---------------- render: greeting marquee ----------------
@@ -1942,12 +1960,25 @@
       : "";
     if(m === "free"){
       const count = photoSrcs.length || 1;
+      const positions = photoSrcs.map((src, i) => photoFreeLayout[i] || defaultFreePos(i, photoSrcs.length));
+      /* An evenly-columned grid (every cell the same width — true for the plain
+         grid default and every real usage so far) gets auto-justified row-by-row
+         at runtime (layoutFreeGrid) from each photo's OWN aspect ratio instead of
+         a fixed percentage box, so there's never a crop (unlike object-fit:cover)
+         and never black letterbox space (unlike object-fit:contain in a box whose
+         ratio doesn't match the photo). A genuinely custom/mixed-size arrangement
+         (e.g. the "1 large + rest small" hero preset) keeps the manual static
+         layout as designed. */
+      const isGrid = positions.every(p => Math.abs((p.w||0) - (positions[0].w||0)) < 0.5);
+      const rowClass = isGrid ? " mode-free-grid" : "";
+      const grid = isGrid ? gridPositionIndexes(positions) : null;
       const frames = photoSrcs.map((src, i) => {
-        const pos = photoFreeLayout[i] || defaultFreePos(i, photoSrcs.length);
-        return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;">${mediaFrameInner(src)}</div>`;
+        const pos = positions[i];
+        const gridAttrs = isGrid ? ` data-row="${grid.rows[i]}" data-col="${grid.cols[i]}"` : "";
+        return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;"${gridAttrs}>${mediaFrameInner(src)}</div>`;
       }).join("");
       const photoHTML = `
-      <div class="gallery mode-free" data-block="${blockId}" data-count="${count}" data-mode="free">
+      <div class="gallery mode-free${rowClass}" data-block="${blockId}" data-count="${count}" data-mode="free">
         <div class="gallery-track">${frames}</div>
       </div>`;
       return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${videoHTML}${photoHTML}</div>` : photoHTML;
@@ -2219,6 +2250,56 @@
       if(tries < 60) requestAnimationFrame(poll);
     })();
   }
+  /* mode-free-grid: an evenly-columned free-mode grid, auto-justified row by row —
+     each row shares one height, sized so its photos' summed widths (from their real
+     aspect ratios) fill the row exactly, so there's no crop and no black gap on
+     either axis; rows can end up different heights depending on their content,
+     same principle as layoutFrames below just grouped by data-row/data-col instead
+     of one flat run. */
+  function layoutFreeGrid(gallery){
+    const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
+    if(!frames.length) return;
+    const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
+    let remaining = mediaEls.length;
+    const onReady = () => { remaining--; if(remaining <= 0) apply(); };
+    function apply(){
+      const rowsMap = {};
+      frames.forEach((f, i) => {
+        const r = f.dataset.row || "0";
+        (rowsMap[r] = rowsMap[r] || []).push({ i, col: parseInt(f.dataset.col || "0", 10) });
+      });
+      const rowKeys = Object.keys(rowsMap).sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+      const availWidth = gallery.parentElement.clientWidth;
+      if(!gallery.dataset.baseRowHeight){
+        gallery.dataset.baseRowHeight = (gallery.clientHeight || (280 * rowKeys.length)) / rowKeys.length;
+      }
+      const baseHeight = parseFloat(gallery.dataset.baseRowHeight);
+      let top = 0;
+      rowKeys.forEach(rk => {
+        const entries = rowsMap[rk].sort((a, b) => a.col - b.col);
+        const ratios = entries.map(e => mediaRatio(mediaEls[e.i]));
+        let height = baseHeight;
+        let totalWidth = ratios.reduce((sum, r) => sum + height*r, 0);
+        if(availWidth > 0 && totalWidth > 0){
+          height = height * (availWidth / totalWidth);
+          totalWidth = availWidth;
+        }
+        let left = 0;
+        entries.forEach((e, j) => {
+          const w = height * ratios[j];
+          const f = frames[e.i];
+          f.style.left = left + "px";
+          f.style.top = top + "px";
+          f.style.width = w + "px";
+          f.style.height = height + "px";
+          left += w;
+        });
+        top += height;
+      });
+      gallery.style.height = top + "px";
+    }
+    mediaEls.forEach(m => waitMediaReady(m, onReady));
+  }
   /* mode-multi: size each frame from its OWN natural aspect ratio (never crop, never
      letterbox) — row mode shares a height and sums widths (shrinking only if the whole
      row would overflow), column mode shares a width and sums heights. */
@@ -2433,7 +2514,10 @@
   function initGallery(g){
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
-    if(mode === "free") return;
+    if(mode === "free"){
+      if(g.classList.contains("mode-free-grid")) layoutFreeGrid(g);
+      return;
+    }
     if(mode !== "custom" && perPage <= 1){
       g.addEventListener("click", () => {
         if(g.dataset.dragged){ delete g.dataset.dragged; return; }
@@ -2458,7 +2542,10 @@
   window.addEventListener("resize", () => {
     scrollRoot.querySelectorAll(".gallery").forEach(g => {
       const mode = g.dataset.mode || "1";
-      if(mode === "free") return;
+      if(mode === "free"){
+        if(g.classList.contains("mode-free-grid")){ delete g.dataset.baseRowHeight; layoutFreeGrid(g); }
+        return;
+      }
       delete g.dataset.baseHeight;
       g.style.height = "";
       if(mode === "1"){
