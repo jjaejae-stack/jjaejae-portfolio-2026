@@ -1396,6 +1396,15 @@
     }
     const project = getCurrentProject();
     if(!project) return;
+    if(kind === "credits"){
+      /* credit rows have no stable id of their own (just [label, value] pairs), so
+         the drag handle's data-item-id is a synthetic "credit-<original index>"
+         assigned at render time — map it back to the pre-drag array position. */
+      project.credits = ids.map(id => project.credits[parseInt(id.slice(7), 10)]).filter(Boolean);
+      renderEditor();
+      saveAndRefresh();
+      return;
+    }
     if(kind === "blocks"){
       project.blocks = ids.map(id => project.blocks.find(b => b.id === id)).filter(Boolean);
     } else if(kind.indexOf("images:") === 0){
@@ -2111,7 +2120,8 @@
   }
 
   function creditsRowHTML(c, i){
-    return '<div class="credit-row" data-credit-index="' + i + '">'
+    return '<div class="credit-row" data-sort-item data-item-id="credit-' + i + '" data-credit-index="' + i + '">'
+      + '<span class="drag-handle">⠿</span>'
       + '<input class="field-inline" data-field="credit-label" data-credit-index="' + i + '" placeholder="라벨 (예: Client)" value="' + escapeHTML(c[0]) + '">'
       + '<input class="field-inline" data-field="credit-value" data-credit-index="' + i + '" placeholder="내용" value="' + escapeHTML(c[1]) + '">'
       + '<button class="icon-btn" data-action="remove-credit" data-credit-index="' + i + '">✕</button>'
@@ -2228,7 +2238,7 @@
 
       + '<div class="section">'
       +   '<div class="section-head">크레딧 <button class="btn-sm" data-action="add-credit">+ 추가</button></div>'
-      +   '<div id="credits-list">' + creditsHTML + '</div>'
+      +   '<div id="credits-list" data-sort-scope="credits">' + creditsHTML + '</div>'
       + '</div>';
     applyTitleFontPreview(project);
   }
