@@ -3942,7 +3942,7 @@
     .gallery.mode-free{position:relative;height:60vh;max-height:640px;min-height:280px;cursor:default;background:#111;}
     .gallery.mode-free .gallery-track{position:relative;height:100%;display:block;}
     .gallery.mode-free .gallery-frame{position:absolute;display:flex;align-items:center;justify-content:center;background:#000;}
-    .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{width:100%;height:100%;object-fit:cover;display:block;}
+    .gallery.mode-free .gallery-frame img,.gallery.mode-free .gallery-frame video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;margin:auto;display:block;}
     .gallery.mode-free .gallery-frame iframe{width:100%;height:100%;border:0;}
     .gallery-video-stack{display:flex;flex-direction:column;gap:8px;}
     .gallery-video-frame{position:relative;width:100%;background:#111;border-radius:18px;overflow:hidden;}
@@ -4620,6 +4620,36 @@
         if(fixed){
           dbPut(p).catch(e => console.error("relPath repair save failed", e));
           console.log("[relPath repair]", p.id, "-", fixed, "path(s) fixed");
+        }
+      });
+    })();
+    /* migrate: normalize every relPath/name to NFC (once, on every load) — a File's
+       name/webkitRelativePath can come back Unicode-decomposed (NFD) for non-Latin
+       filenames even though the actual file on disk/in git is precomposed (NFC);
+       visually identical but byte-different, so it 404s on a byte-exact host like
+       Vercel even though it resolves fine locally on macOS (see 아이스크림 홈런 —
+       broke again after a Publish re-exported the still-NFD IndexedDB data, since
+       the earlier fix only patched index.html's output, not the stored source).
+       Generic and project-agnostic on purpose, unlike repairKnownBadRelPaths above,
+       so this can't recur for any other Korean (or other decomposable Unicode)
+       filename in the future. */
+    (function repairNfcPaths(){
+      function fixImage(im){
+        if(!im || !im.relPath) return 0;
+        const goodPath = nfc(im.relPath), goodName = nfc(im.name || "");
+        if(im.relPath === goodPath && im.name === goodName) return 0;
+        if(im.url === im.relPath) im.url = goodPath;
+        im.relPath = goodPath;
+        im.name = goodName;
+        return 1;
+      }
+      projects.forEach(p => {
+        let fixed = 0;
+        fixed += fixImage(p.heroImage);
+        (p.blocks || []).forEach(b => (b.images || []).forEach(im => { fixed += fixImage(im); }));
+        if(fixed){
+          dbPut(p).catch(e => console.error("NFC repair save failed", e));
+          console.log("[NFC repair]", p.id, "-", fixed, "path(s) fixed");
         }
       });
     })();
