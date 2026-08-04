@@ -32,6 +32,7 @@ PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+MAX_IMAGE_DIM = 2000
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_TIMEOUT_SEC = 180
 MAX_BUDGET_USD = "0.50"
@@ -175,6 +176,31 @@ def _unique_plain_path(out_dir, name_noext, ext):
     return candidate
 
 
+def _resize_cap(img, max_dim=MAX_IMAGE_DIM):
+    """Downscale (never upscale) so neither dimension exceeds max_dim, preserving
+    aspect ratio — like optimize_video's ffmpeg scale filter, but for stills. Runs
+    on every freshly-uploaded photo so a full-res camera/design export never ships
+    at full size just because nobody remembered to resize it first."""
+    w, h = img.size
+    if max(w, h) <= max_dim:
+        return img
+    scale = max_dim / float(max(w, h))
+    return img.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+
+
+def _resize_cap_frames(frames, max_dim=MAX_IMAGE_DIM):
+    """Same as _resize_cap but for a list of animated-GIF frames, which must all
+    end up at the same size (resized together, judged by the first frame)."""
+    if not frames:
+        return frames
+    w, h = frames[0].size
+    if max(w, h) <= max_dim:
+        return frames
+    scale = max_dim / float(max(w, h))
+    size = (max(1, round(w * scale)), max(1, round(h * scale)))
+    return [f.resize(size, Image.LANCZOS) for f in frames]
+
+
 def crop_image(payload):
     """Crop an image on disk (or freshly-uploaded bytes) and save the result
     as a new file next to the source, so the original is never overwritten.
@@ -233,13 +259,14 @@ def crop_image(payload):
         for frame in ImageSequence.Iterator(img):
             frames.append(frame.convert("RGBA").crop(box))
             durations.append(frame.info.get("duration", 100))
+        frames = _resize_cap_frames(frames)
         frames[0].save(
             out_abs, save_all=True, append_images=frames[1:],
             loop=img.info.get("loop", 0), duration=durations, disposal=2,
         )
         out_w, out_h = frames[0].size
     else:
-        cropped = img.crop(box)
+        cropped = _resize_cap(img.crop(box))
         save_kwargs = {}
         if ext.lower() in (".jpg", ".jpeg"):
             if cropped.mode not in ("RGB", "L"):
@@ -901,14 +928,17 @@ def save_info_bg_image(payload):
 
 
 def save_project_image(payload):
-    """Write an uploaded photo (e.g. a hero image picked via a plain file input)
-    into a project's asset folder on disk, returning the relPath it was saved
-    under. A plain <input type=file> gives the browser no folder information at
-    all — unlike the folder/multi-file picker used for block images, whose
-    webkitRelativePath tells us exactly where the file already lives — so without
-    this round trip the picked photo's relPath would default to a bare filename
-    that 404s once published, even if the file happens to already exist on disk
-    somewhere. This guarantees the file actually exists at the relPath recorded."""
+    """Write an uploaded photo (hero image, or a block photo added via the plain
+    file picker/drag-drop — see /upload-project-image) into a project's asset
+    folder on disk, returning the relPath it was saved under. A plain <input
+    type=file> or drag-drop gives the browser no folder information at all —
+    unlike the folder picker, whose webkitRelativePath tells us exactly where the
+    file already lives on disk — so without this round trip the picked photo's
+    relPath would default to a bare filename that 404s once published, even if
+    the file happens to already exist on disk somewhere. This guarantees the file
+    actually exists at the relPath recorded. Also doubles as the "web 최적화"
+    step for stills (mirrors optimize_video's ffmpeg resize for video): every
+    upload gets capped to MAX_IMAGE_DIM on its long edge before being saved."""
     data_url = payload.get("dataUrl") or ""
     if "," not in data_url:
         raise ValueError("dataUrl이 올바르지 않습니다.")
@@ -927,8 +957,19 @@ def save_project_image(payload):
     out_rel = (folder + "/" + out_name) if folder else out_name
 
     if img.format == "GIF" and getattr(img, "is_animated", False):
-        img.save(out_abs, save_all=True)
+        frames = []
+        durations = []
+        for frame in ImageSequence.Iterator(img):
+            frames.append(frame.convert("RGBA"))
+            durations.append(frame.info.get("duration", 100))
+        frames = _resize_cap_frames(frames)
+        frames[0].save(
+            out_abs, save_all=True, append_images=frames[1:],
+            loop=img.info.get("loop", 0), duration=durations, disposal=2,
+        )
+        out_w, out_h = frames[0].size
     else:
+        img = _resize_cap(img)
         save_kwargs = {}
         if ext.lower() in (".jpg", ".jpeg"):
             if img.mode not in ("RGB", "L"):
@@ -936,9 +977,12 @@ def save_project_image(payload):
             save_kwargs["quality"] = 92
         elif ext.lower() == ".webp":
             save_kwargs["quality"] = 92
+        elif ext.lower() == ".png":
+            save_kwargs["optimize"] = True
         img.save(out_abs, **save_kwargs)
+        out_w, out_h = img.size
 
-    return {"relPath": out_rel}
+    return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
 def _run_git(args):
