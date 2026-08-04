@@ -2390,6 +2390,13 @@
       im.url = URL.createObjectURL(file);
       block.images.push(im);
       if(!project.heroImage) project.heroImage = cloneAsHeroImage(im);
+      /* folder-picker files already live on disk exactly at relPath (that's what
+         webkitRelativePath means) — nothing to upload. A plain picker/drag-drop
+         file doesn't, so round-trip it through the server the same way the hero
+         photo does, which also gets it resized down to a web-friendly size. */
+      if(!file.webkitRelativePath){
+        persistImageFileToDisk(project, im, file, () => block.images.includes(im));
+      }
     });
     renderEditor();
     saveAndRefresh();
@@ -2410,18 +2417,24 @@
     project.heroImage = im;
     renderEditor();
     saveAndRefresh();
-    persistHeroFileToDisk(project, im, file);
+    persistImageFileToDisk(project, im, file, () => getCurrentProject()?.heroImage === im);
   });
-  /* A plain <input type=file> gives no folder info at all (unlike the folder/
-     multi-file picker used for block images, whose webkitRelativePath tells us
-     exactly where the file already lives on disk) — even if the user picks a
-     photo that happens to already sit inside the project folder, relPath would
-     stay a bare filename and 404 once published. Round-trip the bytes through
-     the server so the file is guaranteed to actually exist on disk at the
-     relPath we end up recording. Runs in the background; the local blob URL
-     keeps working in the meantime, and if the server call fails (e.g. server
-     not running) the hero photo simply stays as a local-only preview. */
-  function persistHeroFileToDisk(project, im, file){
+  /* A plain <input type=file> (hero photo, or a block photo added via the plain
+     file picker/drag-drop) gives no folder info at all — unlike the folder
+     picker used for block images, whose webkitRelativePath tells us exactly
+     where the file already lives on disk. Even if the user picks a photo that
+     happens to already sit inside the project folder, relPath would stay a bare
+     filename and 404 once published. Round-trip the bytes through the server so
+     the file is guaranteed to actually exist on disk at the relPath we end up
+     recording — and, as a bonus, server.py resizes it down to a sane web size
+     in the process (same idea as optimize_video's ffmpeg pass for uploaded
+     video). Runs in the background; the local blob URL keeps working in the
+     meantime, and if the server call fails (e.g. server not running) the photo
+     simply stays as a local-only preview. `stillWanted()` re-checks that `im`
+     is still the thing it's supposed to be attached to before writing the
+     server's result back, in case the user removed/replaced it while this was
+     in flight. */
+  function persistImageFileToDisk(project, im, file, stillWanted){
     const reader = new FileReader();
     reader.onload = async () => {
       try{
@@ -2432,8 +2445,7 @@
         });
         const data = await res.json().catch(() => ({}));
         if(!res.ok || !data.ok) return;
-        const current = getCurrentProject();
-        if(!current || current.heroImage !== im) return;
+        if(!stillWanted()) return;
         try{ URL.revokeObjectURL(im.url); }catch(err){}
         im.relPath = data.relPath;
         im.name = data.relPath.split("/").pop();
