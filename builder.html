@@ -63,13 +63,14 @@
     background:var(--surface); box-shadow:var(--card-shadow);
   }
   #new-project-btn:hover{border-color:var(--accent); color:var(--accent);}
-  #sync-order-btn{
+  #sync-order-btn, .sidebar-util-btn{
     width:100%; padding:8px; border:1px dashed var(--line-strong);
-    font-size:12px; color:var(--muted); margin-bottom:22px; text-align:center;
+    font-size:12px; color:var(--muted); margin-bottom:8px; text-align:center;
     background:none;
   }
-  #sync-order-btn:hover{border-color:var(--accent); color:var(--accent);}
-  #sync-order-btn:disabled{opacity:.6; cursor:default;}
+  #sync-order-btn:hover, .sidebar-util-btn:hover{border-color:var(--accent); color:var(--accent);}
+  #sync-order-btn:disabled, .sidebar-util-btn:disabled{opacity:.6; cursor:default;}
+  #import-all-btn{margin-bottom:22px;}
   #info-nav-btn{
     width:100%; padding:10px; border:1px solid var(--line-strong);
     font-weight:600; text-align:left; margin-bottom:14px;
@@ -426,6 +427,8 @@
       </div>
       <button id="new-project-btn">+ 새 프로젝트</button>
       <button type="button" id="sync-order-btn" title="사이드바의 프로젝트 순서와 숨김 상태를 실제 Work/Play 리스트 페이지에도 반영합니다">↕ 순서·숨김 반영</button>
+      <button type="button" id="export-all-btn" class="sidebar-util-btn" title="이 브라우저의 프로젝트/INFO 데이터를 JSON 파일로 내보냅니다 — 다른 컴퓨터로 옮길 때 사용">⇩ 다른 기기로 내보내기</button>
+      <button type="button" id="import-all-btn" class="sidebar-util-btn" title="내보내기로 만든 JSON 파일을 가져와 이 브라우저에 반영합니다">⇧ 다른 기기에서 가져오기</button>
       <div id="project-list" data-sort-scope="projects"></div>
     </aside>
 
@@ -2434,29 +2437,165 @@
      is still the thing it's supposed to be attached to before writing the
      server's result back, in case the user removed/replaced it while this was
      in flight. */
+  async function persistDataUrlToDisk(project, im, dataUrl, filename, stillWanted, revokeUrl){
+    try{
+      const res = await fetch(GENERATE_SERVER + "/upload-project-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(filename) })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.ok) return;
+      if(!stillWanted()) return;
+      if(revokeUrl){ try{ URL.revokeObjectURL(im.url); }catch(err){} }
+      im.relPath = data.relPath;
+      im.name = data.relPath.split("/").pop();
+      im.url = data.relPath;
+      delete im.file;
+      delete im.dataUrl;
+      renderEditor();
+      saveAndRefresh();
+    }catch(err){ /* offline/server down — local blob/dataUrl preview keeps working */ }
+  }
   function persistImageFileToDisk(project, im, file, stillWanted){
     const reader = new FileReader();
-    reader.onload = async () => {
-      try{
-        const res = await fetch(GENERATE_SERVER + "/upload-project-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ dataUrl: reader.result, folder: inferProjectFolder(project), filename: nfc(file.name) })
-        });
-        const data = await res.json().catch(() => ({}));
-        if(!res.ok || !data.ok) return;
-        if(!stillWanted()) return;
-        try{ URL.revokeObjectURL(im.url); }catch(err){}
-        im.relPath = data.relPath;
-        im.name = data.relPath.split("/").pop();
-        im.url = data.relPath;
-        delete im.file;
-        renderEditor();
-        saveAndRefresh();
-      }catch(err){ /* offline/server down — local blob preview keeps working */ }
-    };
+    reader.onload = () => { persistDataUrlToDisk(project, im, reader.result, file.name, stillWanted, true); };
     reader.readAsDataURL(file);
   }
+
+  /* ======================================================================
+     data transfer — move builder data (projects + INFO page + custom
+     category tags) between machines. Image FILES already saved to disk
+     sync separately via git (see server.py's upload endpoints + Publish);
+     this only covers what only ever lived in THIS browser's IndexedDB/
+     localStorage. Any image that's still just a local File (server round
+     trip never finished, or server wasn't running when it was added) gets
+     its bytes embedded as a dataUrl so nothing is silently lost in
+     transit — import re-attempts the disk upload on the receiving side. */
+  function fileToDataUrl(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+  async function serializeImageForExport(im){
+    if(!im) return im;
+    const out = Object.assign({}, im);
+    if(out.file){
+      try{ out.dataUrl = await fileToDataUrl(out.file); out.url = out.dataUrl; }catch(e){}
+      delete out.file;
+    }
+    return out;
+  }
+  async function exportAllData(){
+    const allProjects = await dbGetAll();
+    const outProjects = [];
+    for(const p of allProjects){
+      const heroImage = await serializeImageForExport(p.heroImage);
+      const blocks = [];
+      for(const b of (p.blocks || [])){
+        const images = [];
+        for(const im of (b.images || [])) images.push(await serializeImageForExport(im));
+        blocks.push(Object.assign({}, b, { images: images }));
+      }
+      outProjects.push(Object.assign({}, p, { heroImage: heroImage, blocks: blocks }));
+    }
+    return {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      projects: outProjects,
+      info: infoData,
+      customTags: loadCustomTags()
+    };
+  }
+  async function runExportAll(){
+    const btn = document.getElementById("export-all-btn");
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "내보내는 중...";
+    try{
+      const data = await exportAllData();
+      const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "jjaejae-builder-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }catch(e){
+      alert("내보내기 실패: " + e.message);
+    }finally{
+      btn.disabled = false; btn.textContent = orig;
+    }
+  }
+  document.getElementById("export-all-btn").addEventListener("click", runExportAll);
+
+  const importAllInput = document.createElement("input");
+  importAllInput.type = "file"; importAllInput.accept = "application/json";
+  document.body.appendChild(importAllInput);
+  document.getElementById("import-all-btn").addEventListener("click", () => importAllInput.click());
+  importAllInput.addEventListener("change", async () => {
+    const file = importAllInput.files && importAllInput.files[0];
+    importAllInput.value = "";
+    if(!file) return;
+    let data;
+    try{
+      data = JSON.parse(await file.text());
+    }catch(e){
+      alert("파일을 읽을 수 없습니다: " + e.message);
+      return;
+    }
+    if(!data || !Array.isArray(data.projects)){
+      alert("올바른 내보내기 파일이 아닙니다.");
+      return;
+    }
+    const count = data.projects.length;
+    if(!confirm(
+      count + "개 프로젝트를 가져옵니다.\n\n" +
+      "같은 id의 프로젝트는 이 파일 내용으로 덮어써지고, 없던 프로젝트는 새로 추가됩니다(이 기기에만 있던 다른 프로젝트는 그대로 남습니다).\n" +
+      (data.info ? "INFO 페이지 내용도 이 파일 것으로 덮어씁니다.\n" : "") +
+      "\n계속할까요?"
+    )) return;
+
+    const btn = document.getElementById("import-all-btn");
+    const orig = btn.textContent;
+    btn.disabled = true; btn.textContent = "가져오는 중...";
+    try{
+      for(const p of data.projects) await dbPut(p);
+      if(data.info){ infoData = data.info; saveInfo(); }
+      if(Array.isArray(data.customTags)){
+        saveCustomTags(Array.from(new Set(loadCustomTags().concat(data.customTags))));
+      }
+
+      projects = (await dbGetAll()).map(hydrateProject);
+      const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
+      if(firstInTab) currentId = firstInTab.id;
+      renderSidebar();
+      renderEditor();
+      refreshPreview();
+
+      /* any image that traveled as a dataUrl (not yet written to disk on
+         the machine it was added on) gets a fresh upload attempt now, on
+         THIS machine — completes the job wherever the server happens to
+         be running when someone actually looks at it. */
+      projects.forEach(p => {
+        const tryImg = (im) => {
+          if(im && im.dataUrl) persistDataUrlToDisk(p, im, im.dataUrl, im.name || "image.jpg", () => true, false);
+        };
+        tryImg(p.heroImage);
+        (p.blocks || []).forEach(b => (b.images || []).forEach(tryImg));
+      });
+
+      alert("가져오기 완료 (" + count + "개 프로젝트).");
+    }catch(e){
+      alert("가져오기 실패: " + e.message);
+    }finally{
+      btn.disabled = false; btn.textContent = orig;
+    }
+  });
 
   /* ---- INFO page background photo — unlike project images (referenced by relPath,
      expected to already exist on disk), this one is written to disk immediately via
