@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 .vercel
 .env*
+
+# raw/working retouch exports — not web-optimized, not meant for the live site
+YUNJAC/리터칭_최종 완료_OUT/
