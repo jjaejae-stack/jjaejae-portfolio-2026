@@ -770,6 +770,16 @@
     });
   }
   function naturalSort(a,b){ return a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}); }
+  /* @handle in a credit value renders sky-blue; "@handle(url)" additionally turns it into a
+     real link to whatever URL was typed in (URL itself never shown). Mirrors index.html's
+     linkifyHandles — must run on the already-escaped string, same as index.html does. */
+  function linkifyHandles(escapedText){
+    return escapedText.replace(/@([a-zA-Z0-9_.]+)(?:\(([^)]+)\))?/g, function(m, handle, url){
+      return url
+        ? '<a class="credit-handle" href="' + url + '" target="_blank" rel="noopener">@' + handle + '</a>'
+        : '<span class="credit-handle">@' + handle + '</span>';
+    });
+  }
   function debounce(fn, ms){
     let t;
     return function(){ const args=arguments; clearTimeout(t); t=setTimeout(()=>fn.apply(null,args), ms); };
@@ -4607,6 +4617,9 @@
     .credit-item{border-top:1px solid var(--line);padding-top:10px;}
     .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
     .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;font-family:var(--font-medium);}
+    .credit-handle{color:#38bdf8;}
+    a.credit-handle{text-decoration:none;}
+    a.credit-handle:hover{text-decoration:underline;}
     .credit-item.pinned{border-top:none;padding-top:0;}
     #lightbox{display:none;position:fixed;inset:0;z-index:600;align-items:center;justify-content:center;background:rgba(10,10,10,.92);}
     #lightbox.open{display:flex;}
@@ -4989,7 +5002,7 @@
     if(project.client) pinnedCredits.push(["Client", project.client]);
     if(project.agency) pinnedCredits.push(["Agency", project.agency]);
     const restCredits = project.credits || [];
-    const creditItemHTML = (cls) => c => '<div class="credit-item' + cls + '"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>';
+    const creditItemHTML = (cls) => c => '<div class="credit-item' + cls + '"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + linkifyHandles(escapeHTML(c[1])) + '</div></div>';
     const pinnedCreditsHTML = pinnedCredits.length ? '<div class="credits-grid credits-pinned">' + pinnedCredits.map(creditItemHTML(" pinned")).join("") + '</div>' : "";
     const restCreditsHTML = restCredits.length ? '<div class="credits-grid">' + restCredits.map(creditItemHTML("")).join("") + '</div>' : "";
     const creditsHTML = (pinnedCredits.length || restCredits.length)
