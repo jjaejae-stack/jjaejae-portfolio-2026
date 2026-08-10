@@ -185,6 +185,10 @@
   .block-card{border:1px solid var(--line-strong); padding:13px; margin-bottom:22px; background:var(--surface); box-shadow:var(--card-shadow); transition:border-color .15s, background .15s;}
   .block-card.dragging{opacity:.35;}
   .block-card.file-drag-over{border-color:var(--accent) !important; background:color-mix(in srgb, var(--accent) 8%, var(--surface));}
+  /* 파일 첨부가 가능한 곳이면 어디든 쓰는 공용 드롭 강조 — 메인 히어로 섹션, INFO 배경 사진
+     PC/모바일 등 여러 곳에서 재사용(attachFileDrop() 참고). */
+  .file-drop-target{transition:border-color .15s, background .15s; border-radius:6px;}
+  .file-drop-target.file-drag-over{outline:2px dashed var(--accent); outline-offset:-2px; background:color-mix(in srgb, var(--accent) 8%, var(--surface));}
   .block-card-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
   .drag-handle{cursor:grab; color:var(--muted); font-size:15px; user-select:none; flex:0 0 auto;}
   .block-card-head input{flex:1; font-weight:700;}
@@ -798,6 +802,8 @@
       meta: "",
       heroType: "image",
       heroVideoId: "",
+      heroYoutubeId: "",
+      heroVideoFile: "",
       heroImageId: null,
       heroImage: null,
       social: { youtube:"", vimeo:"", instagram:"" },
@@ -1831,21 +1837,21 @@
       + '</div>'
       + '<div class="section">'
       +   '<div class="section-head">배경 사진 (PC)</div>'
-      +   '<div class="hero-image-row">'
+      +   '<div class="hero-image-row file-drop-target" data-drop-target="info-bg-pc">'
       +     '<img class="hero-thumb" src="info-bg.jpg?v=' + infoBgVersion + '" alt="" onerror="this.classList.add(\'hero-thumb-empty\')">'
       +     '<div class="hero-image-controls">'
       +       '<button type="button" class="btn-sm" data-action="upload-info-bg-pc">새 사진 첨부</button>'
-      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">PC(넓은 화면)에서 쓰이는 배경입니다. 첨부하면 바로 실제 파일(info-bg.jpg)이 교체됩니다 — PUBLISH를 누르면 다음 커밋에 함께 올라갑니다.</p>'
+      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">PC(넓은 화면)에서 쓰이는 배경입니다. 파일을 여기로 드래그해서 놓아도 됩니다. 첨부하면 바로 실제 파일(info-bg.jpg)이 교체됩니다 — PUBLISH를 누르면 다음 커밋에 함께 올라갑니다.</p>'
       +     '</div>'
       +   '</div>'
       + '</div>'
       + '<div class="section">'
       +   '<div class="section-head">배경 사진 (모바일)</div>'
-      +   '<div class="hero-image-row">'
+      +   '<div class="hero-image-row file-drop-target" data-drop-target="info-bg-mobile">'
       +     '<img class="hero-thumb" src="info-bg-mobile.jpg?v=' + infoBgMobileVersion + '" alt="" onerror="this.classList.add(\'hero-thumb-empty\')">'
       +     '<div class="hero-image-controls">'
       +       '<button type="button" class="btn-sm" data-action="upload-info-bg-mobile">새 사진 첨부</button>'
-      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">모바일(좁은 화면)에서만 쓰이는 배경입니다. PC 사진과 비율이 달라 잘리는 부분을 따로 맞출 수 있습니다. 첨부하면 실제 파일(info-bg-mobile.jpg)이 교체됩니다 — PUBLISH를 눌러야 반영됩니다.</p>'
+      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">모바일(좁은 화면)에서만 쓰이는 배경입니다. PC 사진과 비율이 달라 잘리는 부분을 따로 맞출 수 있습니다. 파일을 여기로 드래그해서 놓아도 됩니다. 첨부하면 실제 파일(info-bg-mobile.jpg)이 교체됩니다 — PUBLISH를 눌러야 반영됩니다.</p>'
       +     '</div>'
       +   '</div>'
       + '</div>'
@@ -2231,29 +2237,47 @@
       +   '<p style="font-size:11px; color:var(--muted); line-height:1.6;">모바일 화면에서는 사진을 덜 가리도록 박스가 자동으로 작아집니다 (이 슬라이더는 PC 화면 기준입니다).</p>'
       + '</div>'
 
-      + '<div class="section">'
-      +   '<div class="section-head">메인 히어로</div>'
+      + '<div class="section file-drop-target" data-drop-target="hero-media">'
+      +   '<div class="section-head">메인 히어로 <span style="font-weight:400; color:var(--muted); font-size:11px;">— 사진/동영상 파일을 이 영역에 드래그해서 놓아도 됩니다</span></div>'
       +   '<div class="radio-row">'
-      +     '<label><input type="radio" name="heroType" data-field="heroType" value="image"' + (project.heroType!=="video"?" checked":"") + '> 이미지</label>'
-      +     '<label><input type="radio" name="heroType" data-field="heroType" value="video"' + (project.heroType==="video"?" checked":"") + '> 비메오 영상 자동재생</label>'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="image"' + ((project.heroType||"image")==="image"?" checked":"") + '> 이미지</label>'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="video"' + (project.heroType==="video"?" checked":"") + '> 비메오 자동재생</label>'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="youtube"' + (project.heroType==="youtube"?" checked":"") + '> 유튜브 자동재생</label>'
+      +     '<label><input type="radio" name="heroType" data-field="heroType" value="upload"' + (project.heroType==="upload"?" checked":"") + '> 직접 업로드</label>'
       +   '</div>'
-      +   '<div class="field-group"><label class="field-label">히어로 이미지 — 다른 사진에는 영향 없이 이 이미지만 따로 크롭됩니다</label>'
-      +     '<div class="hero-image-row">'
-      +       (project.heroImage
-                ? '<img class="hero-thumb" src="' + project.heroImage.url + '" alt="">'
-                : '<div class="hero-thumb hero-thumb-empty">없음</div>')
-      +       '<div class="hero-image-controls">'
-      +         '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select>'
-      +         '<div class="field-row">'
-      +           '<button type="button" class="btn-sm" data-action="hero-upload">새 이미지 첨부</button>'
-      +           (project.heroImage ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImage.id + '">크롭</button>' : '')
-      +           (project.heroImage && project.heroImage.original ? '<button type="button" class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + project.heroImage.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '')
-      +           (project.heroImage ? '<button type="button" class="icon-btn" data-action="remove-hero-image">제거</button>' : '')
-      +         '</div>'
-      +       '</div>'
-      +     '</div></div>'
-      +   '<div class="field-group"><label class="field-label">비메오 영상 ID (예: vimeo.com/615843658 → 615843658)</label>'
-      +     '<input class="field" data-field="heroVideoId" value="' + escapeHTML(project.heroVideoId||"") + '"></div>'
+      +   ((project.heroType||"image") === "image"
+              ? '<div class="field-group"><label class="field-label">히어로 이미지 — 다른 사진에는 영향 없이 이 이미지만 따로 크롭됩니다</label>'
+              +   '<div class="hero-image-row">'
+              +     (project.heroImage
+                      ? '<img class="hero-thumb" src="' + project.heroImage.url + '" alt="">'
+                      : '<div class="hero-thumb hero-thumb-empty">없음</div>')
+              +     '<div class="hero-image-controls">'
+              +       '<select class="field" data-field="heroImageId">' + heroSelectOptions(project) + '</select>'
+              +       '<div class="field-row">'
+              +         '<button type="button" class="btn-sm" data-action="hero-upload">새 이미지 첨부</button>'
+              +         (project.heroImage ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImage.id + '">크롭</button>' : '')
+              +         (project.heroImage && project.heroImage.original ? '<button type="button" class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + project.heroImage.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '')
+              +         (project.heroImage ? '<button type="button" class="icon-btn" data-action="remove-hero-image">제거</button>' : '')
+              +       '</div>'
+              +     '</div></div>'
+              + '</div>'
+              : '')
+      +   (project.heroType === "video"
+              ? '<div class="field-group"><label class="field-label">비메오 영상 ID (예: vimeo.com/615843658 → 615843658)</label>'
+              +   '<input class="field" data-field="heroVideoId" value="' + escapeHTML(project.heroVideoId||"") + '"></div>'
+              : '')
+      +   (project.heroType === "youtube"
+              ? '<div class="field-group"><label class="field-label">유튜브 영상 링크 또는 ID (예: youtube.com/watch?v=dQw4w9WgXcQ)</label>'
+              +   '<input class="field" data-field="heroYoutubeId" value="' + escapeHTML(project.heroYoutubeId||"") + '"></div>'
+              : '')
+      +   (project.heroType === "upload"
+              ? '<div class="field-group"><label class="field-label">직접 업로드한 동영상 — 서버에서 자동으로 웹 최적화(H.264/mp4)됩니다</label>'
+              +   '<div class="field-row" style="align-items:center;">'
+              +     '<button type="button" class="btn-sm" data-action="hero-video-upload">동영상 선택</button>'
+              +     '<span class="fname">' + (project.heroVideoFile ? escapeHTML(project.heroVideoFile.split("/").pop()) : "선택된 파일 없음") + '</span>'
+              +     (project.heroVideoFile ? '<button type="button" class="icon-btn" data-action="remove-hero-video-file">제거</button>' : '')
+              +   '</div></div>'
+              : '')
       + '</div>'
 
       + '<div class="section">'
@@ -2334,7 +2358,7 @@
       case "tag": project.tag = el.value; syncSidebarItemText(project); break;
       case "year": project.year = el.value; syncSidebarItemText(project); break;
       case "meta": project.meta = el.value; break;
-      case "heroType": project.heroType = el.value; break;
+      case "heroType": project.heroType = el.value; renderEditor(); break;
       case "heroImageId": {
         const chosen = allImages(project).find(im => im.id === el.value);
         project.heroImage = chosen ? cloneAsHeroImage(chosen) : project.heroImage;
@@ -2342,6 +2366,14 @@
         break;
       }
       case "heroVideoId": project.heroVideoId = el.value; break;
+      /* 유튜브 링크(watch?v=, youtu.be/, shorts/) 또는 순수 ID를 그대로 붙여넣어도 항상
+         11자리 ID만 뽑아서 저장 — 실제 임베드는 이 ID만 있으면 됨. */
+      case "heroYoutubeId": {
+        const raw = el.value.trim();
+        const m = raw.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/))([\w-]{11})/) || raw.match(/^([\w-]{11})$/);
+        project.heroYoutubeId = m ? m[1] : raw;
+        break;
+      }
       case "social-youtube": project.social.youtube = el.value; break;
       case "social-vimeo": project.social.vimeo = el.value; break;
       case "social-instagram": project.social.instagram = el.value; break;
@@ -2436,20 +2468,72 @@
   folderInput.addEventListener("change", () => { addFilesToBlock(folderInput.files); folderInput.value=""; });
   filesInput.addEventListener("change", () => { addFilesToBlock(filesInput.files); filesInput.value=""; });
 
-  const heroFileInput = document.createElement("input");
-  heroFileInput.type = "file"; heroFileInput.accept = "image/*";
-  document.body.appendChild(heroFileInput);
-  heroFileInput.addEventListener("change", () => {
+  /* 메인 히어로 "직접 업로드" — 블록 동영상 첨부(video-modal)의 파일 업로드 경로와 동일하게
+     /optimize-video(mode:"upload")로 서버에서 ffmpeg 웹 최적화(H.264/mp4)한 뒤, 결과
+     relPath를 project.heroVideoFile에 저장. 별도 모달 없이 버튼 하나로 바로 진행 —
+     히어로는 항상 파일 1개뿐이라 블록처럼 여러 개를 고르고 관리할 필요가 없음. */
+  async function uploadHeroVideoFile(file){
     const project = getCurrentProject();
-    const file = heroFileInput.files && heroFileInput.files[0];
-    heroFileInput.value = "";
+    if(!project || !file) return;
+    /* 드래그앤드롭으로 아직 "직접 업로드" 모드가 아닐 때 영상 파일이 들어온 경우, 먼저
+       모드를 바꿔서 업로드 버튼/진행 상태를 보여줄 자리를 만들어둠. */
+    if(project.heroType !== "upload"){
+      project.heroType = "upload";
+      renderEditor();
+    }
+    const btn = document.querySelector('[data-action="hero-video-upload"]');
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "웹 최적화 중... (몇 분 걸릴 수 있어요)"; }
+    try{
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const res = await fetch(GENERATE_SERVER + "/optimize-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "upload", dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(file.name) })
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
+      snapshot();
+      project.heroVideoFile = data.relPath;
+      renderEditor();
+      saveAndRefresh();
+    }catch(err){
+      alert("동영상 처리 실패: " + err.message + "\n\n로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py).");
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+    }
+  }
+  const heroVideoFileInput = document.createElement("input");
+  heroVideoFileInput.type = "file"; heroVideoFileInput.accept = "video/*";
+  document.body.appendChild(heroVideoFileInput);
+  heroVideoFileInput.addEventListener("change", () => {
+    const file = heroVideoFileInput.files && heroVideoFileInput.files[0];
+    heroVideoFileInput.value = "";
+    uploadHeroVideoFile(file);
+  });
+
+  function setHeroImageFile(file){
+    const project = getCurrentProject();
     if(!project || !file) return;
     snapshot();
     const im = { id: uid(), file: file, relPath: nfc(file.name), name: nfc(file.name), url: URL.createObjectURL(file) };
     project.heroImage = im;
+    if(project.heroType !== "image") project.heroType = "image";
     renderEditor();
     saveAndRefresh();
     persistImageFileToDisk(project, im, file, () => getCurrentProject()?.heroImage === im);
+  }
+  const heroFileInput = document.createElement("input");
+  heroFileInput.type = "file"; heroFileInput.accept = "image/*";
+  document.body.appendChild(heroFileInput);
+  heroFileInput.addEventListener("change", () => {
+    const file = heroFileInput.files && heroFileInput.files[0];
+    heroFileInput.value = "";
+    setHeroImageFile(file);
   });
   /* A plain <input type=file> (hero photo, or a block photo added via the plain
      file picker/drag-drop) gives no folder info at all — unlike the folder
@@ -2788,6 +2872,54 @@
       alert("이미지 또는 동영상 파일만 첨부할 수 있습니다.");
     }
   }
+
+  /* ---- 파일 첨부가 가능한 다른 자리들(메인 히어로, INFO 배경 사진 PC/모바일)에도 첨부 버튼과
+     동일하게 드래그앤드롭으로 놓을 수 있게 하는 공용 헬퍼. selector에 해당하는 가장 가까운
+     조상을 강조 표시하고, 놓으면 onFiles(files)를 호출 — 위 블록 드롭과 동일하게 내부 카드
+     재정렬 드래그(dragItem)나 실제 OS 파일이 아닌 드래그와는 안 부딪힘. */
+  function attachFileDrop(selector, onFiles){
+    editorEl.addEventListener("dragover", (e) => {
+      if(dragItem) return;
+      if(!e.dataTransfer.types.includes("Files")) return;
+      const el = e.target.closest(selector);
+      if(!el) return;
+      e.preventDefault();
+      el.classList.add("file-drag-over");
+    });
+    editorEl.addEventListener("dragleave", (e) => {
+      const el = e.target.closest(selector);
+      if(el && !el.contains(e.relatedTarget)) el.classList.remove("file-drag-over");
+    });
+    editorEl.addEventListener("drop", (e) => {
+      if(dragItem) return;
+      const el = e.target.closest(selector);
+      if(!el) return;
+      const files = e.dataTransfer.files;
+      if(!files || !files.length) return;
+      e.preventDefault();
+      el.classList.remove("file-drag-over");
+      onFiles(files);
+    });
+  }
+
+  attachFileDrop('[data-drop-target="hero-media"]', (files) => {
+    const fileList = Array.from(files);
+    const imageFile = fileList.find(f => f.type.indexOf("image/") === 0);
+    const videoFile = fileList.find(f => f.type.indexOf("video/") === 0);
+    if(videoFile) uploadHeroVideoFile(videoFile);
+    else if(imageFile) setHeroImageFile(imageFile);
+    else alert("이미지 또는 동영상 파일만 첨부할 수 있습니다.");
+  });
+  attachFileDrop('[data-drop-target="info-bg-pc"]', (files) => {
+    const file = files[0];
+    if(file && file.type.indexOf("image/") === 0) uploadInfoBgImage(file, "pc");
+    else alert("이미지 파일만 첨부할 수 있습니다.");
+  });
+  attachFileDrop('[data-drop-target="info-bg-mobile"]', (files) => {
+    const file = files[0];
+    if(file && file.type.indexOf("image/") === 0) uploadInfoBgImage(file, "mobile");
+    else alert("이미지 파일만 첨부할 수 있습니다.");
+  });
 
   /* ---- Generate: local helper server (server.py) shells out to the `claude` CLI —
      no API key in the browser, no manual copy/paste. Run `python3 server.py` once
@@ -4120,6 +4252,16 @@
       return;
     }
 
+    if(e.target.closest('[data-action="hero-video-upload"]')){ heroVideoFileInput.click(); return; }
+
+    const removeHeroVideoFileBtn = e.target.closest('[data-action="remove-hero-video-file"]');
+    if(removeHeroVideoFileBtn){
+      snapshot();
+      project.heroVideoFile = "";
+      renderEditor(); saveAndRefresh();
+      return;
+    }
+
     const removeBlockBtn = e.target.closest('[data-action="remove-block"]');
     if(removeBlockBtn){
       const blockId = removeBlockBtn.dataset.blockId;
@@ -4218,6 +4360,7 @@
     .p-main{height:100vh;height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;}
     .p-hero{position:absolute;inset:0;z-index:1;overflow:hidden;}
     .p-hero img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
+    .p-hero video{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
     .p-hero-video{position:absolute;inset:0;}
     .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
     .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border:3px solid #111;box-shadow:10px 10px 0 #111;color:#fff3ef;}
@@ -4634,6 +4777,10 @@
     const hero = project.heroImage || imgs[0];
     const heroMedia = (project.heroType === "video" && project.heroVideoId)
       ? '<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/' + encodeURIComponent(project.heroVideoId) + '?autoplay=1&loop=1&muted=1&background=1&app_id=122963" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>'
+      : (project.heroType === "youtube" && project.heroYoutubeId)
+      ? '<div class="p-hero-video"><iframe src="https://www.youtube.com/embed/' + encodeURIComponent(project.heroYoutubeId) + '?autoplay=1&mute=1&loop=1&playlist=' + encodeURIComponent(project.heroYoutubeId) + '&controls=0&showinfo=0&modestbranding=1&playsinline=1" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>'
+      : (project.heroType === "upload" && project.heroVideoFile)
+      ? '<video src="' + project.heroVideoFile + '" autoplay muted loop playsinline></video>'
       : (hero ? '<img src="' + hero.url + '" alt="">' : "");
 
     const blocksHTML = project.blocks.map((block, bi) => {
@@ -4835,6 +4982,8 @@
     L.push("  hero:" + JSON.stringify(heroPath) + ",");
     L.push("  heroType:" + JSON.stringify(project.heroType||"image") + ",");
     if(project.heroType === "video") L.push("  heroVideoId:" + JSON.stringify(project.heroVideoId||"") + ",");
+    if(project.heroType === "youtube") L.push("  heroYoutubeId:" + JSON.stringify(project.heroYoutubeId||"") + ",");
+    if(project.heroType === "upload") L.push("  heroVideoFile:" + JSON.stringify(project.heroVideoFile||"") + ",");
     L.push("  social:{ youtube:" + JSON.stringify(project.social.youtube||"#") + ", vimeo:" + JSON.stringify(project.social.vimeo||"#") + ", instagram:" + JSON.stringify(project.social.instagram||"#") + " },");
     L.push("  tag:" + JSON.stringify(project.tag||"") + ",");
     L.push("  year:" + JSON.stringify(project.year||"") + ",");

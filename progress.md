@@ -2,6 +2,31 @@
 
 최종 업데이트: 2026-08-10
 
+## 세션 요약 — 빌더 파일 첨부 자리 전부 드래그앤드롭 지원 (2026-08-10, 계속)
+
+기존엔 블록 사진/동영상 첨부와 타이틀 폰트 첨부(`#font-preview-box`)만 드래그앤드롭이 됐고, 메인 히어로(이미지/동영상)와 INFO 배경 사진(PC/모바일)은 버튼으로만 첨부 가능했음 — "파일 첨부는 언제나 드래그앤드롭 가능하게" 요청으로 나머지도 전부 채움.
+
+- **공용 헬퍼 `attachFileDrop(selector, onFiles)`** 신설 — 기존 블록 드롭이 쓰던 것과 동일한 판별 방식(내부 카드 재정렬 드래그 `dragItem`이나 실제 OS 파일이 아닌 드래그와 안 부딪히게 `dataTransfer.types.includes("Files")`로 걸러냄)을 재사용 가능한 형태로 뽑아냄. `editorEl`에 `dragover`/`dragleave`/`drop` 세 개를 등록하고, `data-drop-target="..."` 속성이 붙은 컨테이너를 `closest()`로 찾아 강조 표시 후 콜백 호출.
+- **메인 히어로**: 섹션 전체(`data-drop-target="hero-media"`)가 하나의 드롭존 — 사진을 놓으면 "이미지" 모드로, 동영상을 놓으면 자동으로 "직접 업로드" 모드로 전환하면서 그 자리에서 바로 서버 최적화까지 진행(블록 드롭이 사진/동영상을 자동 구분하던 것과 동일한 패턴). 기존 버튼 클릭 로직도 `setHeroImageFile(file)`/`uploadHeroVideoFile(file)` 함수로 뽑아내서 버튼 경로와 드롭 경로가 완전히 같은 코드를 타도록 정리.
+- **INFO 배경 사진 PC/모바일**: 각 행(`data-drop-target="info-bg-pc"`/`"info-bg-mobile"`)에 드롭하면 지난 세션에 이미 파라미터화해둔 `uploadInfoBgImage(file, target)`을 그대로 호출 — PC 칸에 놓으면 PC용, 모바일 칸에 놓으면 모바일용으로 정확히 분리됨.
+- CSS `.file-drop-target.file-drag-over`를 공용 강조 스타일로 추가(기존 블록 카드/폰트 박스 강조와 톤 맞춤, 점선 아웃라인).
+- **검증**: jsdom으로 가짜 `dataTransfer`(types:["Files"], files:[...])를 담은 dragover/drop 이벤트를 각 드롭존에 직접 쏴서 (1) 메인 히어로에 이미지를 놓으면 히어로 이미지가 바뀌는지, (2) 동영상을 놓으면 `/optimize-video` 호출과 함께 heroType이 자동으로 "upload"로 바뀌는지, (3) INFO 배경 PC/모바일에 각각 놓으면 `/upload-info-bg`에 정확히 `target:"pc"`/`"mobile"`로 나가는지, (4) 지원 안 하는 파일 형식(pdf 등)을 놓으면 조용히 실패하지 않고 알림이 뜨는지까지 확인 — 전부 통과. 테스트 중 jsdom이 `structuredClone`/`URL.createObjectURL`을 기본 제공 안 해서 걸린 것도 발견 — 실제 브라우저엔 둘 다 있어서 무해함(테스트 환경에만 폴리필 추가해서 우회).
+- **범위 참고**: 프로젝트/데이터 가져오기(JSON import) 버튼은 이번에 포함 안 함 — 사진/동영상/폰트 같은 "미디어 첨부" 자리들 위주로 처리했고, JSON 가져오기도 드래그앤드롭이 필요하면 말씀해주세요.
+- 아직 커밋 전.
+
+## 세션 요약 — 메인 히어로에 유튜브 링크 / 직접 업로드 추가 (Vimeo 외) (2026-08-10, 계속)
+
+지금까지 빌더의 "메인 히어로" 동영상은 Vimeo 링크(정확히는 숫자 ID)만 지원했음 — 유튜브 링크나 직접 업로드한 파일도 되게 해달라는 요청. `heroType`을 `"image"`/`"video"`(Vimeo, 기존)에 `"youtube"`/`"upload"` 두 가지를 새로 추가하는 방식으로 확장(기존 프로젝트 데이터는 전혀 안 건드림 — `heroType:"video"`가 여전히 Vimeo를 뜻함).
+
+- **데이터 모델**: `heroYoutubeId`(문자열), `heroVideoFile`(relPath 문자열) 두 필드 신설.
+- **빌더 UI**: "메인 히어로" 라디오가 이미지/비메오/유튜브/직접 업로드 4개로 늘어남. 유튜브는 링크(watch?v=, youtu.be/, shorts/)나 순수 ID를 붙여넣어도 정규식으로 11자리 ID만 뽑아 저장. 직접 업로드는 블록 동영상 첨부(video-modal)가 이미 쓰던 `/optimize-video`(ffmpeg 웹 최적화, mode:"upload") 경로를 그대로 재사용 — 별도 서버 변경 없음. 라디오를 바꾸면 해당 타입의 입력 필드만 보이도록(예전엔 비메오 ID 입력창이 이미지를 선택해도 항상 보였음 — 이번에 조건부로 개선).
+- **렌더링(빌더 프리뷰 + 실제 index.html 둘 다)**: `heroMedia` 생성 로직에 유튜브(`youtube.com/embed/...&loop=1&playlist=ID` — 유튜브는 `loop=1` 하나만으론 안 돌아가고 `playlist`에 같은 ID를 같이 줘야 실제로 반복재생됨, 잘 알려진 임베드 특성)와 업로드(`<video autoplay muted loop playsinline>`, iframe이 아니라 네이티브 video라 `object-fit:cover`를 직접 지원해서 오히려 Vimeo/유튜브의 "화면 꽉 채우기 위해 iframe을 과도하게 키우는" 트릭이 필요 없음) 분기 추가.
+- **리스트 배경 프리로드 + 즉시재생 재사용(이전 세션에 만든 기능)도 3가지 타입 전부 대응**: `buildHeroMediaEl(p)` 하나로 리스트 배경 생성과 "선택 시 재사용" 판별 로직을 통일 — `rescuePreloadedHero`가 이제 Vimeo/유튜브 iframe뿐 아니라 업로드 `<video>` 엘리먼트도 똑같이 "이동만 시켜서" 재사용함(video 엘리먼트는 iframe과 달리 브라우징 컨텍스트 문제가 아예 없어서 오히려 더 안전하게 재사용됨). 재사용 슬롯에 iframe이 들어갈 땐 `.p-hero-video` 클래스를 붙여야 화면 꽉 채우기 CSS가 걸리고, video는 클래스 없이도(자손 선택자라) 정상 동작 — 재사용 코드에서 이 케이스를 분기해서 처리.
+- **exportProjectCode**: heroType이 youtube/upload일 때 각각 `heroYoutubeId`/`heroVideoFile`을 실제 발행 코드에 내보내도록 추가.
+- **검증**: `node --check`로 index.html/builder.html 문법 확인. index.html은 실제 PROJECTS 배열에 유튜브/업로드 타입 테스트용 프로젝트 2개를 임시로 주입한 스크래치 사본을 만들어서(원본은 안 건드림) jsdom으로 (1) 리스트 배경에 유튜브는 iframe으로 정확한 embed URL(loop+playlist 파라미터 포함)로, 업로드는 `<video>`로 프리로드되는지, (2) 호버하면 즉시(재로드 없이) 활성화되는지, (3) 클릭해서 프로젝트로 들어가면 유튜브는 iframe이, 업로드는 video가 리스트에서 쓰던 것과 완전히 동일한 DOM 노드로 재사용되는지 확인 — 전부 통과. 기존 Vimeo 경로 회귀 테스트도 재실행해서 이상 없음 확인. 빌더는 새 프로젝트를 만들어 라디오 4개 전환·유튜브 URL 붙여넣기 시 ID 추출·업로드 버튼 노출 조건까지 jsdom으로 확인(테스트 중 `fake-indexeddb/auto`가 jsdom의 별도 컨텍스트에 안 먹혀서 나던 크래시를 발견 — `window.indexedDB`에 직접 연결하는 방식으로 우회, 메모리에 기록해둠).
+- **실제 브라우저에서 확인 안 한 부분**: 유튜브 임베드가 실제로 `controls=0` 등 파라미터로 깔끔하게 배경처럼 보이는지, 직접 업로드한 영상이 실제 ffmpeg 최적화 후 화질/용량이 괜찮은지, 세 방식 전환 시 빌더 프리뷰가 매끄럽게 바뀌는지는 브라우저 + 로컬 서버(`python3 server.py`, 지금 켜져 있음)로 직접 확인 필요.
+- 아직 커밋 전.
+
 ## 세션 요약 — Vimeo 서버 preconnect 추가 (2026-08-10, 계속)
 
 "동영상 로딩을 아예 없애려면 직접 업로드(자체 호스팅)뿐인지" 질문 — 맞다고 답변(Vimeo iframe을 쓰는 이상 플레이어 부트스트랩 시간 자체는 못 없앰, 완전 무로딩은 자체 호스팅 `<video>`로 갈아타야만 가능). 다만 영상 재업로드 없이 공짜로 얻을 수 있는 개선 하나를 바로 적용:

@@ -308,7 +308,7 @@
      이미 재생 중인 레이어를 그대로 드러내는 방식(buildListBgLayers()/setListPreview() 참고). */
   .list-bg-layer{position:absolute; inset:0; opacity:0; transition:opacity .35s ease; pointer-events:none;}
   .list-bg-layer.is-active{opacity:1;}
-  .list-bg-layer img{width:100%; height:100%; object-fit:cover; position:absolute; inset:0;}
+  .list-bg-layer img, .list-bg-layer video{width:100%; height:100%; object-fit:cover; position:absolute; inset:0;}
   .list-bg-layer iframe{
     position:absolute; top:50%; left:50%;
     width:100vw; height:56.25vw;
@@ -458,6 +458,11 @@
     overflow:hidden;
   }
   .p-hero img{
+    width:100%; height:100%;
+    object-fit:cover;
+    position:absolute; inset:0;
+  }
+  .p-hero video{
     width:100%; height:100%;
     object-fit:cover;
     position:absolute; inset:0;
@@ -2090,22 +2095,51 @@
   let listItems = [];
   let listIndex = -1;
   let listBgLayers = [];
-  let pendingHeroIframe = null;
+  let pendingHeroMedia = null;
 
-  /* 리스트 배경 레이어에서 이미 재생 중이던 iframe을 document.body로 "이동"시켜 잠깐 숨겨둠 —
-     그 자리에서 곧바로 closeList()가 listBgMedia를 통째로 비우기 때문에, 그 전에 안전한
-     곳으로 옮겨놔야 재생 중이던 iframe이 파괴되지 않음(appendChild로 옮기는 것 자체는 iframe을
+  /* 프로젝트의 heroType(video=Vimeo, youtube=유튜브, upload=자체 호스팅 mp4)에 맞는 실제
+     재생 엘리먼트(iframe 또는 video)를 만들어 반환 — 이미지거나 필요한 값이 비어있으면 null.
+     리스트 배경 레이어 생성(buildListBgLayers)과 재사용 판별(rescuePreloadedHero) 양쪽에서
+     같은 규칙을 쓰기 위해 한 곳으로 모음. */
+  function buildHeroMediaEl(p){
+    if(p.heroType === "video" && p.heroVideoId){
+      const iframe = document.createElement("iframe");
+      iframe.title = p.title;
+      iframe.allow = "autoplay; fullscreen; picture-in-picture";
+      iframe.src = `https://player.vimeo.com/video/${p.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963`;
+      return iframe;
+    }
+    if(p.heroType === "youtube" && p.heroYoutubeId){
+      const iframe = document.createElement("iframe");
+      iframe.title = p.title;
+      iframe.allow = "autoplay; fullscreen; picture-in-picture";
+      /* loop=1 하나만으로는 유튜브 임베드가 반복 재생되지 않음 — playlist에 같은 영상 ID를
+         넣어야 "재생목록 끝나면 처음부터"가 실제로 동작하는, 잘 알려진 유튜브 임베드 특성 */
+      iframe.src = `https://www.youtube.com/embed/${p.heroYoutubeId}?autoplay=1&mute=1&loop=1&playlist=${p.heroYoutubeId}&controls=0&showinfo=0&modestbranding=1&playsinline=1`;
+      return iframe;
+    }
+    if(p.heroType === "upload" && p.heroVideoFile){
+      const video = document.createElement("video");
+      video.src = u(p.heroVideoFile);
+      video.autoplay = true; video.muted = true; video.loop = true; video.playsInline = true;
+      return video;
+    }
+    return null;
+  }
+
+  /* 리스트 배경 레이어에서 이미 재생 중이던 iframe/video를 document.body로 "이동"시켜 잠깐
+     숨겨둠 — 그 자리에서 곧바로 closeList()가 listBgMedia를 통째로 비우기 때문에, 그 전에
+     안전한 곳으로 옮겨놔야 재생 중이던 엘리먼트가 파괴되지 않음(appendChild로 옮기는 것 자체는
      다시 로드시키지 않음 — remove() 후 나중에 다시 넣는 것과 달리 한 번의 이동으로 처리해야
-     브라우징 컨텍스트가 유지됨). renderProject()가 프로젝트 상세뷰의 히어로 자리에 다시
-     appendChild로 옮겨 넣어서 재사용을 완료함. */
+     iframe의 브라우징 컨텍스트/video의 재생 상태가 유지됨). renderProject()가 프로젝트
+     상세뷰의 히어로 자리에 다시 appendChild로 옮겨 넣어서 재사용을 완료함. */
   function rescuePreloadedHero(p, index){
-    if(p.heroType !== "video") return;
     const layer = listBgLayers[index];
-    const iframe = layer && layer.querySelector("iframe");
-    if(!iframe) return;
-    iframe.style.cssText = "position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;";
-    document.body.appendChild(iframe);
-    pendingHeroIframe = { id: p.id, iframe };
+    const el = layer && layer.querySelector("iframe, video");
+    if(!el) return;
+    el.style.cssText = "position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;";
+    document.body.appendChild(el);
+    pendingHeroMedia = { id: p.id, el };
   }
 
   /* 목록을 열 때(또는 필터를 바꿀 때) 그 목록의 모든 프로젝트를 미리 백그라운드에 깔아둠 —
@@ -2117,12 +2151,9 @@
     listBgLayers = list.map((p) => {
       const layer = document.createElement("div");
       layer.className = "list-bg-layer";
-      if(p.heroType === "video"){
-        const iframe = document.createElement("iframe");
-        iframe.title = p.title;
-        iframe.allow = "autoplay; fullscreen; picture-in-picture";
-        iframe.src = `https://player.vimeo.com/video/${p.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963`;
-        layer.appendChild(iframe);
+      const mediaEl = buildHeroMediaEl(p);
+      if(mediaEl){
+        layer.appendChild(mediaEl);
       }else{
         const img = document.createElement("img");
         img.alt = p.title;
@@ -2421,19 +2452,23 @@
         </div>`;
     }).join("");
 
-    /* 리스트에서 이미 재생 중이던 히어로 동영상을 그대로 넘겨받은 경우, 여기서 또 새 iframe을
-       만들어 처음부터 로드하지 않도록 빈 슬롯만 남겨두고, innerHTML을 채운 직후 실제 재사용
-       중인 iframe을 그 슬롯에 옮겨 넣음(rescuePreloadedHero()/아래 참고). 다른 프로젝트로
-       옮겨둔 게 남아있으면(예: 빠르게 다른 프로젝트로 이동) 더 이상 필요 없으니 정리. */
-    if(pendingHeroIframe && pendingHeroIframe.id !== project.id){
-      pendingHeroIframe.iframe.remove();
-      pendingHeroIframe = null;
+    /* 리스트에서 이미 재생 중이던 히어로 동영상을 그대로 넘겨받은 경우, 여기서 또 새로 만들어
+       처음부터 로드하지 않도록 빈 슬롯만 남겨두고, innerHTML을 채운 직후 실제 재사용 중인
+       엘리먼트를 그 슬롯에 옮겨 넣음(rescuePreloadedHero()/위 참고). 다른 프로젝트로 옮겨둔
+       게 남아있으면(예: 빠르게 다른 프로젝트로 이동) 더 이상 필요 없으니 정리. */
+    if(pendingHeroMedia && pendingHeroMedia.id !== project.id){
+      pendingHeroMedia.el.remove();
+      pendingHeroMedia = null;
     }
-    const reuseHero = pendingHeroIframe && pendingHeroIframe.id === project.id;
-    const heroMedia = project.heroType === "video"
-      ? (reuseHero
-          ? `<div class="p-hero-video" id="p-hero-video-slot"></div>`
-          : `<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/${project.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`)
+    const reuseHero = pendingHeroMedia && pendingHeroMedia.id === project.id;
+    const heroMedia = reuseHero
+      ? `<div id="p-hero-video-slot"></div>`
+      : project.heroType === "video"
+      ? `<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/${project.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`
+      : project.heroType === "youtube"
+      ? `<div class="p-hero-video"><iframe src="https://www.youtube.com/embed/${project.heroYoutubeId}?autoplay=1&mute=1&loop=1&playlist=${project.heroYoutubeId}&controls=0&showinfo=0&modestbranding=1&playsinline=1" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`
+      : project.heroType === "upload"
+      ? `<video src="${u(project.heroVideoFile)}" autoplay muted loop playsinline></video>`
       : `<img src="${u(project.hero)}" alt="${project.title}">`;
 
     scrollRoot.innerHTML = `
@@ -2458,10 +2493,14 @@
 
     if(reuseHero){
       const slot = scrollRoot.querySelector("#p-hero-video-slot");
-      pendingHeroIframe.iframe.style.cssText = "";
-      slot.appendChild(pendingHeroIframe.iframe);
+      /* iframe(Vimeo/유튜브)은 .p-hero-video iframe{...}의 화면 꽉 채우기 트릭이 필요해서
+         래퍼에 그 클래스를 붙여줘야 함 — video(직접 업로드)는 .p-hero video{...}가 래퍼
+         유무와 무관하게(자손 선택자) 적용되므로 그대로 둬도 됨. */
+      if(pendingHeroMedia.el.tagName === "IFRAME") slot.classList.add("p-hero-video");
+      pendingHeroMedia.el.style.cssText = "";
+      slot.appendChild(pendingHeroMedia.el);
       slot.removeAttribute("id");
-      pendingHeroIframe = null;
+      pendingHeroMedia = null;
     }
 
     scrollRoot.querySelectorAll(".gallery").forEach(g => initGallery(g));
