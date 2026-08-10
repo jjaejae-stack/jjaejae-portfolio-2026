@@ -670,13 +670,23 @@
     grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));
     gap:26px 24px;
   }
+  /* Client/Agency render as their own separate grid, above the free-form credits grid,
+     instead of a grid-column:1/-1 divider mixed into one grid — a full-span item forces
+     an early row break in CSS grid auto-placement (it can't share a row with items placed
+     before or after it), which left Client/Agency stranded alone with empty columns to
+     their right instead of sitting flush with a full row. Two small grids stacked with a
+     margin between them lay out cleanly at any column count. */
+  .credits-pinned{margin-bottom:26px;}
   .credit-item{border-top:1px solid var(--line); padding-top:10px;}
   .credit-item .label{
     font-size:11px; text-transform:uppercase; letter-spacing:.06em;
     color:var(--muted); margin-bottom:6px;
   }
   .credit-item .value{font-size:.92rem; line-height:1.55; white-space:pre-line; font-family:var(--font-medium);}
-  .credits-divider{grid-column:1/-1; border-top:1px solid var(--line);}
+  /* pinned items never draw their own top border — whatever grid comes right after them
+     (or, when there's no rest, nothing) provides the one line the section needs, the same
+     way the free-form grid's first row provides the line under the "Credits" heading. */
+  .credit-item.pinned{border-top:none; padding-top:0;}
 
   .p-nav{
     max-width:920px; margin:0 auto; padding:40px 6vw 90px;
@@ -2172,7 +2182,7 @@
       year:"2021",
       blocks:[
         {
-          label:"Toss Securities",
+          label:"Toss Securities Launching Campaign",
           galleryMode:"custom",
           galleryGroups:[1,3,1],
           images:[
