@@ -676,6 +676,7 @@
     color:var(--muted); margin-bottom:6px;
   }
   .credit-item .value{font-size:.92rem; line-height:1.55; white-space:pre-line; font-family:var(--font-medium);}
+  .credits-divider{grid-column:1/-1; border-top:1px solid var(--line);}
 
   .p-nav{
     max-width:920px; margin:0 auto; padding:40px 6vw 90px;
@@ -2441,6 +2442,7 @@
   const viewRoot = document.getElementById("project-view");
   const scrollRoot = document.getElementById("project-scroll");
   const closeBtn = document.getElementById("project-close");
+  let currentProjectId = null; // tracks which project is open so the ✕ Close button knows which list (Work/Play) to return to
 
   /* ---------------- lightbox: 갤러리 사진 클릭 시 확대 레이어 ----------------
      동영상(iframe/video)은 대상이 아니고 사진만 해당. 클릭한 사진이 속한 갤러리 안의
@@ -2604,17 +2606,25 @@
       </div>`;
   }
 
+  /* Client/Agency are pinned to the top of the credits grid from their own project fields
+     (not part of project.credits) — a divider separates them from the free-form credits list
+     below whenever both are present. See builder.html's creditsPinnedHTML for the editor side. */
   function creditsHTML(project){
-    if(!project.credits) return "";
-    const items = project.credits.map(([label, value]) => `
+    const pinned = [];
+    if(project.client) pinned.push(["Client", project.client]);
+    if(project.agency) pinned.push(["Agency", project.agency]);
+    const rest = project.credits || [];
+    if(!pinned.length && !rest.length) return "";
+    const itemHTML = ([label, value]) => `
       <div class="credit-item">
         <div class="label">${label}</div>
         <div class="value">${value}</div>
-      </div>`).join("");
+      </div>`;
+    const divider = (pinned.length && rest.length) ? `<div class="credits-divider"></div>` : "";
     return `
       <div class="p-credits">
         <h3>Credits</h3>
-        <div class="credits-grid">${items}</div>
+        <div class="credits-grid">${pinned.map(itemHTML).join("")}${divider}${rest.map(itemHTML).join("")}</div>
       </div>`;
   }
 
@@ -3204,6 +3214,7 @@
        reads clientWidth to fit frames, which is always 0 while hidden. Add "open" first so
        anything that sizes itself synchronously (e.g. a video-link frame, which doesn't wait on
        an image load event) measures the real, visible layout instead of collapsing to 0×0. */
+    currentProjectId = id;
     viewRoot.classList.add("open");
     renderProject(project);
     viewRoot.scrollTop = 0;
@@ -3238,6 +3249,7 @@
     document.body.classList.remove("project-past-hero");
     closeBtn.classList.remove("show");
     closeLightbox();
+    currentProjectId = null;
   }
 
   const listView = document.getElementById("list-view");
@@ -3323,7 +3335,13 @@
   }
   window.addEventListener("popstate", applyRouteFromLocation);
 
-  closeBtn.addEventListener("click", goHome);
+  /* 프로젝트 상세뷰의 ✕ Close는 메인화면이 아니라, 이 프로젝트가 속한 Work/Play 리스트로
+     돌아감 — 하단 "All Work/Play" 링크와 동일한 목적지(리스트를 거쳐 들어왔든 직접 URL로
+     들어왔든 항상 이 프로젝트의 카테고리 리스트로 돌아가는 게 자연스러움). */
+  closeBtn.addEventListener("click", () => {
+    const p = PROJECTS.find(pr => pr.id === currentProjectId);
+    (p && (p.category || "work") === "play") ? goPlay() : goWork();
+  });
   // 라이트박스가 열려있을 땐 Escape가 라이트박스만 닫아야 함(위쪽 lightbox keydown 핸들러가 처리) —
   // 여기서 goHome까지 같이 불리면 이미지 확대 중 Escape 한 번에 프로젝트 상세페이지 밖으로 나가버림
   document.addEventListener("keydown", (e) => { if(e.key === "Escape" && !lightbox.classList.contains("open")) goHome(); });

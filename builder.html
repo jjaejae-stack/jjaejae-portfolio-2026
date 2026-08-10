@@ -226,6 +226,10 @@
   .block-actions{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .credit-row{display:flex; gap:8px; margin-bottom:8px;}
   .credit-row input{flex:1;}
+  .credit-row.pinned{padding:6px 2px; font-size:13px;}
+  .credit-pinned-label{color:var(--muted); width:70px; flex:none;}
+  .credit-pinned-value{flex:1;}
+  .credits-divider{border-top:1px solid var(--line); margin:4px 0 10px;}
   input[type=file]{display:none;}
 
   /* ---------- preview ---------- */
@@ -831,6 +835,8 @@
       tag: "Campaign",
       year: "",
       meta: "",
+      client: "",
+      agency: "",
       heroType: "image",
       heroVideoId: "",
       heroYoutubeId: "",
@@ -2196,6 +2202,24 @@
       + '<button class="icon-btn" data-action="remove-credit" data-credit-index="' + i + '">✕</button>'
       + '</div>';
   }
+  /* Client/Agency live in their own project fields (edited above, under "카테고리"), not in
+     `project.credits` — these two rows are just a pinned, non-draggable, read-only preview of
+     them at the top of the credits section, followed by a divider once either is filled in, so
+     it's visually obvious that everything below the line is the free-form credits list. */
+  function creditsPinnedHTML(project){
+    const rows = [];
+    if(project.client) rows.push(['Client', project.client]);
+    if(project.agency) rows.push(['Agency', project.agency]);
+    if(!rows.length) return "";
+    return rows.map(([label, value]) =>
+      '<div class="credit-row pinned"><span class="credit-pinned-label">' + label + '</span>'
+        + '<span class="credit-pinned-value">' + escapeHTML(value) + '</span></div>'
+    ).join("") + '<div class="credits-divider"></div>';
+  }
+  function syncCreditsPinnedPreview(project){
+    const el = document.getElementById("credits-pinned");
+    if(el) el.innerHTML = creditsPinnedHTML(project);
+  }
 
   function renderEditor(){
     if(mode === "info"){ renderInfoEditor(); return; }
@@ -2236,8 +2260,12 @@
       +   '<div class="tag-tabs" id="tag-tabs">' + tagTabsHTML(project) + '</div></div>'
       + '<div class="field-group"><label class="field-label">연도</label>'
       +   '<input class="field" data-field="year" style="max-width:140px" value="' + escapeHTML(project.year||"") + '"></div>'
-      + '<div class="field-group"><label class="field-label">클라이언트 / 에이전시</label>'
-      +   '<input class="field" data-field="meta" placeholder="예: Client — 삼성물산 · Agency — TBWA\\KOREA" value="' + escapeHTML(project.meta||"") + '"></div>'
+      + '<div class="field-row field-group">'
+      +   '<div><label class="field-label">Client <span style="font-weight:400; color:var(--muted); font-size:11px;">(크레딧 맨 위에 자동 추가)</span></label>'
+      +     '<input class="field" data-field="client" placeholder="예: 삼성물산" value="' + escapeHTML(project.client||"") + '"></div>'
+      +   '<div><label class="field-label">Agency</label>'
+      +     '<input class="field" data-field="agency" placeholder="예: TBWA\\KOREA" value="' + escapeHTML(project.agency||"") + '"></div>'
+      + '</div>'
 
       + '<div class="section' + (openSections.has("typography-section") ? '' : ' collapsed') + '" id="typography-section">'
       +   '<div class="section-head" data-toggle="typography-section"><span><span class="chevron">▾</span>타이틀 타이포그래피</span></div>'
@@ -2325,6 +2353,7 @@
 
       + '<div class="section">'
       +   '<div class="section-head">크레딧 <span><button class="btn-sm" data-action="paste-credits">붙여넣기로 추가</button> <button class="btn-sm" data-action="add-credit">+ 추가</button></span></div>'
+      +   '<div id="credits-pinned">' + creditsPinnedHTML(project) + '</div>'
       +   '<div id="credits-list" data-sort-scope="credits">' + creditsHTML + '</div>'
       + '</div>';
     applyTitleFontPreview(project);
@@ -2388,7 +2417,8 @@
       }
       case "tag": project.tag = el.value; syncSidebarItemText(project); break;
       case "year": project.year = el.value; syncSidebarItemText(project); break;
-      case "meta": project.meta = el.value; break;
+      case "client": project.client = el.value; syncCreditsPinnedPreview(project); break;
+      case "agency": project.agency = el.value; syncCreditsPinnedPreview(project); break;
       case "heroType": project.heroType = el.value; renderEditor(); break;
       case "heroImageId": {
         const chosen = allImages(project).find(im => im.id === el.value);
@@ -3534,7 +3564,15 @@
       return;
     }
     snapshot();
-    project.credits.push(...parsed);
+    /* Client/Agency lines are near-universal at the top of a pasted agency credit block —
+       route them into the pinned fields instead of the free-form list so they don't show
+       up twice (once pinned, once as an ordinary row) once the divider is in place. */
+    const rest = parsed.filter(([label, value]) => {
+      if(label === "Client" && !project.client){ project.client = value; return false; }
+      if(label === "Agency" && !project.agency){ project.agency = value; return false; }
+      return true;
+    });
+    project.credits.push(...rest);
     renderEditor();
     saveAndRefresh();
     closeCreditsPasteModal();
@@ -4568,6 +4606,7 @@
     .credit-item{border-top:1px solid var(--line);padding-top:10px;}
     .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
     .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;font-family:var(--font-medium);}
+    .credits-divider{grid-column:1/-1;border-top:1px solid var(--line);}
     #lightbox{display:none;position:fixed;inset:0;z-index:600;align-items:center;justify-content:center;background:rgba(10,10,10,.92);}
     #lightbox.open{display:flex;}
     #lightbox img{max-width:88vw;max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:12px;user-select:none;-webkit-user-drag:none;}
@@ -4945,10 +4984,17 @@
         + '</div>';
     }).join("");
 
-    const creditsHTML = (project.credits && project.credits.length)
-      ? '<div class="p-credits"><h3>Credits</h3><div class="credits-grid">' + project.credits.map(c =>
-          '<div class="credit-item"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>'
-        ).join("") + '</div></div>'
+    const pinnedCredits = [];
+    if(project.client) pinnedCredits.push(["Client", project.client]);
+    if(project.agency) pinnedCredits.push(["Agency", project.agency]);
+    const restCredits = project.credits || [];
+    const creditItemHTML = c => '<div class="credit-item"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>';
+    const creditsHTML = (pinnedCredits.length || restCredits.length)
+      ? '<div class="p-credits"><h3>Credits</h3><div class="credits-grid">'
+        + pinnedCredits.map(creditItemHTML).join("")
+        + (pinnedCredits.length && restCredits.length ? '<div class="credits-divider"></div>' : "")
+        + restCredits.map(creditItemHTML).join("")
+      + '</div></div>'
       : "";
 
     const textColor = project.textColor || "#fff3ef";
@@ -5131,6 +5177,8 @@
       L.push("  titleFontDataUrl:" + JSON.stringify(project.titleFont.dataUrl) + ", /* base64 폰트 — 파일이 커서 코드가 길어질 수 있어요 */");
     }
     L.push("  meta:" + JSON.stringify(project.meta||"") + ",");
+    if(project.client) L.push("  client:" + JSON.stringify(project.client) + ",");
+    if(project.agency) L.push("  agency:" + JSON.stringify(project.agency) + ",");
     L.push("  hero:" + JSON.stringify(heroPath) + ",");
     L.push("  heroType:" + JSON.stringify(project.heroType||"image") + ",");
     if(project.heroType === "video") L.push("  heroVideoId:" + JSON.stringify(project.heroVideoId||"") + ",");
@@ -5342,6 +5390,23 @@
         i = Math.max(i, (p.order||0) + 1);
       });
     });
+    /* migrate: Client/Agency used to be just the first one or two manually-typed rows
+       in `credits` (every project that had them followed this convention) — pull them
+       out into dedicated `client`/`agency` fields so they can be pinned to the top of
+       the credits list and edited from their own field instead of a free-text row.
+       Only touches the leading pair (in order) so projects whose first row isn't
+       literally labeled "Client"/"Agency" are left completely alone. */
+    projects.forEach(p => {
+      if(p.client !== undefined && p.agency !== undefined) return;
+      const credits = p.credits || [];
+      let client = "", agency = "", taken = 0;
+      if(credits[taken] && credits[taken][0] === "Client"){ client = credits[taken][1]; taken++; }
+      if(credits[taken] && credits[taken][0] === "Agency"){ agency = credits[taken][1]; taken++; }
+      p.client = client;
+      p.agency = agency;
+      if(taken) p.credits = credits.slice(taken);
+      dbPut(p).catch(e => console.error("client/agency migration failed", e));
+    });
     /* one-off: import "Toss | Fraud Bank Account Search Service (2020)" from Behance
        (behance.net/gallery/128198713) — text/copy pulled via WebFetch (no formal credits
        listed on the page, just the two campaign images), images referenced by relative
@@ -5367,6 +5432,8 @@
         tag: "Campaign",
         year: "2020",
         meta: "",
+        client: "",
+        agency: "",
         heroType: "image",
         heroVideoId: "",
         heroYoutubeId: "",
