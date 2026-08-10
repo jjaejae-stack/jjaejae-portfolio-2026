@@ -5342,6 +5342,53 @@
         i = Math.max(i, (p.order||0) + 1);
       });
     });
+    /* one-off: import "Toss | Fraud Bank Account Search Service (2020)" from Behance
+       (behance.net/gallery/128198713) — text/copy pulled via WebFetch (no formal credits
+       listed on the page, just the two campaign images), images referenced by relative
+       path next to builder.html the same way buildSSFSampleProject() does, since the
+       user needs to save the 2 Behance images into "Toss 2020/" themselves (no network
+       access in this environment to download them directly). Runs once — skipped if
+       the project id already exists (e.g. after the user has since edited/renamed it). */
+    if(!projects.some(p => p.id === "toss-fraud-2020")){
+      const img1 = { id: uid(), relPath: "Toss 2020/toss-01.webp", name: "toss-01.webp", url: "Toss 2020/toss-01.webp" };
+      const img2 = { id: uid(), relPath: "Toss 2020/toss-02.webp", name: "toss-02.webp", url: "Toss 2020/toss-02.webp" };
+      const tossProject = {
+        id: "toss-fraud-2020",
+        title: "Toss",
+        category: "work",
+        order: 7,
+        color: "#0064FF",
+        textColor: "#ffffff",
+        titleLetterSpacing: -0.02,
+        titleLineHeight: 1.02,
+        titleFont: { name:"", dataUrl:"" },
+        boxWidthScale: 1,
+        boxHeightScale: 1,
+        tag: "Campaign",
+        year: "2020",
+        meta: "",
+        heroType: "image",
+        heroVideoId: "",
+        heroYoutubeId: "",
+        heroVideoFile: "",
+        heroImageId: img1.id,
+        heroImage: cloneAsHeroImage(img1),
+        social: { youtube:"", vimeo:"", instagram:"" },
+        blocks: [
+          {
+            id: uid(), label: "Campaign", heading: "",
+            images: [img1, img2],
+            paragraphs: [
+              "An advertising campaign for Toss's Fraud Bank Account Search Service, designed to prevent simple remittance fraud. When a user enters transfer details on Toss's simple remittance screen, the service automatically checks the recipient's account and contact information against fraud transaction reports registered with the National Police Agency.",
+              "We visualized scammers as ghosts, and delivered the message through the confident attitude of Toss users looking straight at them: “Dear. Every Frauder... Now find a new job. The era of making money out of fraud is over.” — closing with the tagline “Safe remittance. Toss.”"
+            ]
+          }
+        ],
+        credits: []
+      };
+      projects.push(tossProject);
+      try{ await dbPut(tossProject); }catch(e){ console.error("Toss seed save failed", e); }
+    }
     const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
     if(firstInTab) currentId = firstInTab.id;
     else if(projects.length) currentId = projects[0].id;
