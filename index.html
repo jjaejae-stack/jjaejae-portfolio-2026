@@ -686,6 +686,9 @@
     color:var(--muted); margin-bottom:6px;
   }
   .credit-item .value{font-size:.92rem; line-height:1.55; white-space:pre-line; font-family:var(--font-medium);}
+  .credit-handle{color:#38bdf8;}
+  a.credit-handle{text-decoration:none;}
+  a.credit-handle:hover{text-decoration:underline;}
   /* pinned items never draw their own top border — whatever grid comes right after them
      (or, when there's no rest, nothing) provides the one line the section needs, the same
      way the free-form grid's first row provides the line under the "Credits" heading. */
@@ -2252,7 +2255,7 @@
       hero:"BRANDI/1237498094-27733e9d52f88f58144ec989e09be3ec753f54612eb682967345190d2316f5a3-d.avif",
       heroType:"video",
       heroVideoId:"601501191",
-      social:{ youtube:"#", vimeo:"https://vimeo.com/601501191?fl=pl&fe=sh", instagram:"#" },
+      social:{ youtube:"#", vimeo:"https://vimeo.com/601501191?fl=pl&fe=sh", instagram:"https://www.instagram.com/brandi__official/" },
       tag:"Campaign",
       year:"",
       blocks:[
@@ -2864,6 +2867,17 @@
       </div>`;
   }
 
+  /* @handle in a credit value always renders sky-blue; "@handle(url)" additionally turns it
+     into a real link to whatever URL was typed in — the URL itself is never shown, only the
+     @handle. A bare @handle with no (url) just gets the color, no link, until one's added. */
+  function linkifyHandles(text){
+    return String(text == null ? "" : text).replace(/@([a-zA-Z0-9_.]+)(?:\(([^)]+)\))?/g, (m, handle, url) =>
+      url
+        ? '<a class="credit-handle" href="' + url + '" target="_blank" rel="noopener">@' + handle + '</a>'
+        : '<span class="credit-handle">@' + handle + '</span>'
+    );
+  }
+
   /* Client/Agency are pinned above the free-form credits from their own project fields
      (not part of project.credits) — rendered as a separate small grid so they always sit
      flush across a full row, then the free-form grid's own first-row border draws the one
@@ -2877,7 +2891,7 @@
     const itemHTML = (cls) => ([label, value]) => `
       <div class="credit-item${cls}">
         <div class="label">${label}</div>
-        <div class="value">${value}</div>
+        <div class="value">${linkifyHandles(value)}</div>
       </div>`;
     const pinnedHTML = pinned.length ? `<div class="credits-grid credits-pinned">${pinned.map(itemHTML(" pinned")).join("")}</div>` : "";
     const restHTML = rest.length ? `<div class="credits-grid">${rest.map(itemHTML("")).join("")}</div>` : "";
