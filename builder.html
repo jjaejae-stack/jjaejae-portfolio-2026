@@ -4603,10 +4603,11 @@
     .p-credits{max-width:1620px;margin:0 auto 100px;padding-top:8px;}
     .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:48px;}
     .credits-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:26px 24px;}
+    .credits-pinned{margin-bottom:26px;}
     .credit-item{border-top:1px solid var(--line);padding-top:10px;}
     .credit-item .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:6px;}
     .credit-item .value{font-size:.92rem;line-height:1.55;white-space:pre-line;font-family:var(--font-medium);}
-    .credits-divider{grid-column:1/-1;border-top:1px solid var(--line);}
+    .credit-item.pinned{border-top:none;padding-top:0;}
     #lightbox{display:none;position:fixed;inset:0;z-index:600;align-items:center;justify-content:center;background:rgba(10,10,10,.92);}
     #lightbox.open{display:flex;}
     #lightbox img{max-width:88vw;max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:12px;user-select:none;-webkit-user-drag:none;}
@@ -4988,13 +4989,11 @@
     if(project.client) pinnedCredits.push(["Client", project.client]);
     if(project.agency) pinnedCredits.push(["Agency", project.agency]);
     const restCredits = project.credits || [];
-    const creditItemHTML = c => '<div class="credit-item"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>';
+    const creditItemHTML = (cls) => c => '<div class="credit-item' + cls + '"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + escapeHTML(c[1]) + '</div></div>';
+    const pinnedCreditsHTML = pinnedCredits.length ? '<div class="credits-grid credits-pinned">' + pinnedCredits.map(creditItemHTML(" pinned")).join("") + '</div>' : "";
+    const restCreditsHTML = restCredits.length ? '<div class="credits-grid">' + restCredits.map(creditItemHTML("")).join("") + '</div>' : "";
     const creditsHTML = (pinnedCredits.length || restCredits.length)
-      ? '<div class="p-credits"><h3>Credits</h3><div class="credits-grid">'
-        + pinnedCredits.map(creditItemHTML).join("")
-        + (pinnedCredits.length && restCredits.length ? '<div class="credits-divider"></div>' : "")
-        + restCredits.map(creditItemHTML).join("")
-      + '</div></div>'
+      ? '<div class="p-credits"><h3>Credits</h3>' + pinnedCreditsHTML + restCreditsHTML + '</div>'
       : "";
 
     const textColor = project.textColor || "#fff3ef";
