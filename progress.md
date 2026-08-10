@@ -2,6 +2,19 @@
 
 최종 업데이트: 2026-08-10
 
+## 세션 요약 — Toss 프로젝트 추가, 크레딧 Client/Agency 자동 고정, 리스트 UX 개선, 갤러리 버그 수정 (2026-08-10)
+
+- **Toss | Fraud Bank Account Search Service (2020) 프로젝트 추가**: 비핸스(behance.net/gallery/128198713)에서 텍스트/카피는 WebFetch로 가져와 빌더 IndexedDB에 seed 마이그레이션으로 주입(ministock 때와 동일한 패턴). 이미지 2장은 처음 WebFetch가 놓친 게 있어서 실제로는 사용자가 더 받아서 직접 빌더의 "사진 추가"로 정리 완료.
+- **크레딧에 Client/Agency 필드 신설 + 항상 맨 위 고정**: 프로젝트 편집 화면의 "카테고리" 밑 필드를 Client/Agency 두 칸으로 분리(기존엔 사이트에 전혀 안 보이던 죽은 `meta` 텍스트 필드였음). 여기 입력하면 크레딧 리스트 맨 위에 자동으로 붙고 드래그로 못 옮기게 고정, 나머지 수동 크레딧들은 그 아래부터. 기존 프로젝트들(크레딧 첫 줄이 이미 Client/Agency였던 것들)은 빌더 로드 시 자동 마이그레이션됨. "붙여넣기로 추가" 모달도 Client/Agency 줄을 자동으로 이 필드로 라우팅.
+  - 처음엔 `grid-column:1/-1` divider 방식으로 만들었다가, CSS grid auto-placement가 그 자리에서 강제로 줄바꿈시켜서 Client/Agency만 빈 칸 여러 개를 남긴 채 혼자 한 줄을 차지하는 버그를 발견 → Client/Agency를 별도의 작은 grid로 분리하고 나머지 grid의 첫 줄 자체 테두리가 구분선 역할을 하도록 재설계.
+  - "CREDITS" 제목 밑줄 + 크레딧 첫 줄 테두리가 겹쳐 보이던 것도 제목 쪽 밑줄을 없애서 해결.
+- **크레딧 값의 `@계정` 자동 하늘색 표시 + 선택적 링크**: `@handle`은 항상 하늘색(#38bdf8)으로 표시. `@handle(URL)` 형식으로 쓰면 그 URL로 이동하는 링크가 됨(화면엔 URL 안 보이고 `@handle`만 보임). URL 없이 `@handle`만 쓰면 색만 입혀지고 클릭은 안 됨 — "웹사이트는 내가 직접 넣겠다"는 요청 반영.
+- **프로젝트 상세뷰 우상단 ✕ Close → 홈 대신 Work/Play 리스트로 복귀**: 하단 "All Work/Play" 링크와 동일한 목적지로 통일. 로고 클릭/Escape는 기존처럼 홈으로 이동(변경 안 함).
+- **Work/Play 리스트가 10개 넘으면 창 밖으로 계속 안 늘어나고 내부 스크롤**: `.list-rows`에 `max-height:700px`(≈10줄) 지정. 화면이 아무리 커도 리스트 박스 크기가 일정하게 유지됨.
+- **리스트 열어두고 5초간 가만히 있으면 다음 프로젝트 미리보기로 자동 전환**: 호버·위/아래 버튼 클릭 시 카운트다운 리셋, 리스트 닫으면 타이머도 정지.
+- **Neo QLED 8K "Idea" 블록 이미지 밑 검은 여백 버그 수정**: 원인은 `.gallery`의 CSS `min-height:280px` 고정값 — 아주 넓은 이미지(1400×219px, 6.4:1)는 정상 계산 높이가 193px로 이 최소값보다 작아서, 박스는 280px를 유지한 채 나머지가 배경색(검정)으로 남아 보이던 것. 이미지 크기에 맞춰 박스 높이를 정할 때 `min-height`도 함께 갱신하도록 수정 — 특정 이미지가 아니라 갤러리 로직 자체를 고쳐서 앞으로 비슷한 극단적 가로/세로 비율 이미지에도 재발 안 함.
+- **참고**: 이 세션 내내 여러 수정사항이 사용자가 빌더에서 직접 Publish/Sync order를 누를 때마다 `git add -A`로 같이 커밋됨([[project_2026_portfolio_publish_git_add_a]]) — 별도로 커밋한 것도 있고(`6ce3044`, `2491486` 등) 사용자 Publish에 묻어간 것도 있음(BRANDI, Toss Securities, Samsung Neo QLED 8K 등 커밋들). 세션 종료 시점 `git status` clean, `origin/main`과 동기화 확인됨.
+
 **세션 마무리 (2026-08-10)** — 사용자가 빌더에서 NOSCARNA 크레딧 확인 후 직접 Publish 진행. 빌더의 Publish가 `git add -A`를 쓰는 구조라([[project_2026_portfolio_publish_git_add_a]]) 이 세션에서 만든 코드 수정(server.py 동영상 dedupe/raw업로드/화질개선, builder.html 폴더선택 탭·크레딧 붙여넣기 기능, .gitignore)이 NOSCARNA 미디어 파일들과 함께 `4f1b94b`("Publish: NOSCARNA") 커밋에 같이 들어갔고, 이어진 `5672730`/`ddc23b1` 커밋까지 전부 `origin/main`에 이미 push 완료(`git status` 확인 결과 clean, "up to date with origin/main"). 별도로 커밋/push할 것 없음 — 다음 세션은 이 상태를 최신으로 보고 시작하면 됨. 로컬 서버(`python3 server.py`, 8420)는 이 세션 수정사항이 반영된 채로 계속 켜져 있을 수 있음.
 
 ## 세션 요약 — 크레딧 "붙여넣기로 추가" 기능 신설 (2026-08-10, 계속)
