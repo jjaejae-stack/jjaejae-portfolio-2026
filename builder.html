@@ -1523,10 +1523,12 @@
   /* one-level undo scoped to the last GENERATE call — separate from the project
      undo stack since INFO editing has no general undo/redo system. */
   let infoGenerateUndo = null;
-  /* cache-bust key for info-bg.jpg — server.py overwrites that same file on disk when a
-     new background photo is attached, so the preview needs a fresh query string each
-     time to avoid showing a browser-cached copy of the old one. */
+  /* cache-bust keys for info-bg.jpg (PC) / info-bg-mobile.jpg — server.py overwrites
+     those files on disk when a new background photo is attached, so the preview needs
+     a fresh query string each time to avoid showing a browser-cached copy of the old
+     one. Separate keys since PC/mobile backgrounds are uploaded independently. */
   let infoBgVersion = Date.now();
+  let infoBgMobileVersion = Date.now();
 
   function saveInfo(){
     try{ localStorage.setItem(INFO_STORAGE_KEY, JSON.stringify(infoData)); }
@@ -1652,7 +1654,8 @@
     }
     if(e.target.closest('[data-action="publish-info"]')){ runPublishInfo(); return; }
     if(e.target.closest('[data-action="save-info"]')){ runSaveInfo(); return; }
-    if(e.target.closest('[data-action="upload-info-bg"]')){ infoBgFileInput.click(); return; }
+    if(e.target.closest('[data-action="upload-info-bg-pc"]')){ infoBgFileInput.click(); return; }
+    if(e.target.closest('[data-action="upload-info-bg-mobile"]')){ infoBgMobileFileInput.click(); return; }
     if(e.target.closest('[data-action="generate-info"]')){ openInfoGenerateModal(); return; }
     if(e.target.closest('[data-action="undo-generate-info"]')){ undoInfoGenerate(); return; }
   }
@@ -1811,12 +1814,22 @@
       +   '</div>'
       + '</div>'
       + '<div class="section">'
-      +   '<div class="section-head">배경 사진</div>'
+      +   '<div class="section-head">배경 사진 (PC)</div>'
       +   '<div class="hero-image-row">'
       +     '<img class="hero-thumb" src="info-bg.jpg?v=' + infoBgVersion + '" alt="" onerror="this.classList.add(\'hero-thumb-empty\')">'
       +     '<div class="hero-image-controls">'
-      +       '<button type="button" class="btn-sm" data-action="upload-info-bg">새 사진 첨부</button>'
-      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">첨부하면 바로 실제 파일(info-bg.jpg)이 교체됩니다 — PUBLISH를 누르면 다음 커밋에 함께 올라갑니다. 취소하려면 원래 쓰던 사진을 다시 첨부해주세요.</p>'
+      +       '<button type="button" class="btn-sm" data-action="upload-info-bg-pc">새 사진 첨부</button>'
+      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">PC(넓은 화면)에서 쓰이는 배경입니다. 첨부하면 바로 실제 파일(info-bg.jpg)이 교체됩니다 — PUBLISH를 누르면 다음 커밋에 함께 올라갑니다.</p>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="section">'
+      +   '<div class="section-head">배경 사진 (모바일)</div>'
+      +   '<div class="hero-image-row">'
+      +     '<img class="hero-thumb" src="info-bg-mobile.jpg?v=' + infoBgMobileVersion + '" alt="" onerror="this.classList.add(\'hero-thumb-empty\')">'
+      +     '<div class="hero-image-controls">'
+      +       '<button type="button" class="btn-sm" data-action="upload-info-bg-mobile">새 사진 첨부</button>'
+      +       '<p style="font-size:11px; color:var(--muted); line-height:1.6;">모바일(좁은 화면)에서만 쓰이는 배경입니다. PC 사진과 비율이 달라 잘리는 부분을 따로 맞출 수 있습니다. 첨부하면 실제 파일(info-bg-mobile.jpg)이 교체됩니다 — PUBLISH를 눌러야 반영됩니다.</p>'
       +     '</div>'
       +   '</div>'
       + '</div>'
@@ -2607,10 +2620,19 @@
   infoBgFileInput.addEventListener("change", () => {
     const file = infoBgFileInput.files && infoBgFileInput.files[0];
     infoBgFileInput.value = "";
-    if(file) uploadInfoBgImage(file);
+    if(file) uploadInfoBgImage(file, "pc");
   });
 
-  async function uploadInfoBgImage(file){
+  const infoBgMobileFileInput = document.createElement("input");
+  infoBgMobileFileInput.type = "file"; infoBgMobileFileInput.accept = "image/*";
+  document.body.appendChild(infoBgMobileFileInput);
+  infoBgMobileFileInput.addEventListener("change", () => {
+    const file = infoBgMobileFileInput.files && infoBgMobileFileInput.files[0];
+    infoBgMobileFileInput.value = "";
+    if(file) uploadInfoBgImage(file, "mobile");
+  });
+
+  async function uploadInfoBgImage(file, target){
     const status = document.getElementById("info-publish-status");
     if(status){ status.style.display = "block"; status.textContent = "배경 사진을 저장하는 중..."; }
     try{
@@ -2623,12 +2645,13 @@
       const res = await fetch(GENERATE_SERVER + "/upload-info-bg", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl: dataUrl, filename: file.name })
+        body: JSON.stringify({ dataUrl: dataUrl, filename: file.name, target: target })
       });
       const data = await res.json().catch(() => ({}));
       if(!res.ok) throw new Error(data.error || ("서버 응답 오류 (" + res.status + ")"));
 
-      infoBgVersion = Date.now();
+      if(target === "mobile") infoBgMobileVersion = Date.now();
+      else infoBgVersion = Date.now();
       if(status) status.textContent = "완료 — 배경 사진을 교체했습니다. PUBLISH를 눌러야 GitHub에도 반영됩니다.";
       renderEditor();
       refreshPreview();
@@ -4599,8 +4622,12 @@
     ).join("");
     /* NOTE: the url(...) value must be single-quoted, not JSON.stringify()'d — that
        wraps it in double quotes, which prematurely closes the surrounding style="..."
-       HTML attribute and silently drops the background-image entirely. */
-    const bgUrl = "info-bg.jpg?v=" + infoBgVersion;
+       HTML attribute and silently drops the background-image entirely. Mirrors the
+       index.html @media(max-width:760px) swap: the Mobile preview toggle shows
+       info-bg-mobile.jpg instead of the PC background. */
+    const bgUrl = currentView === "mobile"
+      ? "info-bg-mobile.jpg?v=" + infoBgMobileVersion
+      : "info-bg.jpg?v=" + infoBgVersion;
     return '<div class="info-page-preview">'
       + '<div class="info-bg" style="background-image:url(\'' + bgUrl + '\')"></div><div class="info-grain"></div>'
       + '<div class="info-inner"><div class="info-content">'

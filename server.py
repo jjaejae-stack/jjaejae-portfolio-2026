@@ -909,22 +909,26 @@ def publish_info(data):
 
 
 INFO_BG_PATH = os.path.join(BASE_DIR, "info-bg.jpg")
+INFO_BG_MOBILE_PATH = os.path.join(BASE_DIR, "info-bg-mobile.jpg")
 
 
 def save_info_bg_image(payload):
-    """Overwrite info-bg.jpg on disk with a newly attached photo. Always saved under
-    that exact same filename (re-encoded to JPEG regardless of the source format) so
-    index.html's `url("info-bg.jpg")` CSS reference never has to change — the file
-    just rides along with whatever git commit the next Publish makes."""
+    """Overwrite info-bg.jpg (PC) or info-bg-mobile.jpg (mobile) on disk with a newly
+    attached photo, depending on payload["target"]. Always saved under that exact same
+    filename (re-encoded to JPEG regardless of the source format) so index.html's
+    `url("info-bg.jpg")`/`url("info-bg-mobile.jpg")` CSS references never have to
+    change — the file just rides along with whatever git commit the next Publish makes."""
     data_url = payload.get("dataUrl") or ""
     if "," not in data_url:
         raise ValueError("dataUrl이 올바르지 않습니다.")
+    target = payload.get("target") or "pc"
+    out_path = INFO_BG_MOBILE_PATH if target == "mobile" else INFO_BG_PATH
     raw = base64.b64decode(data_url.split(",", 1)[1])
     img = Image.open(io.BytesIO(raw))
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-    img.save(INFO_BG_PATH, quality=92)
-    return {"ok": True}
+    img.save(out_path, quality=92)
+    return {"ok": True, "target": target}
 
 
 def save_project_image(payload):
