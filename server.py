@@ -15,6 +15,7 @@ API key needed, it shells out to the `claude` CLI using your existing
 Claude Code login.)
 """
 import base64
+import hashlib
 import html as html_lib
 import http.server
 import io
@@ -32,6 +33,7 @@ PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 MAX_IMAGE_DIM = 2000
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_TIMEOUT_SEC = 180
@@ -164,6 +166,21 @@ def list_images(folder):
     return out
 
 
+def list_videos(folder):
+    """Recursively collect video files under BASE_DIR/folder, return relative paths
+    (used by the builder's "폴더에서 선택" video picker, so an already-optimized video
+    can be attached to another block without re-uploading/re-encoding it)."""
+    root = os.path.join(BASE_DIR, folder)
+    out = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for fn in filenames:
+            if os.path.splitext(fn)[1].lower() in VIDEO_EXT:
+                rel = os.path.relpath(os.path.join(dirpath, fn), BASE_DIR)
+                out.append(rel.replace(os.sep, "/"))
+    out.sort(key=natural_key)
+    return out
+
+
 def _unique_path(out_dir, name_noext, ext, suffix="-crop"):
     candidate = name_noext + suffix + ext
     n = 2
@@ -290,57 +307,98 @@ def crop_image(payload):
 
 
 def _run_ffmpeg(input_source, out_abs):
+    # Cap the LONGER edge at 1920 (not just width) so portrait video is capped by
+    # height instead of width — the old "scale=min(1920,iw):-2" only ever capped
+    # width, so a portrait 4K clip (e.g. 2160x3840) got scaled to 1920x3413 instead
+    # of a proper 1080p-equivalent (1080x1920). Anything already at/under a 1920
+    # long edge (including a normal 1080p or 1080x1920 vertical clip) passes through
+    # with no resize at all — full resolution preserved, only re-encoded.
+    scale_filter = "scale='if(gt(iw,ih),min(1920,iw),-2)':'if(gt(iw,ih),-2,min(1920,ih))'"
     cmd = [
         "ffmpeg", "-y", "-i", input_source,
-        "-vf", "scale='min(1920,iw)':'-2'",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "23",
-        "-c:a", "aac", "-b:a", "128k",
+        "-vf", scale_filter,
+        # crf 18 + preset slow: visually near-lossless x264 (crf 23/medium noticeably
+        # softened fine detail/motion on portfolio footage) — bigger files, but this
+        # runs once at upload time on a local machine, so the extra encode time is cheap.
+        "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+        "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         out_abs,
     ]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError("ffmpeg 인코딩 실패: " + proc.stderr.strip()[-1500:])
 
 
-def optimize_video(payload):
-    """Re-encode a video (uploaded file, or a direct video URL) to a web-friendly
-    H.264/AAC mp4 with faststart, server-side via ffmpeg. Vimeo/YouTube links never
-    reach this function — those platforms already serve optimized video, so
-    builder.html embeds them directly via iframe instead of routing them here."""
-    mode = payload.get("mode") or "upload"
-    folder = (payload.get("folder") or "").strip().strip("/")
-    filename = (payload.get("filename") or "video").strip() or "video"
+def _video_cache_path():
+    return os.path.join(BASE_DIR, ".video_cache.json")
+
+
+def _load_video_cache():
+    try:
+        with open(_video_cache_path(), "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_video_cache(cache):
+    try:
+        with open(_video_cache_path(), "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+    except OSError:
+        pass
+
+
+def optimize_video_from_bytes(raw, folder, filename):
+    """Core of the upload path: re-encode raw video bytes to a web-friendly H.264/AAC
+    mp4 with faststart, server-side via ffmpeg, and cache the result by content hash
+    (sha256 of the raw bytes) in .video_cache.json — reusing the same source video
+    (e.g. the hero video picked again for a block) reuses the already-encoded file
+    instead of re-encoding and writing a duplicate onto disk.
+
+    Called directly by the /optimize-video-raw route (video bytes streamed straight
+    from the request body — no base64/JSON involved, so multi-hundred-MB phone-shot
+    vertical videos don't have to be held in memory as a giant base64 string first,
+    which is what was crashing the browser tab on large uploads) and, for backward
+    compatibility, by optimize_video()'s legacy dataUrl JSON path."""
+    folder = (folder or "").strip().strip("/")
+    filename = (filename or "video").strip() or "video"
     name_noext = os.path.splitext(filename)[0] or "video"
 
     out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
     os.makedirs(out_dir, exist_ok=True)
+
+    content_hash = hashlib.sha256(raw).hexdigest()
+    cached = _load_video_cache().get(content_hash)
+    if cached and os.path.isfile(os.path.join(BASE_DIR, cached["relPath"])):
+        return {"relPath": cached["relPath"], "width": cached.get("width"), "height": cached.get("height"), "reused": True}
+
     out_name = _unique_path(out_dir, name_noext, ".mp4", suffix="-web")
     out_abs = os.path.join(out_dir, out_name)
     out_rel = (folder + "/" + out_name) if folder else out_name
 
-    if mode == "upload":
-        data_url = payload.get("dataUrl") or ""
-        if "," not in data_url:
-            raise ValueError("dataUrl이 올바르지 않습니다.")
-        raw = base64.b64decode(data_url.split(",", 1)[1])
-        with tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[1] or ".mp4", delete=False) as tmp:
-            tmp.write(raw)
-            tmp_path = tmp.name
+    with tempfile.NamedTemporaryFile(suffix=os.path.splitext(filename)[1] or ".mp4", delete=False) as tmp:
+        tmp.write(raw)
+        tmp_path = tmp.name
+    try:
+        _run_ffmpeg(tmp_path, out_abs)
+    finally:
         try:
-            _run_ffmpeg(tmp_path, out_abs)
-        finally:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-    else:  # mode == "link": a direct video URL (not Vimeo/YouTube) — ffmpeg reads it over HTTP
-        url = (payload.get("url") or "").strip()
-        if not url:
-            raise ValueError("동영상 링크가 필요합니다.")
-        _run_ffmpeg(url, out_abs)
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
-    width = height = None
+    width, height = _probe_video_dims(out_abs)
+
+    cache = _load_video_cache()
+    cache[content_hash] = {"relPath": out_rel, "width": width, "height": height}
+    _save_video_cache(cache)
+
+    return {"relPath": out_rel, "width": width, "height": height}
+
+
+def _probe_video_dims(out_abs):
     try:
         probe = subprocess.run(
             ["ffprobe", "-v", "error", "-select_streams", "v:0",
@@ -349,10 +407,45 @@ def optimize_video(payload):
         )
         streams = json.loads(probe.stdout).get("streams") or []
         if streams:
-            width, height = streams[0].get("width"), streams[0].get("height")
+            return streams[0].get("width"), streams[0].get("height")
     except Exception:
         pass
+    return None, None
 
+
+def optimize_video(payload):
+    """Re-encode a video (base64 dataUrl upload, or a direct video URL) to a
+    web-friendly H.264/AAC mp4 with faststart. Vimeo/YouTube links never reach
+    this function — those platforms already serve optimized video, so
+    builder.html embeds them directly via iframe instead of routing them here.
+    File uploads go through /optimize-video-raw (optimize_video_from_bytes)
+    instead of this dataUrl path now; this is kept for the "link" mode and as a
+    fallback."""
+    mode = payload.get("mode") or "upload"
+    folder = (payload.get("folder") or "").strip().strip("/")
+    filename = (payload.get("filename") or "video").strip() or "video"
+
+    if mode == "upload":
+        data_url = payload.get("dataUrl") or ""
+        if "," not in data_url:
+            raise ValueError("dataUrl이 올바르지 않습니다.")
+        raw = base64.b64decode(data_url.split(",", 1)[1])
+        return optimize_video_from_bytes(raw, folder, filename)
+
+    # mode == "link": a direct video URL (not Vimeo/YouTube) — ffmpeg reads it over HTTP
+    url = (payload.get("url") or "").strip()
+    if not url:
+        raise ValueError("동영상 링크가 필요합니다.")
+
+    name_noext = os.path.splitext(filename)[0] or "video"
+    out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
+    os.makedirs(out_dir, exist_ok=True)
+    out_name = _unique_path(out_dir, name_noext, ".mp4", suffix="-web")
+    out_abs = os.path.join(out_dir, out_name)
+    out_rel = (folder + "/" + out_name) if folder else out_name
+
+    _run_ffmpeg(url, out_abs)
+    width, height = _probe_video_dims(out_abs)
     return {"relPath": out_rel, "width": width, "height": height}
 
 
@@ -1071,6 +1164,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             self._send_json(200, {"folder": folder, "images": list_images(folder)})
             return
+        if parsed.path == "/scan-videos":
+            qs = urllib.parse.parse_qs(parsed.query)
+            name = (qs.get("folder") or [""])[0]
+            folder = find_project_folder(name)
+            if not folder:
+                self._send_json(200, {"folder": None, "videos": []})
+                return
+            # Only list videos that already went through our ffmpeg web-optimize pipeline
+            # (recognized by the "-web"/"-web2"/... suffix _unique_path always appends) —
+            # the builder's "폴더에서 선택" picker must never surface a raw, un-optimized
+            # video that happens to be sitting in the project folder for some other reason.
+            optimized = [v for v in list_videos(folder) if re.search(r"-web\d*$", os.path.splitext(v)[0], re.IGNORECASE)]
+            self._send_json(200, {"folder": folder, "videos": optimized})
+            return
         if parsed.path == "/ping":
             self._send_json(200, {"ok": True})
             return
@@ -1078,6 +1185,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/optimize-video-raw":
+            # Raw binary body (the video file itself, streamed straight off the socket) —
+            # never JSON-decoded, so large uploads never get held in memory as one giant
+            # base64 string (that's what was crashing the tab on big vertical/phone videos).
+            qs = urllib.parse.parse_qs(parsed.query)
+            folder = (qs.get("folder") or [""])[0]
+            filename = (qs.get("filename") or ["video"])[0]
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                raw = self.rfile.read(length) if length else b""
+            except Exception as e:
+                self._send_json(400, {"error": "bad request: %s" % e})
+                return
+            if not raw:
+                self._send_json(400, {"error": "동영상 데이터가 비어 있습니다."})
+                return
+            try:
+                result = optimize_video_from_bytes(raw, folder, filename)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "동영상 최적화 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
+            return
+
         if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return

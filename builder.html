@@ -288,6 +288,16 @@
   #video-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
   #video-modal.open{display:flex;}
   #video-modal .modal-box{width:min(520px,92vw);}
+  .existing-video-list{display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; margin-top:8px;}
+  .existing-video-item{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:6px;}
+  .existing-video-item .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;}
+  .existing-video-empty{color:var(--muted); font-size:13px; padding:6px 2px;}
+
+  /* ---------- credits-paste modal ---------- */
+  #credits-paste-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #credits-paste-modal.open{display:flex;}
+  #credits-paste-modal .modal-box{width:min(560px,92vw);}
+  #credits-paste-input.field{min-height:320px; white-space:pre-wrap; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px;}
 
   /* ---------- layout modal ---------- */
   #layout-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
@@ -655,6 +665,7 @@
       <h3>동영상 추가</h3>
       <div class="view-toggle" id="video-tab-toggle">
         <button type="button" data-tab="file">파일 첨부</button>
+        <button type="button" data-tab="existing">폴더에서 선택</button>
         <button type="button" data-tab="link">링크 첨부</button>
       </div>
       <div class="field-group" id="video-file-panel">
@@ -665,6 +676,11 @@
         </div>
         <p class="hint">추가하면 서버에서 자동으로 웹 최적화(H.264/mp4로 재인코딩)해서 프로젝트 폴더에 저장합니다. 파일이 크면 시간이 좀 걸릴 수 있어요.</p>
       </div>
+      <div class="field-group" id="video-existing-panel" style="display:none;">
+        <label class="field-label">이미 프로젝트 폴더에 올라간 동영상</label>
+        <p class="hint">히어로나 다른 블록에 이미 첨부한 동영상을 다시 최적화하지 않고 그대로 재사용합니다 — 같은 파일을 또 올리면 폴더에 중복 파일이 생기니, 이미 쓴 적 있는 영상이라면 이 목록에서 골라주세요.</p>
+        <div id="video-existing-list" class="existing-video-list"></div>
+      </div>
       <div class="field-group" id="video-link-panel" style="display:none;">
         <label class="field-label">동영상 링크 (Vimeo, YouTube, 또는 직접 mp4 링크)</label>
         <input class="field" id="video-link-input" placeholder="https://vimeo.com/... 또는 https://youtube.com/watch?v=...">
@@ -673,6 +689,21 @@
       <div class="modal-actions">
         <button class="btn-sm" id="video-cancel">Cancel</button>
         <button class="btn-primary" id="video-confirm">추가</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="credits-paste-modal">
+    <div class="modal-box">
+      <h3>크레딧 붙여넣기</h3>
+      <div class="field-group">
+        <label class="field-label">"라벨 : 내용" 형식으로 한 줄에 하나씩</label>
+        <textarea class="field" id="credits-paste-input" rows="14" placeholder="Client : 동아제약&#10;Agency : 제일기획&#10;Director : 이용준 @dogo_production"></textarea>
+        <p class="hint">클라이언트/에이전시에서 받은 크레딧 블록을 그대로 붙여넣으면 됩니다. "::FILM::"이나 "[CREDIT]" 같은 구분선/섹션 표시 줄은 자동으로 걸러지고, 콜론(:)이 있는 줄만 라벨/내용으로 각각 추가됩니다.</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="credits-paste-cancel">Cancel</button>
+        <button class="btn-primary" id="credits-paste-confirm">추가</button>
       </div>
     </div>
   </div>
@@ -2293,7 +2324,7 @@
       + '</div>'
 
       + '<div class="section">'
-      +   '<div class="section-head">크레딧 <button class="btn-sm" data-action="add-credit">+ 추가</button></div>'
+      +   '<div class="section-head">크레딧 <span><button class="btn-sm" data-action="paste-credits">붙여넣기로 추가</button> <button class="btn-sm" data-action="add-credit">+ 추가</button></span></div>'
       +   '<div id="credits-list" data-sort-scope="credits">' + creditsHTML + '</div>'
       + '</div>';
     applyTitleFontPreview(project);
@@ -2468,10 +2499,28 @@
   folderInput.addEventListener("change", () => { addFilesToBlock(folderInput.files); folderInput.value=""; });
   filesInput.addEventListener("change", () => { addFilesToBlock(filesInput.files); filesInput.value=""; });
 
+  /* 동영상 파일을 raw 바이너리로 그대로 스트리밍해서 /optimize-video-raw에 올림 — 예전엔
+     FileReader.readAsDataURL로 base64 문자열(원본보다 ~33% 커짐)을 통째로 메모리에 만든 뒤
+     JSON.stringify까지 한 번 더 해서 fetch로 보냈는데, 세로로 찍은 폰 영상처럼 용량이 큰
+     파일에서 이 거대한 문자열 때문에 탭이 죽고 브라우저 오류 페이지가 뜨는 문제가 있었음.
+     fetch에 File을 body로 바로 넘기면 브라우저가 문자열로 안 만들고 스트리밍해서 보내기
+     때문에 이 문제가 근본적으로 없어짐. */
+  async function optimizeVideoRaw(file, folder){
+    const qs = "folder=" + encodeURIComponent(folder || "") + "&filename=" + encodeURIComponent(nfc(file.name));
+    const res = await fetch(GENERATE_SERVER + "/optimize-video-raw?" + qs, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file
+    });
+    const data = await res.json();
+    if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
+    return data;
+  }
+
   /* 메인 히어로 "직접 업로드" — 블록 동영상 첨부(video-modal)의 파일 업로드 경로와 동일하게
-     /optimize-video(mode:"upload")로 서버에서 ffmpeg 웹 최적화(H.264/mp4)한 뒤, 결과
-     relPath를 project.heroVideoFile에 저장. 별도 모달 없이 버튼 하나로 바로 진행 —
-     히어로는 항상 파일 1개뿐이라 블록처럼 여러 개를 고르고 관리할 필요가 없음. */
+     optimizeVideoRaw()로 서버에서 ffmpeg 웹 최적화(H.264/mp4)한 뒤, 결과 relPath를
+     project.heroVideoFile에 저장. 별도 모달 없이 버튼 하나로 바로 진행 — 히어로는 항상
+     파일 1개뿐이라 블록처럼 여러 개를 고르고 관리할 필요가 없음. */
   async function uploadHeroVideoFile(file){
     const project = getCurrentProject();
     if(!project || !file) return;
@@ -2485,23 +2534,12 @@
     const origLabel = btn ? btn.textContent : "";
     if(btn){ btn.disabled = true; btn.textContent = "웹 최적화 중... (몇 분 걸릴 수 있어요)"; }
     try{
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(file);
-      });
-      const res = await fetch(GENERATE_SERVER + "/optimize-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "upload", dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(file.name) })
-      });
-      const data = await res.json();
-      if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
+      const data = await optimizeVideoRaw(file, inferProjectFolder(project));
       snapshot();
       project.heroVideoFile = data.relPath;
       renderEditor();
       saveAndRefresh();
+      if(data.reused) alert("이미 최적화된 동일한 영상을 재사용했습니다 (중복 파일을 새로 만들지 않았어요).");
     }catch(err){
       alert("동영상 처리 실패: " + err.message + "\n\n로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py).");
       if(btn){ btn.disabled = false; btn.textContent = origLabel; }
@@ -3264,6 +3302,8 @@
   const videoModal = document.getElementById("video-modal");
   const videoTabToggle = document.getElementById("video-tab-toggle");
   const videoFilePanel = document.getElementById("video-file-panel");
+  const videoExistingPanel = document.getElementById("video-existing-panel");
+  const videoExistingList = document.getElementById("video-existing-list");
   const videoLinkPanel = document.getElementById("video-link-panel");
   const videoFilePick = document.getElementById("video-file-pick");
   const videoFileName = document.getElementById("video-file-name");
@@ -3281,8 +3321,50 @@
   function renderVideoTabs(){
     videoTabToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.tab === videoTab));
     videoFilePanel.style.display = videoTab === "file" ? "block" : "none";
+    videoExistingPanel.style.display = videoTab === "existing" ? "block" : "none";
     videoLinkPanel.style.display = videoTab === "link" ? "block" : "none";
+    videoConfirmBtn.style.display = videoTab === "existing" ? "none" : "";
+    if(videoTab === "existing") loadExistingVideoList();
   }
+  /* "폴더에서 선택" 탭 — 프로젝트 폴더에 이미 최적화되어 올라간 동영상을 서버가 목록으로
+     내려주면(/scan-videos), 골라서 바로 relPath만 block.images에 추가함. optimize-video(-raw)를
+     아예 다시 호출하지 않으니 재인코딩도, 폴더 안 파일 중복도 없음 — 히어로에 쓴 영상을
+     다른 블록에서도 쓰고 싶을 때 이 탭을 쓰면 됨. */
+  async function loadExistingVideoList(){
+    const project = getCurrentProject();
+    videoExistingList.innerHTML = '<div class="existing-video-empty">불러오는 중...</div>';
+    try{
+      const folder = inferProjectFolder(project);
+      const res = await fetch(GENERATE_SERVER + "/scan-videos?folder=" + encodeURIComponent(folder || ""));
+      const data = await res.json();
+      const videos = (data && data.videos) || [];
+      if(!videos.length){
+        videoExistingList.innerHTML = '<div class="existing-video-empty">이 프로젝트 폴더엔 아직 첨부된 동영상이 없습니다. "파일 첨부" 탭에서 새로 올려주세요.</div>';
+        return;
+      }
+      videoExistingList.innerHTML = videos.map(relPath =>
+        '<div class="existing-video-item">'
+        +   '<span class="fname">' + escapeHTML(relPath.split("/").pop()) + '</span>'
+        +   '<button type="button" class="btn-sm" data-pick-existing-video="' + escapeHTML(relPath) + '">선택</button>'
+        + '</div>'
+      ).join("");
+    }catch(err){
+      videoExistingList.innerHTML = '<div class="existing-video-empty">목록을 불러오지 못했습니다. 로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py).</div>';
+    }
+  }
+  videoExistingList.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-pick-existing-video]");
+    if(!btn) return;
+    const project = getCurrentProject();
+    const block = project && project.blocks.find(b => b.id === videoTargetBlockId);
+    if(!block){ closeVideoModal(); return; }
+    const relPath = btn.dataset.pickExistingVideo;
+    snapshot();
+    block.images.push({ id: uid(), relPath: relPath, name: relPath.split("/").pop(), url: relPath });
+    renderEditor();
+    saveAndRefresh();
+    closeVideoModal();
+  });
   function openVideoModal(blockId){
     videoTargetBlockId = blockId;
     videoTab = "file";
@@ -3341,17 +3423,7 @@
     const block = project && project.blocks.find(b => b.id === videoTargetBlockId);
     if(!block){ closeVideoModal(); return; }
 
-    let body;
-    if(videoTab === "file"){
-      if(!videoPendingFile){ alert("동영상 파일을 선택하세요."); return; }
-      const dataUrl = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(videoPendingFile);
-      });
-      body = { mode: "upload", dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(videoPendingFile.name) };
-    } else {
+    if(videoTab === "link"){
       const url = videoLinkInput.value.trim();
       if(!url){ alert("동영상 링크를 입력하세요."); return; }
       if(VIDEO_PLATFORM_RE.test(url)){
@@ -3364,21 +3436,48 @@
         return;
       }
       const filename = (url.split("/").pop() || "video").split("?")[0] || "video.mp4";
-      body = { mode: "link", url: url, folder: inferProjectFolder(project), filename: filename };
+      videoConfirmBtn.disabled = true;
+      videoConfirmBtn.textContent = "웹 최적화 중... (몇 분 걸릴 수 있어요)";
+      try{
+        const res = await fetch(GENERATE_SERVER + "/optimize-video", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mode: "link", url: url, folder: inferProjectFolder(project), filename: filename })
+        });
+        const data = await res.json();
+        if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
+        snapshot();
+        block.images.push({ id: uid(), relPath: data.relPath, name: data.relPath.split("/").pop(), url: data.relPath });
+      }catch(err){
+        alert("동영상 처리 실패: " + err.message);
+        videoConfirmBtn.disabled = false;
+        videoConfirmBtn.textContent = "추가";
+        return;
+      }
+      videoConfirmBtn.disabled = false;
+      videoConfirmBtn.textContent = "추가";
+      renderEditor();
+      saveAndRefresh();
+      closeVideoModal();
+      return;
     }
 
+    if(!videoPendingFile){ alert("동영상 파일을 선택하세요."); return; }
     videoConfirmBtn.disabled = true;
     videoConfirmBtn.textContent = "웹 최적화 중... (몇 분 걸릴 수 있어요)";
     try{
-      const res = await fetch(GENERATE_SERVER + "/optimize-video", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
-      if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
+      const data = await optimizeVideoRaw(videoPendingFile, inferProjectFolder(project));
       snapshot();
       block.images.push({ id: uid(), relPath: data.relPath, name: data.relPath.split("/").pop(), url: data.relPath });
+      if(data.reused){
+        renderEditor();
+        saveAndRefresh();
+        videoConfirmBtn.disabled = false;
+        videoConfirmBtn.textContent = "추가";
+        closeVideoModal();
+        alert("이미 최적화된 동일한 영상을 재사용했습니다 (중복 파일을 새로 만들지 않았어요).");
+        return;
+      }
     }catch(err){
       alert("동영상 처리 실패: " + err.message);
       videoConfirmBtn.disabled = false;
@@ -3390,6 +3489,55 @@
     renderEditor();
     saveAndRefresh();
     closeVideoModal();
+  });
+
+  /* ---- credits-paste modal ----
+     Agency credit blocks (Client/Director/... 30+ lines) come as one big text blob from
+     the client/agency — typing each into a separate label/value row would be tedious, so
+     this parses "Label : Value" lines in bulk. Section markers like "::FILM::" or a
+     "[CREDIT]" header have no equivalent in the flat project.credits [label,value][] model
+     (see other projects' credits arrays — always flat, no section grouping), so those
+     lines are just dropped rather than turned into a weird empty-value row. */
+  const creditsPasteModal = document.getElementById("credits-paste-modal");
+  const creditsPasteInput = document.getElementById("credits-paste-input");
+  function openCreditsPasteModal(){
+    creditsPasteInput.value = "";
+    creditsPasteModal.classList.add("open");
+    creditsPasteInput.focus();
+  }
+  function closeCreditsPasteModal(){
+    creditsPasteModal.classList.remove("open");
+  }
+  function parseCreditsText(text){
+    const out = [];
+    for(const raw of text.split(/\r?\n/)){
+      const line = raw.trim();
+      if(!line) continue;
+      if(/^\[.*\]$/.test(line)) continue;   // "[CREDIT]"
+      if(/^::.*::$/.test(line)) continue;   // "::FILM::"
+      const idx = line.indexOf(":");
+      if(idx === -1) continue;
+      const label = line.slice(0, idx).trim();
+      const value = line.slice(idx + 1).trim();
+      if(!label || !value) continue;
+      out.push([label, value]);
+    }
+    return out;
+  }
+  document.getElementById("credits-paste-cancel").addEventListener("click", closeCreditsPasteModal);
+  document.getElementById("credits-paste-confirm").addEventListener("click", () => {
+    const project = getCurrentProject();
+    if(!project) { closeCreditsPasteModal(); return; }
+    const parsed = parseCreditsText(creditsPasteInput.value);
+    if(!parsed.length){
+      alert('인식된 줄이 없습니다. "라벨 : 내용" 형식인지 확인해주세요.');
+      return;
+    }
+    snapshot();
+    project.credits.push(...parsed);
+    renderEditor();
+    saveAndRefresh();
+    closeCreditsPasteModal();
   });
 
   /* ---- layout modal ----
@@ -4317,6 +4465,10 @@
       snapshot();
       project.credits.push(["", ""]);
       renderEditor(); saveAndRefresh();
+      return;
+    }
+    if(e.target.closest('[data-action="paste-credits"]')){
+      openCreditsPasteModal();
       return;
     }
     const removeCreditBtn = e.target.closest('[data-action="remove-credit"]');
