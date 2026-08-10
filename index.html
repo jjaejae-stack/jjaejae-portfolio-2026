@@ -2447,6 +2447,7 @@
   let activeListRow = null;
   let listItems = [];
   let listIndex = -1;
+  let listAutoAdvanceTimer = null;
   let listBgLayers = [];
   let pendingHeroMedia = null;
 
@@ -2522,6 +2523,20 @@
      드러내기만 함(새로 로드하지 않음). 행에 마우스를 올릴 때(desktop hover), 위/아래
      버튼으로 이동할 때, 목록을 열 때(기본값 = 첫 항목) 호출됨. 하단 바의 현재 이름/N of M
      카운트도 여기서 같이 갱신. */
+  /* 가만히 있으면(호버·클릭 등 다른 상호작용이 5초간 없으면) 다음 프로젝트로 자동 넘어감 —
+     setListPreview는 호버·위아래 버튼·이 타이머 자신 전부를 거쳐가는 공통 지점이라, 여기
+     한 곳에서만 재예약하면 "무슨 이유로든 선택이 바뀔 때마다 5초 카운트다운을 다시 시작"이
+     자연스럽게 성립함(별도 setInterval 없이 스스로 이어지는 setTimeout 체인). */
+  function scheduleListAutoAdvance(){
+    clearTimeout(listAutoAdvanceTimer);
+    if(listItems.length < 2) return;
+    listAutoAdvanceTimer = setTimeout(() => navListPreview(1), 5000);
+  }
+  function stopListAutoAdvance(){
+    clearTimeout(listAutoAdvanceTimer);
+    listAutoAdvanceTimer = null;
+  }
+
   function setListPreview(p, rowEl, index){
     if(activeListRow) activeListRow.classList.remove("active");
     activeListRow = rowEl || null;
@@ -2536,9 +2551,11 @@
     if(listIndex > -1 && listBgLayers[listIndex]) listBgLayers[listIndex].classList.add("is-active");
     listCurrentName.textContent = p.title;
     listCurrentCount.textContent = listIndex > -1 ? (listIndex + 1) + " / " + listItems.length : "";
+    scheduleListAutoAdvance();
   }
 
-  /* 하단 위/아래 버튼 — 현재 미리보기 중인 항목을 목록의 이전/다음 항목으로 순환 이동. */
+  /* 하단 위/아래 버튼 — 현재 미리보기 중인 항목을 목록의 이전/다음 항목으로 순환 이동.
+     (5초 자동 넘어가기도 이 함수를 그대로 재사용) */
   function navListPreview(dir){
     if(!listItems.length) return;
     const next = (listIndex + dir + listItems.length) % listItems.length;
@@ -3414,6 +3431,7 @@
     document.body.classList.add("list-open");
   }
   function closeList(){
+    stopListAutoAdvance();
     listView.classList.remove("open");
     document.body.classList.remove("list-open");
     listBgMedia.innerHTML = "";
