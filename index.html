@@ -8,6 +8,12 @@
 <link rel="icon" type="image/png" sizes="192x192" href="favicon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="favicon-512.png">
 <link rel="apple-touch-icon" href="favicon-192.png">
+<!-- 히어로/리스트 배경 동영상이 전부 Vimeo 임베드라서, 그 iframe을 실제로 만들기 전에
+     Vimeo 서버로의 DNS/TLS 연결을 미리 열어둬서(handshake를 미리 끝내둠) 첫 재생까지
+     걸리는 시간을 조금이라도 줄임 — 완전한 무로딩은 아니지만 공짜로 얻는 개선. -->
+<link rel="preconnect" href="https://player.vimeo.com">
+<link rel="preconnect" href="https://i.vimeocdn.com">
+<link rel="preconnect" href="https://f.vimeocdn.com" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraBold.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-ExtraLight.woff2" crossorigin>
 <link rel="preload" as="font" type="font/woff2" href="fonts/SUIT-Medium.woff2" crossorigin>
@@ -1339,9 +1345,9 @@
     },
     {
       id:"icecream-homerun",
-      title:"아이스크림 홈런",
+      title:"i-Scream\nHomeLearn",
       category:"work",
-      order:6,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:6, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#ff8a24",
       textColor:"#000000",
       titleLetterSpacing:-0.02,
