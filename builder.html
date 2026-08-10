@@ -1658,6 +1658,12 @@
     if(e.target.closest('[data-action="upload-info-bg-mobile"]')){ infoBgMobileFileInput.click(); return; }
     if(e.target.closest('[data-action="generate-info"]')){ openInfoGenerateModal(); return; }
     if(e.target.closest('[data-action="undo-generate-info"]')){ undoInfoGenerate(); return; }
+    if(e.target.closest('[data-action="translate-info-lead-ko-en"]')){ runInfoLeadTranslate("ko-en"); return; }
+    if(e.target.closest('[data-action="translate-info-lead-en-ko"]')){ runInfoLeadTranslate("en-ko"); return; }
+    const translateParaKoEnBtn = e.target.closest('[data-action="translate-info-para-ko-en"]');
+    if(translateParaKoEnBtn){ runInfoParaTranslate("ko-en", translateParaKoEnBtn.dataset.paraId, translateParaKoEnBtn); return; }
+    const translateParaEnKoBtn = e.target.closest('[data-action="translate-info-para-en-ko"]');
+    if(translateParaEnKoBtn){ runInfoParaTranslate("en-ko", translateParaEnKoBtn.dataset.paraId, translateParaEnKoBtn); return; }
   }
 
   function runSaveInfo(){
@@ -1761,6 +1767,8 @@
       +     '<button type="button" data-value="body"' + (p.type!=="tagline"?' class="active"':'') + '>본문</button>'
       +     '<button type="button" data-value="tagline"' + (p.type==="tagline"?' class="active"':'') + '>태그라인</button>'
       +   '</div>'
+      +   '<button class="icon-btn" data-action="translate-info-para-ko-en" data-para-id="' + p.id + '" title="이 문단만 한국어 → 영어로 번역">KR → EN</button>'
+      +   '<button class="icon-btn" data-action="translate-info-para-en-ko" data-para-id="' + p.id + '" title="이 문단만 영어 → 한국어로 번역">EN → KR</button>'
       +   '<button class="icon-btn" data-toggle="' + styleId + '">스타일</button>'
       +   '<button class="icon-btn" data-action="remove-info-paragraph" data-para-id="' + p.id + '">삭제</button>'
       + '</div>'
@@ -1805,8 +1813,16 @@
       + '</div>'
       + '<p id="info-generate-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<p id="info-publish-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
-      + '<div class="field-group"><label class="field-label">인사말 (첫 문단, 줄바꿈 그대로 유지)</label>'
-      +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea></div>'
+      + '<div class="field-group">'
+      +   '<label class="field-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">'
+      +     '<span>인사말 (첫 문단, 줄바꿈 그대로 유지)</span>'
+      +     '<span>'
+      +       '<button class="icon-btn" id="translate-info-lead-ko-en-btn" data-action="translate-info-lead-ko-en" title="인사말만 한국어 → 영어로 번역">KR → EN</button>'
+      +       '<button class="icon-btn" id="translate-info-lead-en-ko-btn" data-action="translate-info-lead-en-ko" title="인사말만 영어 → 한국어로 번역">EN → KR</button>'
+      +     '</span>'
+      +   '</label>'
+      +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea>'
+      + '</div>'
       + '<div class="section' + (leadStyleOpen ? '' : ' collapsed') + '" id="info-lead-style">'
       +   '<div class="section-head" data-toggle="info-lead-style"><span><span class="chevron">▾</span>인사말 스타일</span></div>'
       +   '<div class="section-body">'
@@ -3861,6 +3877,93 @@
       if(status2){
         status2.style.display = "block";
         status2.textContent = "완료 — 이 블록을 " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      }
+    }catch(e){
+      alert(
+        "번역 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py)."
+      );
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  /* ---- INFO 페이지 KR<->EN 번역 — 프로젝트 편집 화면의 블록 단위 번역(runTranslateBlock)과
+     같은 사상: 한 번에 전체를 번역하는 대신 인사말/문단 하나씩 따로 번역 버튼을 둠(전체를
+     한번에 돌리면 마음에 안 드는 한 군데 때문에 전부 다시 해야 하는 게 불편하다는 피드백).
+     서버의 /translate-info는 lead 문자열 + paragraphs 문자열 배열을 받는 구조라, 인사말만
+     보낼 땐 paragraphs를 빈 배열로, 문단 하나만 보낼 땐 lead를 빈 문자열로 보내는 식으로
+     같은 엔드포인트를 그대로 재사용함(서버 쪽 스키마/엔드포인트 추가 없이 해결됨). 문단의
+     id/type/스타일 필드는 안 건드리고 text만 교체. undo는 GENERATE 전용 1단계 슬롯
+     (infoGenerateUndo)과는 별개라 지원 안 함(GENERATE와 동일한 기존 한계). */
+  async function runInfoLeadTranslate(direction){
+    const btnId = direction === "ko-en" ? "translate-info-lead-ko-en-btn" : "translate-info-lead-en-ko-btn";
+    const btn = document.getElementById(btnId);
+    const status = document.getElementById("info-generate-status");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "인사말을 번역하는 중..."; }
+
+    try{
+      const res = await fetch(GENERATE_SERVER + "/translate-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction: direction, lead: infoData.lead || "", paragraphs: [] })
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+      if(data.lead == null) throw new Error("번역 결과가 비어있습니다.");
+
+      infoData.lead = data.lead;
+      renderEditor();
+      saveInfoAndRefresh();
+      const status2 = document.getElementById("info-generate-status");
+      if(status2){
+        status2.style.display = "block";
+        status2.textContent = "완료 — 인사말을 " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      }
+    }catch(e){
+      alert(
+        "번역 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py)."
+      );
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  async function runInfoParaTranslate(direction, paraId, btn){
+    const para = infoData.paragraphs.find(p => p.id === paraId);
+    if(!para) return;
+    const status = document.getElementById("info-generate-status");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "이 문단을 번역하는 중..."; }
+
+    try{
+      const res = await fetch(GENERATE_SERVER + "/translate-info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction: direction, lead: "", paragraphs: [para.text || ""] })
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+      const translated = Array.isArray(data.paragraphs) ? data.paragraphs[0] : null;
+      if(translated == null) throw new Error("번역 결과가 비어있습니다.");
+
+      para.text = translated;
+      renderEditor();
+      saveInfoAndRefresh();
+      const status2 = document.getElementById("info-generate-status");
+      if(status2){
+        status2.style.display = "block";
+        status2.textContent = "완료 — 이 문단을 " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
       }
     }catch(e){
       alert(

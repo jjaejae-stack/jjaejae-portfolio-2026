@@ -113,6 +113,15 @@ TRANSLATE_SCHEMA = {
     "required": ["title", "tag", "meta", "blocks"]
 }
 
+INFO_TRANSLATE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "lead": {"type": "string"},
+        "paragraphs": {"type": "array", "items": {"type": "string"}}
+    },
+    "required": ["lead", "paragraphs"]
+}
+
 
 def natural_key(s):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
@@ -558,6 +567,19 @@ def build_translate_prompt(direction, data):
         "번역할 원본 JSON:\n%s\n\n"
         "동일한 필드 구조(title, tag, meta, blocks[].heading, blocks[].paragraphs)로 번역 결과를 JSON으로 반환해줘. "
         "빈 문자열이나 빈 배열은 그대로 빈 값으로 둬."
+    ) % (src_lang, dst_lang, json.dumps(data, ensure_ascii=False))
+
+
+def build_info_translate_prompt(direction, data):
+    src_lang = "한국어" if direction == "ko-en" else "영어"
+    dst_lang = "영어" if direction == "ko-en" else "한국어"
+    return (
+        "아래는 광고 에이전시 아트디렉터 포트폴리오 사이트의 INFO(자기소개) 페이지 텍스트(JSON)야. "
+        "%s로 되어 있는 텍스트를 자연스러운 %s로 번역해줘. "
+        "고유명사(이름, 브랜드명)는 그대로 두고, 원문의 줄바꿈(\\n) 위치는 최대한 자연스럽게 유지해줘.\n"
+        "번역할 원본 JSON:\n%s\n\n"
+        "lead 1개와 paragraphs 배열(원본과 정확히 같은 개수)로 이루어진 동일한 필드 구조(lead, paragraphs)로 "
+        "번역 결과를 JSON으로 반환해줘. 빈 문자열은 그대로 빈 값으로 둬."
     ) % (src_lang, dst_lang, json.dumps(data, ensure_ascii=False))
 
 
@@ -1056,7 +1078,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -1219,6 +1241,27 @@ class Handler(http.server.BaseHTTPRequestHandler):
             try:
                 prompt = build_info_generate_prompt(mode, lead, paragraphs, draft, note)
                 structured = run_claude(prompt, INFO_GENERATE_SCHEMA)
+            except subprocess.TimeoutExpired:
+                self._send_json(504, {"error": "claude CLI timed out"})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": str(e)})
+                return
+            self._send_json(200, structured)
+            return
+
+        if parsed.path == "/translate-info":
+            direction = payload.get("direction")
+            if direction not in ("ko-en", "en-ko"):
+                self._send_json(400, {"error": "direction must be 'ko-en' or 'en-ko'"})
+                return
+            data = {
+                "lead": payload.get("lead") or "",
+                "paragraphs": payload.get("paragraphs") if isinstance(payload.get("paragraphs"), list) else []
+            }
+            try:
+                prompt = build_info_translate_prompt(direction, data)
+                structured = run_claude(prompt, INFO_TRANSLATE_SCHEMA)
             except subprocess.TimeoutExpired:
                 self._send_json(504, {"error": "claude CLI timed out"})
                 return
