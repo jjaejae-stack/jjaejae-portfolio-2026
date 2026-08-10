@@ -2,6 +2,8 @@
 
 최종 업데이트: 2026-08-10
 
+**세션 마무리 (2026-08-10)** — 사용자가 빌더에서 NOSCARNA 크레딧 확인 후 직접 Publish 진행. 빌더의 Publish가 `git add -A`를 쓰는 구조라([[project_2026_portfolio_publish_git_add_a]]) 이 세션에서 만든 코드 수정(server.py 동영상 dedupe/raw업로드/화질개선, builder.html 폴더선택 탭·크레딧 붙여넣기 기능, .gitignore)이 NOSCARNA 미디어 파일들과 함께 `4f1b94b`("Publish: NOSCARNA") 커밋에 같이 들어갔고, 이어진 `5672730`/`ddc23b1` 커밋까지 전부 `origin/main`에 이미 push 완료(`git status` 확인 결과 clean, "up to date with origin/main"). 별도로 커밋/push할 것 없음 — 다음 세션은 이 상태를 최신으로 보고 시작하면 됨. 로컬 서버(`python3 server.py`, 8420)는 이 세션 수정사항이 반영된 채로 계속 켜져 있을 수 있음.
+
 ## 세션 요약 — 크레딧 "붙여넣기로 추가" 기능 신설 (2026-08-10, 계속)
 
 NOSCARNA 프로젝트 크레딧에 30줄 가까운 에이전시 크레딧 블록(Client/Agency/::FILM::/::Key Visual:: 섹션 포함)을 추가해달라는 요청. **직접 대신 입력해줄 수 없었던 이유**: 빌더의 프로젝트 데이터는 각자의 브라우저 IndexedDB에만 있고 저장소의 파일이 아니라서, 이 세션(터미널/파일 접근만 가능, 실제 브라우저 조작 불가 — [[feedback_sandbox_no_browser_automation]])에서는 사용자의 실제 브라우저를 열어 그 프로젝트를 직접 편집할 방법이 없음. 대신 붙여넣기만 하면 되는 기능을 새로 만들어서 사용자가 직접 몇 클릭으로 끝내도록 함.
