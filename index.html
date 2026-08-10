@@ -2062,7 +2062,13 @@
         <span class="tag">${[p.tag, p.year].filter(Boolean).join(" · ")}</span>
       </div>`;
     card.addEventListener("mouseenter", () => setListPreview(p, card, i));
-    card.addEventListener("click", () => goProject(p.id));
+    card.addEventListener("click", () => {
+      /* 클릭한 프로젝트가 리스트 배경에 이미 재생 중이던 동영상이면, 새로 로드하지 않고
+         그 iframe을 그대로 프로젝트 상세뷰 히어로로 옮겨감(rescuePreloadedHero 참고) —
+         상세뷰에 들어가자마자 로딩 없이 바로 이어서 재생됨. */
+      rescuePreloadedHero(p, i);
+      goProject(p.id);
+    });
     return card;
   }
 
@@ -2078,6 +2084,23 @@
   let listItems = [];
   let listIndex = -1;
   let listBgLayers = [];
+  let pendingHeroIframe = null;
+
+  /* 리스트 배경 레이어에서 이미 재생 중이던 iframe을 document.body로 "이동"시켜 잠깐 숨겨둠 —
+     그 자리에서 곧바로 closeList()가 listBgMedia를 통째로 비우기 때문에, 그 전에 안전한
+     곳으로 옮겨놔야 재생 중이던 iframe이 파괴되지 않음(appendChild로 옮기는 것 자체는 iframe을
+     다시 로드시키지 않음 — remove() 후 나중에 다시 넣는 것과 달리 한 번의 이동으로 처리해야
+     브라우징 컨텍스트가 유지됨). renderProject()가 프로젝트 상세뷰의 히어로 자리에 다시
+     appendChild로 옮겨 넣어서 재사용을 완료함. */
+  function rescuePreloadedHero(p, index){
+    if(p.heroType !== "video") return;
+    const layer = listBgLayers[index];
+    const iframe = layer && layer.querySelector("iframe");
+    if(!iframe) return;
+    iframe.style.cssText = "position:fixed; left:-9999px; top:0; width:1px; height:1px; opacity:0; pointer-events:none;";
+    document.body.appendChild(iframe);
+    pendingHeroIframe = { id: p.id, iframe };
+  }
 
   /* 목록을 열 때(또는 필터를 바꿀 때) 그 목록의 모든 프로젝트를 미리 백그라운드에 깔아둠 —
      전부 autoplay/loop/muted라 화면에 안 보이는 상태(opacity:0)에서도 이미 로딩·재생이 진행됨.
@@ -2392,8 +2415,19 @@
         </div>`;
     }).join("");
 
+    /* 리스트에서 이미 재생 중이던 히어로 동영상을 그대로 넘겨받은 경우, 여기서 또 새 iframe을
+       만들어 처음부터 로드하지 않도록 빈 슬롯만 남겨두고, innerHTML을 채운 직후 실제 재사용
+       중인 iframe을 그 슬롯에 옮겨 넣음(rescuePreloadedHero()/아래 참고). 다른 프로젝트로
+       옮겨둔 게 남아있으면(예: 빠르게 다른 프로젝트로 이동) 더 이상 필요 없으니 정리. */
+    if(pendingHeroIframe && pendingHeroIframe.id !== project.id){
+      pendingHeroIframe.iframe.remove();
+      pendingHeroIframe = null;
+    }
+    const reuseHero = pendingHeroIframe && pendingHeroIframe.id === project.id;
     const heroMedia = project.heroType === "video"
-      ? `<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/${project.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`
+      ? (reuseHero
+          ? `<div class="p-hero-video" id="p-hero-video-slot"></div>`
+          : `<div class="p-hero-video"><iframe src="https://player.vimeo.com/video/${project.heroVideoId}?autoplay=1&loop=1&muted=1&background=1&app_id=122963" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`)
       : `<img src="${u(project.hero)}" alt="${project.title}">`;
 
     scrollRoot.innerHTML = `
@@ -2415,6 +2449,14 @@
         <a href="#" data-allwork>All ${(project.category || "work") === "play" ? "Play" : "Work"}</a>
         ${visibleProjects.length > 1 ? `<a href="#" data-next>${next.title} →</a>` : `<span></span>`}
       </div>`;
+
+    if(reuseHero){
+      const slot = scrollRoot.querySelector("#p-hero-video-slot");
+      pendingHeroIframe.iframe.style.cssText = "";
+      slot.appendChild(pendingHeroIframe.iframe);
+      slot.removeAttribute("id");
+      pendingHeroIframe = null;
+    }
 
     scrollRoot.querySelectorAll(".gallery").forEach(g => initGallery(g));
     if(visibleProjects.length > 1){
