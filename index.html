@@ -693,6 +693,14 @@
      (or, when there's no rest, nothing) provides the one line the section needs, the same
      way the free-form grid's first row provides the line under the "Credits" heading. */
   .credit-item.pinned{border-top:none; padding-top:0;}
+  /* Section dividers (e.g. "Main Film" / "Digital Film") get spacing but no border of
+     their own — their grid's own first-row border-top (same as every other row) supplies
+     the one line underneath, avoiding the doubled-line problem the "Credits" heading had. */
+  .credits-section{margin-top:34px;}
+  .credits-section-title{
+    font-size:12px; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); margin-bottom:14px;
+  }
 
   .p-nav{
     max-width:920px; margin:0 auto; padding:40px 6vw 90px;
@@ -1371,7 +1379,7 @@
       id:"icecream-homerun",
       title:"i-Scream\nHomeLearn",
       category:"work",
-      order:9,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:11, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#ff8a24",
       textColor:"#000000",
       titleLetterSpacing:-0.02,
@@ -1379,6 +1387,8 @@
       boxWidthScale:1,
       boxHeightScale:1,
       meta:"Client — i-Scream Edu · Agency — TBWA\\KOREA",
+      client:"i-Scream Edu",
+      agency:"TBWA\\KOREA",
       hero:"아이스크림 홈런/ac59fa169739327.64537424686f9.webp",
       heroType:"video",
       heroVideoId:"823640859",
@@ -1483,14 +1493,14 @@
         }
       ],
       credits:[
-        ["Client", "i-Scream Edu"],
-        ["Agency", "TBWA\\KOREA"],
         ["Creative Director", "Seyoon Kim"],
         ["Copywriter", "Bokyung Yoon, Seohee Chong"],
         ["Art Director", "Jaehoon Choi"],
         ["Producer", "Sukhoon Byun"],
         ["Account Executive", "Hojeong Roh, Chihyeuk Im, Eunbi Kim, Haemin Park"],
         ["BX Planner", "Hyejin Park, Geonyoung Kim, Sol Lee"],
+        ["Slogan Design", "햇빛스튜디오 (@sunnystudio.kr)"],
+        ["__section__", "Main Film"],
         ["Director (Main Film)", "Sungmin Kim(ian)"],
         ["Assistant Director (Main Film)", "Heejae Lee"],
         ["Production (Main Film)", "element pictures"],
@@ -1509,6 +1519,7 @@
         ["2D (Main Film)", "소극장"],
         ["Sound (Main Film)", "DR.HOOK"],
         ["Audio PD (Main Film)", "Yuri Ahn"],
+        ["__section__", "Digital film"],
         ["Director (Digital Film)", "Minwoo Kim"],
         ["D.O.P (Digital Film)", "Jongwook Lee"],
         ["Gaffer (Digital Film)", "Dukyong Lee"],
@@ -1519,10 +1530,10 @@
         ["Edit (Digital Film)", "편집인"],
         ["2D (Digital Film)", "엘리엇"],
         ["Sound (Digital Film)", "안녕 낯선사람"],
-        ["Leader, TBWA Org. Culture Research Institute", "Woonghyun Park"],
+        ["__section__", "TBWA\\Organizational Culture Research Institute"],
+        ["Leader", "Woonghyun Park"],
         ["Consulting Director", "Jaeho Kim"],
         ["Consultant", "Yujin Lee"],
-        ["Slogan Design", "햇빛스튜디오 (@sunnystudio.kr)"],
       ]
     },
     {
@@ -2910,6 +2921,29 @@
     );
   }
 
+  /* A credit row whose label is this sentinel is a section divider (value = the section
+     title) instead of a normal [label, value] pair — e.g. "Main Film" vs. "Digital Film"
+     within one project's credits. See builder.html's CREDIT_SECTION_MARKER for the editor
+     side (same constant, same convention). */
+  const CREDIT_SECTION_MARKER = "__section__";
+  /* Splits the flat credits array on section markers into { title, items } segments —
+     items before the first marker land in a title:null leading segment (the normal,
+     un-sectioned case every pre-existing project still uses). */
+  function creditSegments(rest){
+    const segments = [];
+    let current = { title: null, items: [] };
+    (rest || []).forEach(c => {
+      if(c[0] === CREDIT_SECTION_MARKER){
+        if(current.items.length || current.title !== null) segments.push(current);
+        current = { title: c[1], items: [] };
+      }else{
+        current.items.push(c);
+      }
+    });
+    if(current.items.length || current.title !== null) segments.push(current);
+    return segments;
+  }
+
   /* Client/Agency are pinned above the free-form credits from their own project fields
      (not part of project.credits) — rendered as a separate small grid so they always sit
      flush across a full row, then the free-form grid's own first-row border draws the one
@@ -2926,11 +2960,14 @@
         <div class="value">${linkifyHandles(value)}</div>
       </div>`;
     const pinnedHTML = pinned.length ? `<div class="credits-grid credits-pinned">${pinned.map(itemHTML(" pinned")).join("")}</div>` : "";
-    const restHTML = rest.length ? `<div class="credits-grid">${rest.map(itemHTML("")).join("")}</div>` : "";
+    const segmentsHTML = creditSegments(rest).filter(seg => seg.items.length).map(seg => {
+      const grid = `<div class="credits-grid">${seg.items.map(itemHTML("")).join("")}</div>`;
+      return seg.title == null ? grid : `<div class="credits-section"><div class="credits-section-title">${seg.title}</div>${grid}</div>`;
+    }).join("");
     return `
       <div class="p-credits">
         <h3>Credits</h3>
-        ${pinnedHTML}${restHTML}
+        ${pinnedHTML}${segmentsHTML}
       </div>`;
   }
 

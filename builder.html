@@ -230,6 +230,8 @@
   .credit-pinned-label{color:var(--muted); width:70px; flex:none;}
   .credit-pinned-value{flex:1;}
   .credits-divider{border-top:1px solid var(--line); margin:4px 0 10px;}
+  .credit-row.credit-section-row{margin-top:14px;}
+  .credit-section-input{font-weight:700; text-transform:uppercase; letter-spacing:.04em; font-size:12px;}
   input[type=file]{display:none;}
 
   /* ---------- preview ---------- */
@@ -2204,7 +2206,20 @@
       + '</div>';
   }
 
+  /* A credit row is normally a plain [label, value] pair. A row whose label is this
+     sentinel is instead a section divider (value = the section title) — e.g. "Main Film"
+     vs. "Digital Film" within one project's credits. Keeping it as a 2-tuple with a
+     reserved label (rather than a new object shape) means the exported code, the drag-sort
+     index mapping, and every existing [label,value] consumer keep working unchanged. */
+  const CREDIT_SECTION_MARKER = "__section__";
   function creditsRowHTML(c, i){
+    if(c[0] === CREDIT_SECTION_MARKER){
+      return '<div class="credit-row credit-section-row" data-sort-item data-item-id="credit-' + i + '" data-credit-index="' + i + '">'
+        + '<span class="drag-handle">⠿</span>'
+        + '<input class="field-inline credit-section-input" data-field="credit-section-title" data-credit-index="' + i + '" placeholder="섹션 이름 (예: Main Film)" value="' + escapeHTML(c[1]) + '">'
+        + '<button class="icon-btn" data-action="remove-credit" data-credit-index="' + i + '">✕</button>'
+        + '</div>';
+    }
     return '<div class="credit-row" data-sort-item data-item-id="credit-' + i + '" data-credit-index="' + i + '">'
       + '<span class="drag-handle">⠿</span>'
       + '<input class="field-inline" data-field="credit-label" data-credit-index="' + i + '" placeholder="라벨 (예: Client)" value="' + escapeHTML(c[0]) + '">'
@@ -2362,7 +2377,7 @@
       + '</div>'
 
       + '<div class="section">'
-      +   '<div class="section-head">크레딧 <span><button class="btn-sm" data-action="paste-credits">붙여넣기로 추가</button> <button class="btn-sm" data-action="add-credit">+ 추가</button></span></div>'
+      +   '<div class="section-head">크레딧 <span><button class="btn-sm" data-action="paste-credits">붙여넣기로 추가</button> <button class="btn-sm" data-action="add-credit-section" title="Main Film / Digital Film처럼 크레딧을 구간으로 나누는 제목 행을 추가합니다">+ 섹션</button> <button class="btn-sm" data-action="add-credit">+ 추가</button></span></div>'
       +   '<div id="credits-pinned">' + creditsPinnedHTML(project) + '</div>'
       +   '<div id="credits-list" data-sort-scope="credits">' + creditsHTML + '</div>'
       + '</div>';
@@ -2457,6 +2472,11 @@
         break;
       }
       case "credit-value": {
+        const i = parseInt(el.dataset.creditIndex, 10);
+        if(project.credits[i]) project.credits[i][1] = el.value;
+        break;
+      }
+      case "credit-section-title": {
         const i = parseInt(el.dataset.creditIndex, 10);
         if(project.credits[i]) project.credits[i][1] = el.value;
         break;
@@ -3534,10 +3554,10 @@
   /* ---- credits-paste modal ----
      Agency credit blocks (Client/Director/... 30+ lines) come as one big text blob from
      the client/agency — typing each into a separate label/value row would be tedious, so
-     this parses "Label : Value" lines in bulk. Section markers like "::FILM::" or a
-     "[CREDIT]" header have no equivalent in the flat project.credits [label,value][] model
-     (see other projects' credits arrays — always flat, no section grouping), so those
-     lines are just dropped rather than turned into a weird empty-value row. */
+     this parses "Label : Value" lines in bulk. A "::FILM::"-style marker becomes a real
+     section divider (CREDIT_SECTION_MARKER) so agency-supplied groupings like Main Film /
+     Digital Film survive the paste instead of being dropped. A bracketed "[CREDIT]" header
+     has no clear title to extract, so it's still just dropped. */
   const creditsPasteModal = document.getElementById("credits-paste-modal");
   const creditsPasteInput = document.getElementById("credits-paste-input");
   function openCreditsPasteModal(){
@@ -3553,8 +3573,12 @@
     for(const raw of text.split(/\r?\n/)){
       const line = raw.trim();
       if(!line) continue;
-      if(/^\[.*\]$/.test(line)) continue;   // "[CREDIT]"
-      if(/^::.*::$/.test(line)) continue;   // "::FILM::"
+      if(/^\[.*\]$/.test(line)) continue;   // "[CREDIT]" — no title to extract, still dropped
+      const sectionMatch = line.match(/^::\s*(.+?)\s*::$/);   // "::FILM::" -> section divider
+      if(sectionMatch){
+        out.push([CREDIT_SECTION_MARKER, sectionMatch[1]]);
+        continue;
+      }
       const idx = line.indexOf(":");
       if(idx === -1) continue;
       const label = line.slice(0, idx).trim();
@@ -4515,6 +4539,12 @@
       renderEditor(); saveAndRefresh();
       return;
     }
+    if(e.target.closest('[data-action="add-credit-section"]')){
+      snapshot();
+      project.credits.push([CREDIT_SECTION_MARKER, "New Section"]);
+      renderEditor(); saveAndRefresh();
+      return;
+    }
     if(e.target.closest('[data-action="paste-credits"]')){
       openCreditsPasteModal();
       return;
@@ -4621,6 +4651,8 @@
     a.credit-handle{text-decoration:none;}
     a.credit-handle:hover{text-decoration:underline;}
     .credit-item.pinned{border-top:none;padding-top:0;}
+    .credits-section{margin-top:34px;}
+    .credits-section-title{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:14px;}
     #lightbox{display:none;position:fixed;inset:0;z-index:600;align-items:center;justify-content:center;background:rgba(10,10,10,.92);}
     #lightbox.open{display:flex;}
     #lightbox img{max-width:88vw;max-height:88vh;width:auto;height:auto;object-fit:contain;border-radius:12px;user-select:none;-webkit-user-drag:none;}
@@ -5006,9 +5038,28 @@
     const restCredits = project.credits || [];
     const creditItemHTML = (cls) => c => '<div class="credit-item' + cls + '"><div class="label">' + escapeHTML(c[0]) + '</div><div class="value">' + linkifyHandles(escapeHTML(c[1])) + '</div></div>';
     const pinnedCreditsHTML = pinnedCredits.length ? '<div class="credits-grid credits-pinned">' + pinnedCredits.map(creditItemHTML(" pinned")).join("") + '</div>' : "";
-    const restCreditsHTML = restCredits.length ? '<div class="credits-grid">' + restCredits.map(creditItemHTML("")).join("") + '</div>' : "";
+    /* mirrors index.html's creditSegments()/CREDIT_SECTION_MARKER — splits on section
+       divider rows so "Main Film"/"Digital Film"-style groupings preview correctly here too. */
+    const creditSegmentsPreview = (() => {
+      const segments = [];
+      let current = { title: null, items: [] };
+      restCredits.forEach(c => {
+        if(c[0] === CREDIT_SECTION_MARKER){
+          if(current.items.length || current.title !== null) segments.push(current);
+          current = { title: c[1], items: [] };
+        }else{
+          current.items.push(c);
+        }
+      });
+      if(current.items.length || current.title !== null) segments.push(current);
+      return segments;
+    })();
+    const segmentsCreditsHTML = creditSegmentsPreview.filter(seg => seg.items.length).map(seg => {
+      const grid = '<div class="credits-grid">' + seg.items.map(creditItemHTML("")).join("") + '</div>';
+      return seg.title == null ? grid : '<div class="credits-section"><div class="credits-section-title">' + escapeHTML(seg.title) + '</div>' + grid + '</div>';
+    }).join("");
     const creditsHTML = (pinnedCredits.length || restCredits.length)
-      ? '<div class="p-credits"><h3>Credits</h3>' + pinnedCreditsHTML + restCreditsHTML + '</div>'
+      ? '<div class="p-credits"><h3>Credits</h3>' + pinnedCreditsHTML + segmentsCreditsHTML + '</div>'
       : "";
 
     const textColor = project.textColor || "#fff3ef";
