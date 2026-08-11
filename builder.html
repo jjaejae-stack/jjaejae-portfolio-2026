@@ -2357,7 +2357,8 @@
       +   (project.heroType === "upload"
               ? '<div class="field-group"><label class="field-label">직접 업로드한 동영상 — 서버에서 자동으로 웹 최적화(H.264/mp4)됩니다</label>'
               +   '<div class="field-row" style="align-items:center;">'
-              +     '<button type="button" class="btn-sm" data-action="hero-video-upload">동영상 선택</button>'
+              +     '<button type="button" class="btn-sm" data-action="hero-video-upload">새 동영상 업로드</button>'
+              +     '<button type="button" class="btn-sm" data-action="hero-video-pick-existing">이미 올린 동영상에서 선택</button>'
               +     '<span class="fname">' + (project.heroVideoFile ? escapeHTML(project.heroVideoFile.split("/").pop()) : "선택된 파일 없음") + '</span>'
               +     (project.heroVideoFile ? '<button type="button" class="icon-btn" data-action="remove-hero-video-file">제거</button>' : '')
               +   '</div></div>'
@@ -3374,17 +3375,42 @@
   videoFileInput.type = "file"; videoFileInput.accept = "video/*";
   document.body.appendChild(videoFileInput);
 
+  /* videoTargetBlockId is normally a real block id, but this sentinel routes the same
+     modal at the main hero's "직접 업로드" video instead — the hero already has dedicated
+     Vimeo/YouTube radio options for embedded platforms, so "링크 첨부" (which lets a user
+     paste any URL, including a Vimeo/YouTube link that heroVideoFile can't render) is
+     hidden whenever this target is active — see renderVideoTabs(). */
+  const HERO_VIDEO_TARGET = "__hero__";
   let videoTargetBlockId = null;
   let videoTab = "file";
   let videoPendingFile = null;
 
   function renderVideoTabs(){
+    const isHero = videoTargetBlockId === HERO_VIDEO_TARGET;
+    const linkTabBtn = videoTabToggle.querySelector('[data-tab="link"]');
+    if(linkTabBtn) linkTabBtn.style.display = isHero ? "none" : "";
     videoTabToggle.querySelectorAll("button").forEach(b => b.classList.toggle("active", b.dataset.tab === videoTab));
     videoFilePanel.style.display = videoTab === "file" ? "block" : "none";
     videoExistingPanel.style.display = videoTab === "existing" ? "block" : "none";
     videoLinkPanel.style.display = videoTab === "link" ? "block" : "none";
     videoConfirmBtn.style.display = videoTab === "existing" ? "none" : "";
     if(videoTab === "existing") loadExistingVideoList();
+  }
+  /* Resolves videoTargetBlockId into an actual write — either the hero's upload slot
+     or a block's images array — shared by every path that ends with a usable relPath
+     (existing-video pick, file upload, and a direct non-platform video link). Returns
+     false if the target no longer exists (e.g. the block was deleted while the modal
+     was open), so callers can bail out consistently. */
+  function applyVideoRelPathToTarget(project, relPath){
+    if(videoTargetBlockId === HERO_VIDEO_TARGET){
+      project.heroType = "upload";
+      project.heroVideoFile = relPath;
+      return true;
+    }
+    const block = project.blocks.find(b => b.id === videoTargetBlockId);
+    if(!block) return false;
+    block.images.push({ id: uid(), relPath: relPath, name: relPath.split("/").pop(), url: relPath });
+    return true;
   }
   /* "폴더에서 선택" 탭 — 프로젝트 폴더에 이미 최적화되어 올라간 동영상을 서버가 목록으로
      내려주면(/scan-videos), 골라서 바로 relPath만 block.images에 추가함. optimize-video(-raw)를
@@ -3416,11 +3442,10 @@
     const btn = e.target.closest("[data-pick-existing-video]");
     if(!btn) return;
     const project = getCurrentProject();
-    const block = project && project.blocks.find(b => b.id === videoTargetBlockId);
-    if(!block){ closeVideoModal(); return; }
+    if(!project){ closeVideoModal(); return; }
     const relPath = btn.dataset.pickExistingVideo;
     snapshot();
-    block.images.push({ id: uid(), relPath: relPath, name: relPath.split("/").pop(), url: relPath });
+    if(!applyVideoRelPathToTarget(project, relPath)){ closeVideoModal(); return; }
     renderEditor();
     saveAndRefresh();
     closeVideoModal();
@@ -3488,16 +3513,17 @@
   document.getElementById("video-cancel").addEventListener("click", closeVideoModal);
   videoConfirmBtn.addEventListener("click", async () => {
     const project = getCurrentProject();
-    const block = project && project.blocks.find(b => b.id === videoTargetBlockId);
-    if(!block){ closeVideoModal(); return; }
+    if(!project){ closeVideoModal(); return; }
 
     if(videoTab === "link"){
       const url = videoLinkInput.value.trim();
       if(!url){ alert("동영상 링크를 입력하세요."); return; }
       if(VIDEO_PLATFORM_RE.test(url)){
-        /* Vimeo/YouTube already serve optimized, adaptive-bitrate video — embed directly. */
+        /* Vimeo/YouTube already serve optimized, adaptive-bitrate video — embed directly.
+           (link tab is hidden for the hero target — see renderVideoTabs — so this only
+           ever runs for a block, where a raw platform URL is a valid image entry.) */
         snapshot();
-        block.images.push({ id: uid(), relPath: url, name: url, url: url });
+        if(!applyVideoRelPathToTarget(project, url)){ closeVideoModal(); return; }
         renderEditor();
         saveAndRefresh();
         closeVideoModal();
@@ -3515,7 +3541,7 @@
         const data = await res.json();
         if(!res.ok || !data.ok) throw new Error(data.error || "동영상 최적화에 실패했습니다.");
         snapshot();
-        block.images.push({ id: uid(), relPath: data.relPath, name: data.relPath.split("/").pop(), url: data.relPath });
+        applyVideoRelPathToTarget(project, data.relPath);
       }catch(err){
         alert("동영상 처리 실패: " + err.message);
         videoConfirmBtn.disabled = false;
@@ -3536,7 +3562,7 @@
     try{
       const data = await optimizeVideoRaw(videoPendingFile, inferProjectFolder(project));
       snapshot();
-      block.images.push({ id: uid(), relPath: data.relPath, name: data.relPath.split("/").pop(), url: data.relPath });
+      applyVideoRelPathToTarget(project, data.relPath);
       if(data.reused){
         renderEditor();
         saveAndRefresh();
@@ -4481,6 +4507,7 @@
     }
 
     if(e.target.closest('[data-action="hero-video-upload"]')){ heroVideoFileInput.click(); return; }
+    if(e.target.closest('[data-action="hero-video-pick-existing"]')){ openVideoModal(HERO_VIDEO_TARGET); return; }
 
     const removeHeroVideoFileBtn = e.target.closest('[data-action="remove-hero-video-file"]');
     if(removeHeroVideoFileBtn){
