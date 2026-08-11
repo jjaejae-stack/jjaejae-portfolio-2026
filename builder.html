@@ -3473,7 +3473,15 @@
     if(project.heroImage && (project.heroImage.relPath||"").includes("/")){
       return project.heroImage.relPath.split("/").slice(0,-1).join("/");
     }
-    return project.title || "";
+    /* project.title can contain literal newlines (multi-line title styling, e.g.
+       "Samsung\nNeo QLED 8K :\nOnly for Neo Owners.") — this fallback only runs for a
+       brand-new project's very first upload, before any image has a real relPath to
+       infer a folder from. A raw newline in the folder name the server writes to is
+       technically a valid filesystem byte, so the upload silently succeeds into a
+       broken-looking split folder, but the resulting relPath isn't a usable URL path
+       and the image never loads. Collapse whitespace runs into a single space,
+       matching how the title reads as one line everywhere else in the UI. */
+    return (project.title || "").replace(/\s+/g, " ").trim();
   }
   const VIDEO_PLATFORM_RE = /vimeo\.com\/|youtube\.com\/watch\?v=|youtu\.be\//i;
 
@@ -5442,6 +5450,36 @@
         if(fixed){
           dbPut(p).catch(e => console.error("NFC repair save failed", e));
           console.log("[NFC repair]", p.id, "-", fixed, "path(s) fixed");
+        }
+      });
+    })();
+    /* migrate: a brand-new project's first upload used to fall back to project.title
+       (via inferProjectFolder) for the destination folder name — and titles routinely
+       contain literal newlines for multi-line display (e.g. "Samsung\nNeo QLED 8K :\n
+       Only for Neo Owners."). A raw newline in a folder name is a valid filesystem
+       byte, so the upload silently wrote into a broken-looking split folder, but the
+       resulting relPath isn't a usable URL path and the image never loads (see
+       Samsung TV History Film — 2026-08-11). inferProjectFolder/server.py's
+       _sanitize_folder now collapse whitespace before it ever becomes a path, but any
+       relPath already saved with the old broken folder name needs the same collapse
+       applied retroactively. Generic and project-agnostic, same as repairNfcPaths
+       above, so this can't recur for any other multi-line-titled project. */
+    (function repairWhitespaceRelPaths(){
+      function fixImage(im){
+        if(!im || !im.relPath || !/\s{2,}|[\n\r\t]/.test(im.relPath)) return 0;
+        const goodPath = im.relPath.replace(/\s+/g, " ").trim();
+        if(im.url === im.relPath) im.url = goodPath;
+        im.relPath = goodPath;
+        im.name = goodPath.split("/").pop();
+        return 1;
+      }
+      projects.forEach(p => {
+        let fixed = 0;
+        fixed += fixImage(p.heroImage);
+        (p.blocks || []).forEach(b => (b.images || []).forEach(im => { fixed += fixImage(im); }));
+        if(fixed){
+          dbPut(p).catch(e => console.error("whitespace relPath repair save failed", e));
+          console.log("[whitespace relPath repair]", p.id, "-", fixed, "path(s) fixed");
         }
       });
     })();

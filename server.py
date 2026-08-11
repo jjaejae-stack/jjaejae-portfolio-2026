@@ -181,6 +181,20 @@ def list_videos(folder):
     return out
 
 
+def _sanitize_folder(folder):
+    """A project's inferred upload folder can come from its title (builder.html's
+    inferProjectFolder() falls back to the title for a brand-new project's first
+    upload, before any image has a real relPath to infer a folder from) — and titles
+    routinely contain literal newlines for multi-line display (e.g. "Samsung\nNeo
+    QLED 8K :\nOnly for Neo Owners."). A raw newline in a folder name is a valid
+    Unix filename byte, so os.makedirs happily creates it, but the resulting relPath
+    is not a usable URL path segment and the image 404s everywhere it's used.
+    Collapse all whitespace runs (including newlines) into a single space before
+    it ever becomes part of a path, matching how the title reads as one line
+    elsewhere in the UI. """
+    return re.sub(r"\s+", " ", (folder or "").strip()).strip("/")
+
+
 def _unique_path(out_dir, name_noext, ext, suffix="-crop"):
     candidate = name_noext + suffix + ext
     n = 2
@@ -258,7 +272,7 @@ def crop_image(payload):
             raise ValueError("dataUrl이 올바르지 않습니다.")
         raw = base64.b64decode(data_url.split(",", 1)[1])
         img = Image.open(io.BytesIO(raw))
-        folder = (payload.get("folder") or "").strip().strip("/")
+        folder = _sanitize_folder(payload.get("folder"))
         base_name = (payload.get("filename") or "cropped.png").strip() or "cropped.png"
 
     name_noext, ext = os.path.splitext(base_name)
@@ -362,7 +376,7 @@ def optimize_video_from_bytes(raw, folder, filename):
     vertical videos don't have to be held in memory as a giant base64 string first,
     which is what was crashing the browser tab on large uploads) and, for backward
     compatibility, by optimize_video()'s legacy dataUrl JSON path."""
-    folder = (folder or "").strip().strip("/")
+    folder = _sanitize_folder(folder)
     filename = (filename or "video").strip() or "video"
     name_noext = os.path.splitext(filename)[0] or "video"
 
@@ -422,7 +436,7 @@ def optimize_video(payload):
     instead of this dataUrl path now; this is kept for the "link" mode and as a
     fallback."""
     mode = payload.get("mode") or "upload"
-    folder = (payload.get("folder") or "").strip().strip("/")
+    folder = _sanitize_folder(payload.get("folder"))
     filename = (payload.get("filename") or "video").strip() or "video"
 
     if mode == "upload":
@@ -1063,7 +1077,7 @@ def save_project_image(payload):
         raise ValueError("dataUrl이 올바르지 않습니다.")
     raw = base64.b64decode(data_url.split(",", 1)[1])
     img = Image.open(io.BytesIO(raw))
-    folder = (payload.get("folder") or "").strip().strip("/")
+    folder = _sanitize_folder(payload.get("folder"))
     base_name = (payload.get("filename") or "image.jpg").strip() or "image.jpg"
     name_noext, ext = os.path.splitext(base_name)
     if not ext:
