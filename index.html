@@ -123,7 +123,16 @@
      filter:invert(1) flips it to a white source first (no separate white asset needed),
      *then* mix-blend-mode:difference makes it auto-contrast against any background exactly
      like #frame-day/#frame-clock already do. Shares the same show/hide + 40%-on-detail-pages
-     rules as the header and the corner frame items. */
+     rules as the header and the corner frame items.
+
+     filter and mix-blend-mode are split across TWO elements (.brand-logo-blend wrapper +
+     the <img> inside it) rather than both on the <img> itself — combining them on one
+     element is a known WebKit/Safari bug (confirmed on iOS + macOS Safari; Chromium/Firefox
+     render it fine either way) where the filtered result no longer blends against the real
+     page backdrop, so it renders as plain inverted white regardless of background instead
+     of auto-contrasting. Splitting them onto separate elements sidesteps it: the <img>'s
+     filter runs first, then the wrapper (which has no filter of its own) blends that
+     already-inverted image against the actual page behind it. */
   .brand-logo{
     position:fixed; top:20px; left:28px; z-index:500;
     opacity:0;
@@ -131,13 +140,15 @@
     cursor:pointer;
     transition:opacity .35s ease;
   }
-  .brand-logo img{display:block; height:26px; width:auto; filter:invert(1); mix-blend-mode:difference;}
+  .brand-logo-blend{ mix-blend-mode:difference; }
+  .brand-logo-blend img{display:block; height:26px; width:auto; filter:invert(1);}
   body.past-hero .brand-logo{opacity:1; pointer-events:auto;}
   body.project-open .brand-logo, body.info-open .brand-logo{opacity:.4; pointer-events:auto;}
   body.project-open .brand-logo:hover, body.info-open .brand-logo:hover{opacity:1;}
   /* Info 페이지는 배경이 사진(구름/캐릭터)이라 difference 블렌드가 로고를 배경색에 물들여
      보이게 하므로, frame-item과 동일하게 Info 페이지에서는 원래의 솔리드 블랙으로 되돌림 */
-  body.info-open .brand-logo img{ filter:none; mix-blend-mode:normal; }
+  body.info-open .brand-logo-blend{ mix-blend-mode:normal; }
+  body.info-open .brand-logo-blend img{ filter:none; }
 
   /* ---------- corner frame: day / clock / email / ig ----------
      hidden on the main greeting screen, fades in once you scroll past it
@@ -868,7 +879,7 @@
     <button id="project-close">✕ Close</button>
   </header>
 
-  <div class="brand-logo" data-go="home"><img src="jjaejae-wordmark-black.png" alt="jjaejae"></div>
+  <div class="brand-logo" data-go="home"><div class="brand-logo-blend"><img src="jjaejae-wordmark-black.png" alt="jjaejae"></div></div>
 
   <div class="frame-item" id="frame-day"></div>
   <div class="frame-item" id="frame-clock"></div>
@@ -1225,7 +1236,7 @@
       id:"galaxy-tab-s9",
       title:"Galaxy Tab S9",
       category:"work",
-      order:1,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:1, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#16249B",
       textColor:"#b2b6d2",
       titleLetterSpacing:-0.02,
@@ -1286,7 +1297,34 @@
           paragraphs:["People recognize the various shortcomings of existing tablets. We embedded the message that the best choice creates the best outcome, as the protagonist selects Galaxy Tab S9—the finest tablet available today."]
         },
         {
+          label:"Digital Shorts",
+          galleryMode:"3",
+          videoGalleryMode:"custom",
+          videoGalleryGroups:[4,4],
+          images:[
+            "Galaxy Tab S9/02_TAB_BATTERY-web.mp4",
+            "Galaxy Tab S9/WATERPROOF-web.mp4",
+            "Galaxy Tab S9/09_SD_CARD-web.mp4",
+            "Galaxy Tab S9/S_PEN-web.mp4",
+            "Galaxy Tab S9/05_MULTI_PARTITION-web.mp4",
+            "Galaxy Tab S9/08_CHILD-web.mp4",
+            "Galaxy Tab S9/MULTI_RATIO-web.mp4",
+            "Galaxy Tab S9/0914_AMOLED_Ver1-web.mp4",
+            "Galaxy Tab S9/655731514_18138357049501582_8969693227676692362_n.jpg",
+            "Galaxy Tab S9/655210932_18112919308682841_117195002390698744_n.jpg",
+            "Galaxy Tab S9/652107735_18085571570265515_5266818479518807878_n.jpg",
+            "Galaxy Tab S9/656274367_18096273407045809_7992926784986412984_n.jpg",
+            "Galaxy Tab S9/650833731_18001095893906506_4696446475567263586_n.jpg",
+            "Galaxy Tab S9/657134316_18094271341873756_7770746291112263406_n.jpg",
+            "Galaxy Tab S9/655122628_18071456879239662_7405502098636239968_n.jpg",
+            "Galaxy Tab S9/655286651_18119414455624317_3087612032982237346_n.jpg",
+            "Galaxy Tab S9/657600535_18092857502513952_3049996262384112297_n.jpg",
+          ],
+          paragraphs:[]
+        },
+        {
           label:"Behind the scene",
+          galleryMode:"3",
           images:[
             "Galaxy Tab S9/197abe201750005.669e1b443b7a8.webp",
             "Galaxy Tab S9/310c1a201750005.669e1b443d009.webp",
@@ -1303,10 +1341,12 @@
         ["CopyWriter", "Jihwan Park, Jun Moon, Jihyun Park"],
         ["Art Director", "Jaehoon Choi, Kwangrak Choi"],
         ["Account Executive", "Seonkyu Kang, Taegeun Gong, Hyekyung Kim, Sohyun Park, Jaerim Ha"],
+        ["__section__", "Main Film"],
         ["Director", "Moonyong Jeon"],
         ["Assistant Director", "Hyunju Son,Eunhye Chae"],
         ["Executive Producer", "Sungjae Lee, Jihoon Kim"],
-        ["Producer", "Kinam Park, Haeun Lee"],
+        ["Producer", "Kinam Park"],
+        ["Line Producer", "Haeun Lee"],
         ["Production", "Matters-in-Liukh, STUDIO MECCA"],
         ["D.O.P", "Jongtaek Kang"],
         ["Gaffer", "Hongsu Kim"],
@@ -1321,6 +1361,24 @@
         ["2D & 3D", "GIANTSTEP"],
         ["Recording", "STONE SOUND WORKS"],
         ["Audio PD", "Yeojin Lee"],
+        ["__section__", "Digital Film"],
+        ["Director", "Jinho Lee"],
+        ["1st Assistant Director", "Jaehee Kim"],
+        ["2nd Assistant Director", "Hyunjun Jang"],
+        ["Executive Producer", "Sungjae Lee, Jihoon Kim"],
+        ["Producer", "Kinam Park"],
+        ["Line Producer", "Haeun Lee"],
+        ["Production", "Objective X, STUDIO MECCA"],
+        ["D.O.P", "Jisung Kim"],
+        ["Gaffer", "Kyungmoon Ha"],
+        ["Art Team", "Juhyun Ahn"],
+        ["Stylist", "Hyejung Jeong"],
+        ["Hair & Make Up", "Yeji Bang"],
+        ["Location", "Jungyoon Kim"],
+        ["D.I", "SUBMARINE"],
+        ["Edit", "GROOT"],
+        ["2D", "GIANTSTEP"],
+        ["Recording", "STONE SOUND WORKS"],
       ]
     },
     {
@@ -3818,6 +3876,21 @@
     closeBtn.classList.remove("show");
     closeLightbox();
     currentProjectId = null;
+    /* Hiding the view via the "open" class (display:none) does NOT stop any media
+       inside it — a gallery <video> the user tapped play on, an uploaded hero
+       <video>, or a Vimeo/YouTube hero iframe all keep playing (audio included) in
+       the background, invisibly, until something explicitly stops them. Clearing
+       the content is the reliable fix for iframes in particular: pausing a
+       same-origin <video> is easy, but Vimeo/YouTube live in a cross-origin iframe
+       with no synchronous way to pause it from here, so removing the iframe
+       (which tears down its whole browsing context) is what actually stops it.
+       Safe to always do — openProject()/renderProject() unconditionally rebuild
+       this same content from scratch on the next open regardless of what was
+       here before, and the one place a hero node is deliberately reused across a
+       render (pendingHeroMedia, list → project) parks it on document.body while
+       in transit, never leaving it a child of scrollRoot at rest — so it's never
+       here to be destroyed by this. */
+    scrollRoot.innerHTML = "";
   }
 
   const listView = document.getElementById("list-view");
