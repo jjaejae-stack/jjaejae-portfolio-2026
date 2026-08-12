@@ -4491,10 +4491,15 @@
     if(!Array.isArray(data.blocks)) throw new Error("한글 자동 번역 실패: 응답이 비정상입니다.");
     data.blocks.forEach((tb, j) => {
       const block = project.blocks[needsIdx[j]];
+      const src = needsBlocks[j];
       if(!block) return;
-      if(tb.label != null) block.labelKo = tb.label;
-      if(tb.heading != null) block.headingKo = tb.heading;
-      if(Array.isArray(tb.paragraphs)) block.paragraphsKo = tb.paragraphs;
+      /* src(원본 영문 필드)가 비어있었으면 그 필드는 절대 채우지 않음 — 번역할 내용이
+         없는데도 claude가 "번역 준비 완료..." 같은 엉뚱한 안내문을 지어내 응답하는 경우가
+         있어서, 모델 응답을 믿지 않고 원본이 있던 필드만 반영함(원본이 비었으면 결과도
+         비어있는 게 맞음). */
+      if(src.label && tb.label != null) block.labelKo = tb.label;
+      if(src.heading && tb.heading != null) block.headingKo = tb.heading;
+      if(src.paragraphs.filter(Boolean).length && Array.isArray(tb.paragraphs)) block.paragraphsKo = tb.paragraphs;
     });
     await dbPut(project);
     return true;
@@ -4723,9 +4728,11 @@
       if(!translated) throw new Error("번역 결과가 비어있습니다.");
 
       snapshot();
-      if(translated.label != null) block.labelKo = translated.label;
-      if(translated.heading != null) block.headingKo = translated.heading;
-      if(Array.isArray(translated.paragraphs)) block.paragraphsKo = translated.paragraphs;
+      /* 원본이 비어있던 필드는 절대 채우지 않음 — 번역할 내용이 없는데 claude가 엉뚱한
+         안내문을 지어내 응답하는 경우를 대비. */
+      if(payload.blocks[0].label && translated.label != null) block.labelKo = translated.label;
+      if(payload.blocks[0].heading && translated.heading != null) block.headingKo = translated.heading;
+      if(payload.blocks[0].paragraphs.filter(Boolean).length && Array.isArray(translated.paragraphs)) block.paragraphsKo = translated.paragraphs;
 
       renderEditor();
       saveAndRefresh();
