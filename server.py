@@ -105,6 +105,7 @@ TRANSLATE_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "label": {"type": "string"},
                     "heading": {"type": "string"},
                     "paragraphs": {"type": "array", "items": {"type": "string"}}
                 },
@@ -730,7 +731,8 @@ def build_translate_prompt(direction, data):
         "%s로 되어 있는 텍스트를 자연스러운 %s로 번역해줘. "
         "고유명사(브랜드명, 사람 이름)는 그대로 두고, 나머지는 포트폴리오/케이스 스터디 톤을 유지해서 번역해.\n"
         "번역할 원본 JSON:\n%s\n\n"
-        "동일한 필드 구조(title, tag, meta, blocks[].heading, blocks[].paragraphs)로 번역 결과를 JSON으로 반환해줘. "
+        "동일한 필드 구조(title, tag, meta, blocks[].label, blocks[].heading, blocks[].paragraphs)로 번역 결과를 JSON으로 반환해줘. "
+        "blocks[].label은 섹션 제목(예: \"Key Visual\")이니 짧고 간결하게 옮겨줘. "
         "빈 문자열이나 빈 배열은 그대로 빈 값으로 둬."
     ) % (src_lang, dst_lang, json.dumps(data, ensure_ascii=False))
 

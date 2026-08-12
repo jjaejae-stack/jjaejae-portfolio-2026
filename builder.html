@@ -197,6 +197,15 @@
   .block-card-head input{flex:1; font-weight:700;}
   .icon-btn{font-size:12px; color:var(--muted); padding:4px 6px; flex:0 0 auto;}
   .icon-btn:hover{color:var(--accent);}
+  /* 블록마다 EN/한글 콘텐츠 탭 — [data-active-lang]에 따라 .block-lang-content 중 하나만 보임.
+     블록 데이터는 항상 두 언어 다 갖고 있고, 이건 순수하게 어느 쪽을 편집 중인지 보여주는 UI 상태. */
+  .block-lang-tabs{display:flex; gap:4px; margin-bottom:10px;}
+  .lang-tab-btn{font-size:11px; letter-spacing:.04em; padding:4px 10px; border:1px solid var(--line-strong); border-radius:999px; color:var(--muted);}
+  .lang-tab-btn.active{background:var(--fg); color:var(--bg); border-color:var(--fg);}
+  .block-lang-content{display:none;}
+  .block-card[data-active-lang="en"] .block-lang-content.lang-en{display:block;}
+  .block-card[data-active-lang="ko"] .block-lang-content.lang-ko{display:block;}
+  .field-hint{font-size:11px; color:var(--muted); margin-top:6px;}
 
   .image-list{display:flex; flex-direction:column; gap:12px; margin:14px 0;}
   .image-row{display:flex; align-items:center; gap:10px; border:1px solid var(--line-strong); padding:6px 8px; background:var(--surface); box-shadow:var(--card-shadow);}
@@ -1211,6 +1220,10 @@
   let projects = [];
   let currentId = null;
   let mode = "project"; // "project" (editing a PROJECTS entry) | "info" (editing the site's INFO page)
+  /* renderEditor()가 blockCardHTML을 매번 새로 그려서, 블록 카드 안의 EN/KR 탭처럼 순수 DOM
+     상태(어떤 필드가 보이는지일 뿐 project 데이터는 아님)는 재렌더링을 거치면 사라짐 — 어느
+     블록이 KR 탭을 보고 있었는지만 따로 기억해서 renderEditor() 이후에도 유지되게 함. */
+  const blockKoTabOpen = new Set();
   /* collapsible sections (e.g. typography) re-render their whole HTML on every
      edit, which would otherwise reset them to collapsed each time — track open
      state here instead of relying on the DOM class surviving a re-render. */
@@ -2295,7 +2308,17 @@
       +   '<button type="button" class="icon-btn" data-action="block-move-up" data-block-id="' + block.id + '" title="위로 이동"' + (isFirst ? ' disabled' : '') + '>▲</button>'
       +   '<button type="button" class="icon-btn" data-action="block-move-down" data-block-id="' + block.id + '" title="아래로 이동"' + (isLast ? ' disabled' : '') + '>▼</button>'
       + '</span>';
-    return '<div class="block-card" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
+    const hasKo = !!(block.labelKo || block.headingKo || (block.paragraphsKo||[]).filter(Boolean).length);
+    /* 사이트에서 방문자가 EN/한글을 토글해서 볼 수 있는 기능용 — 영문 원본은 그대로 두고
+       한글 버전을 label/heading/paragraphs와 나란히 labelKo/headingKo/paragraphsKo에 저장.
+       기존 "KR → EN"/"EN → KR" 버튼(그 자리 텍스트를 덮어쓰는 번역)과는 별개 — 이건 항상
+       영문 헤더의 label 입력칸을 그대로 두고, 이 탭 안에서만 한글 필드를 다룸. */
+    const koTabActive = blockKoTabOpen.has(block.id);
+    const langTabs = '<div class="block-lang-tabs">'
+      +   '<button type="button" class="lang-tab-btn' + (koTabActive ? '' : ' active') + '" data-action="block-lang-tab" data-lang="en" data-block-id="' + block.id + '">EN</button>'
+      +   '<button type="button" class="lang-tab-btn' + (koTabActive ? ' active' : '') + '" data-action="block-lang-tab" data-lang="ko" data-block-id="' + block.id + '">KR' + (hasKo ? '' : ' ○ 비어있음') + '</button>'
+      + '</div>';
+    return '<div class="block-card" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '" data-active-lang="' + (koTabActive ? 'ko' : 'en') + '">'
       + '<div class="block-card-head">'
       +   '<span class="drag-handle">⠿</span>'
       +   reorderBtns
@@ -2305,10 +2328,23 @@
       +   '<button class="icon-btn" data-action="translate-block-en-ko" data-block-id="' + block.id + '" title="이 블록만 영어 → 한국어로 번역">EN → KR</button>'
       +   '<button class="icon-btn" data-action="remove-block" data-block-id="' + block.id + '">블록 삭제</button>'
       + '</div>'
-      + '<div class="field-group"><label class="field-label">헤드라인 (선택)</label>'
-      +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
-      + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
-      +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
+      + langTabs
+      + '<div class="block-lang-content lang-en">'
+      +   '<div class="field-group"><label class="field-label">헤드라인 (선택)</label>'
+      +     '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
+      +   '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
+      +     '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
+      + '</div>'
+      + '<div class="block-lang-content lang-ko">'
+      +   '<div class="field-group"><label class="field-label">한글 라벨 (사이트 섹션 제목 — 비워두면 영문 라벨 사용)</label>'
+      +     '<input class="field" data-field="labelKo" data-block-id="' + block.id + '" placeholder="예: 키 비주얼" value="' + escapeHTML(block.labelKo||"") + '"></div>'
+      +   '<div class="field-group"><label class="field-label">한글 헤드라인 (선택)</label>'
+      +     '<input class="field" data-field="headingKo" data-block-id="' + block.id + '" value="' + escapeHTML(block.headingKo||"") + '"></div>'
+      +   '<div class="field-group"><label class="field-label">한글 본문 (줄바꿈 = 문단 구분)</label>'
+      +     '<textarea class="field" data-field="paragraphsKo" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphsKo||[]).join("\n")) + '</textarea></div>'
+      +   '<button type="button" class="btn-sm" data-action="translate-block-fill-ko" data-block-id="' + block.id + '">이 블록 영→한 자동번역해서 채우기</button>'
+      +   '<p class="field-hint">비워두고 Publish하면 발행 시점에 자동으로 번역해서 채워집니다.</p>'
+      + '</div>'
       + '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:8px; font-weight:400;">'
       +   '<input type="checkbox" data-action="toggle-media-position" data-block-id="' + block.id + '"' + (block.mediaPosition === "above" ? ' checked' : '') + '> 사진/영상을 헤드라인·본문보다 위로 배치</label></div>'
       + (function(){
@@ -2601,6 +2637,9 @@
       case "label": if(block) block.label = el.value; break;
       case "heading": if(block) block.heading = el.value; break;
       case "paragraphs": if(block) block.paragraphs = el.value.split("\n"); break;
+      case "labelKo": if(block) block.labelKo = el.value; break;
+      case "headingKo": if(block) block.headingKo = el.value; break;
+      case "paragraphsKo": if(block) block.paragraphsKo = el.value.split("\n"); break;
       case "credit-label": {
         const i = parseInt(el.dataset.creditIndex, 10);
         if(project.credits[i]) project.credits[i][0] = el.value;
@@ -4421,6 +4460,46 @@
     }
   }
 
+  /* ---- Publish 직전에 EN 콘텐츠는 있는데 한글 탭이 비어있는 블록을 한 번에 자동 번역해서
+     채워 넣음 — 방문자가 실제로 볼 때 실시간 번역 API를 부르는 게 아니라, 발행 시점에 미리
+     번역해서 static index.html에 그대로 박아 넣는 방식(기존 runTranslateBlock/runTranslate와
+     같은 로컬 claude CLI 경로 재사용). 채운 결과는 IndexedDB에도 저장해서 이 publish 한 번으로
+     끝나는 게 아니라 이후에도 남아있음. 반환값: 뭔가 번역해서 채웠으면 true. */
+  async function fillMissingKoreanTranslations(project){
+    const needsBlocks = [];
+    const needsIdx = [];
+    project.blocks.forEach((b, i) => {
+      const hasEn = !!(b.label || b.heading || (b.paragraphs||[]).filter(Boolean).length);
+      const hasKo = !!(b.labelKo || b.headingKo || (b.paragraphsKo||[]).filter(Boolean).length);
+      if(hasEn && !hasKo){
+        needsBlocks.push({ label: b.label||"", heading: b.heading||"", paragraphs: b.paragraphs||[] });
+        needsIdx.push(i);
+      }
+    });
+    if(!needsBlocks.length) return false;
+
+    const res = await fetch(GENERATE_SERVER + "/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ direction: "en-ko", title: "", tag: "", meta: "", blocks: needsBlocks })
+    });
+    if(!res.ok){
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error("한글 자동 번역 실패: " + (errBody.error || ("서버 응답 오류 (" + res.status + ")")));
+    }
+    const data = await res.json();
+    if(!Array.isArray(data.blocks)) throw new Error("한글 자동 번역 실패: 응답이 비정상입니다.");
+    data.blocks.forEach((tb, j) => {
+      const block = project.blocks[needsIdx[j]];
+      if(!block) return;
+      if(tb.label != null) block.labelKo = tb.label;
+      if(tb.heading != null) block.headingKo = tb.heading;
+      if(Array.isArray(tb.paragraphs)) block.paragraphsKo = tb.paragraphs;
+    });
+    await dbPut(project);
+    return true;
+  }
+
   /* ---- Publish: sends this project's exported code to server.py, which writes it
      into index.html's live PROJECTS array and git push's it — Vercel then auto-deploys
      from the GitHub repo. Requires server.py running AND GitHub remote configured. ---- */
@@ -4435,6 +4514,11 @@
     if(status){ status.style.display = "block"; status.textContent = "index.html에 반영하고 GitHub에 푸시하는 중... (최대 1분)"; }
 
     try{
+      if(status) status.textContent = "빈 한글 탭 자동 번역하는 중...";
+      const translatedAny = await fillMissingKoreanTranslations(project);
+      if(translatedAny) renderEditor();
+      if(status) status.textContent = "index.html에 반영하고 GitHub에 푸시하는 중... (최대 1분)";
+
       const code = exportProjectCode(project);
       const res = await fetch(GENERATE_SERVER + "/publish", {
         method: "POST",
@@ -4594,6 +4678,61 @@
       if(status2){
         status2.style.display = "block";
         status2.textContent = "완료 — 이 블록을 " + (direction === "ko-en" ? "영문으로" : "한글로") + " 번역했습니다.";
+      }
+    }catch(e){
+      alert(
+        "번역 실패: " + e.message + "\n\n" +
+        "로컬 서버가 켜져 있는지 확인해주세요 (python3 server.py)."
+      );
+      if(btn){ btn.disabled = false; btn.textContent = origLabel; }
+      if(status){ status.style.display = "none"; }
+    }
+  }
+
+  /* ---- 사이트 EN/한글 토글용 한글 필드 채우기 — runTranslateBlock과 달리 영문 원본
+     (label/heading/paragraphs)은 절대 안 건드리고 결과를 labelKo/headingKo/paragraphsKo에만
+     씀. 방향은 항상 en-ko(영문이 늘 원본). Publish 시점 자동 채우기(runPublish)도 같은
+     /translate 응답 모양을 그대로 재사용함. */
+  async function runTranslateBlockToKorean(blockId, btn){
+    const project = getCurrentProject();
+    if(!project) return;
+    const block = project.blocks.find(b => b.id === blockId);
+    if(!block) return;
+    const status = document.getElementById("generate-status");
+    const origLabel = btn ? btn.textContent : "";
+    if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
+    if(status){ status.style.display = "block"; status.textContent = "로컬 서버에서 이 블록을 한글로 번역하는 중..."; }
+
+    try{
+      const payload = {
+        direction: "en-ko",
+        title: "", tag: "", meta: "",
+        blocks: [{ label: block.label || "", heading: block.heading || "", paragraphs: block.paragraphs || [] }]
+      };
+      const res = await fetch(GENERATE_SERVER + "/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if(!res.ok){
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.error || ("서버 응답 오류 (" + res.status + ")"));
+      }
+      const data = await res.json();
+      const translated = Array.isArray(data.blocks) ? data.blocks[0] : null;
+      if(!translated) throw new Error("번역 결과가 비어있습니다.");
+
+      snapshot();
+      if(translated.label != null) block.labelKo = translated.label;
+      if(translated.heading != null) block.headingKo = translated.heading;
+      if(Array.isArray(translated.paragraphs)) block.paragraphsKo = translated.paragraphs;
+
+      renderEditor();
+      saveAndRefresh();
+      const status2 = document.getElementById("generate-status");
+      if(status2){
+        status2.style.display = "block";
+        status2.textContent = "완료 — 이 블록의 한글 탭을 채웠습니다.";
       }
     }catch(e){
       alert(
@@ -4952,6 +5091,17 @@
     if(translateBlockKoEnBtn){ runTranslateBlock("ko-en", translateBlockKoEnBtn.dataset.blockId, translateBlockKoEnBtn); return; }
     const translateBlockEnKoBtn = e.target.closest('[data-action="translate-block-en-ko"]');
     if(translateBlockEnKoBtn){ runTranslateBlock("en-ko", translateBlockEnKoBtn.dataset.blockId, translateBlockEnKoBtn); return; }
+    const langTabBtn = e.target.closest('[data-action="block-lang-tab"]');
+    if(langTabBtn){
+      const card = langTabBtn.closest(".block-card");
+      const bId = langTabBtn.dataset.blockId;
+      if(langTabBtn.dataset.lang === "ko") blockKoTabOpen.add(bId); else blockKoTabOpen.delete(bId);
+      if(card) card.dataset.activeLang = langTabBtn.dataset.lang;
+      card.querySelectorAll(".lang-tab-btn").forEach(b => b.classList.toggle("active", b === langTabBtn));
+      return;
+    }
+    const translateBlockFillKoBtn = e.target.closest('[data-action="translate-block-fill-ko"]');
+    if(translateBlockFillKoBtn){ runTranslateBlockToKorean(translateBlockFillKoBtn.dataset.blockId, translateBlockFillKoBtn); return; }
     if(e.target.closest('[data-action="publish"]')){ runPublish(); return; }
 
     const toggleHead = e.target.closest('[data-toggle]');
@@ -5739,7 +5889,12 @@
         });
         L.push("      ],");
       }
-      L.push("      paragraphs:[" + (b.paragraphs||[]).filter(Boolean).map(p => JSON.stringify(p)).join(", ") + "]");
+      L.push("      paragraphs:[" + (b.paragraphs||[]).filter(Boolean).map(p => JSON.stringify(p)).join(", ") + "],");
+      /* EN/한글 토글 기능용 — 방문자가 이 프로젝트를 한글로 볼 수 있는 콘텐츠. 번역 안 된
+         (아직 재발행 안 한) 블록은 이 필드들이 아예 안 찍혀서 지금 발행된 코드와 동일함. */
+      if(b.labelKo) L.push("      labelKo:" + JSON.stringify(b.labelKo) + ",");
+      if(b.headingKo) L.push("      headingKo:" + JSON.stringify(b.headingKo) + ",");
+      if(b.paragraphsKo && b.paragraphsKo.filter(Boolean).length) L.push("      paragraphsKo:[" + b.paragraphsKo.filter(Boolean).map(p => JSON.stringify(p)).join(", ") + "],");
       L.push("    }" + (i < project.blocks.length-1 ? "," : ""));
     });
     L.push("  ],");

@@ -692,6 +692,29 @@
   .p-block-body.muted{color:var(--muted); font-style:italic;}
   .p-block .gallery{margin-top:26px;}
   .p-block .gallery-video-stack{margin-top:26px;}
+  /* heading+본문을 감싸기만 하는 래퍼 — EN/한글 토글 시 이 안쪽 innerHTML만 갈아끼우기 위한
+     JS 훅(applyProjectLang)이고, display:contents라 레이아웃엔 전혀 영향 없음(감싸지 않은 것과
+     동일하게 부모 .p-block의 흐름에 자식들이 그대로 참여함). */
+  .p-block-copy{display:contents;}
+  /* 프로젝트 상세페이지 EN/한글 토글 — 첫 블록 바로 위, 갤러리 넘기기 pill(.gallery-nav)과
+     같은 톤. 한글 콘텐츠가 있는 프로젝트에서만 렌더링됨(galleryHTML 쪽 로직과 별개로
+     renderProject()가 판단). */
+  .lang-toggle{
+    display:flex; align-items:center; gap:4px;
+    width:fit-content; margin:0 0 28px;
+    padding:4px;
+    border-radius:999px;
+    background:rgba(17,17,17,.05);
+    border:1px solid var(--line);
+  }
+  .lang-toggle-btn{
+    font-size:11px; letter-spacing:.04em;
+    padding:5px 12px;
+    border-radius:999px;
+    color:var(--muted);
+    transition:background .2s, color .2s;
+  }
+  .lang-toggle-btn.active{background:var(--fg); color:var(--bg);}
 
   .p-credits{max-width:1620px; margin:0 auto 100px; padding-top:8px;}
   .p-credits h3{
@@ -2058,7 +2081,7 @@
       id:"noscarna-z44ul",
       title:"NOSCARNA",
       category:"work",
-      order:0,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:0, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#ff9b8a",
       textColor:"#000000",
       titleLetterSpacing:0,
@@ -2085,7 +2108,9 @@
             "NOSCARNA/00.jpg",
             "NOSCARNA/01.jpg",
           ],
-          paragraphs:["Noscarna, an acne scar treatment solution. We aimed to redefine the product's identity—shifting it from 'a wound-healing medicine' to a 'daily lifestyle routine' that consumers could incorporate into their everyday lives. We developed a tagline that conveys the overwhelming market dominance demonstrated by over 13 million units sold, while subtly instilling a sense of urgency in consumers: 'Right now. Someone's. Getting better'", "Tailored for our 18-24 female demographic, we cast Wonhee from the idol group ILLIT as our model, leveraging sophisticated visuals and mood to transform the pharmaceutical brand image into something fresh and culturally vibrant.", "We produced a three-part video series: a main film delivering the campaign message, a vlog exploring the model's charm and daily routine, and a gaming episode."]
+          paragraphs:["Noscarna, an acne scar treatment solution. We aimed to redefine the product's identity—shifting it from 'a wound-healing medicine' to a 'daily lifestyle routine' that consumers could incorporate into their everyday lives. We developed a tagline that conveys the overwhelming market dominance demonstrated by over 13 million units sold, while subtly instilling a sense of urgency in consumers: 'Right now. Someone's. Getting better'", "Tailored for our 18-24 female demographic, we cast Wonhee from the idol group ILLIT as our model, leveraging sophisticated visuals and mood to transform the pharmaceutical brand image into something fresh and culturally vibrant.", "We produced a three-part video series: a main film delivering the campaign message, a vlog exploring the model's charm and daily routine, and a gaming episode."],
+          headingKo:"지금. 누군가는. 나아지고 있어",
+          paragraphsKo:["여드름 흉터 치료제 Noscarna. 우리는 제품의 정체성을 재정의하고자 했습니다. '상처 치유 약품'에서 소비자들이 일상에 자연스럽게 녹여낼 수 있는 '일상 생활 루틴'으로의 전환 말입니다. 1,300만 개 이상의 판매량으로 입증된 압도적인 시장 지배력을 전달하면서도, 소비자들에게 은밀하게 긴박감을 불어넣는 태그라인을 개발했습니다: '지금. 누군가는. 나아지고 있어'", "18-24세 여성 타겟층을 겨냥하여 아이돌 그룹 ILLIT의 Wonhee를 모델로 캐스팅했습니다. 세련된 비주얼과 무드를 통해 제약 브랜드 이미지를 신선하고 문화적 생명력이 넘치는 것으로 재탄생시켰습니다.", "캠페인 메시지를 전달하는 메인 필름, 모델의 매력과 일상을 탐색하는 브이로그, 게이밍 에피소드까지 3부작 비디오 시리즈를 제작했습니다."],
         },
         {
           label:"Main Film",
@@ -2097,7 +2122,7 @@
             "NOSCARNA/Layer-2.jpg",
             "NOSCARNA/dafdaf.jpg",
           ],
-          paragraphs:[]
+          paragraphs:[],
         },
         {
           label:"V-log",
@@ -2111,14 +2136,14 @@
             "NOSCARNA/Layer-32.jpg",
             "NOSCARNA/Layer-22.jpg",
           ],
-          paragraphs:[]
+          paragraphs:[],
         },
         {
           label:"Game",
           images:[
             "NOSCARNA/0605_노스카나_게임편-web.mp4",
           ],
-          paragraphs:[]
+          paragraphs:[],
         },
         {
           label:"Poster & Photography",
@@ -2134,7 +2159,7 @@
             "NOSCARNA/0519 Noscarna-594최종.jpg",
             "NOSCARNA/0519 Noscarna-292최종.jpg",
           ],
-          paragraphs:[]
+          paragraphs:[],
         },
         {
           label:"BTS",
@@ -2147,7 +2172,7 @@
             "NOSCARNA/IMG_8346.jpg",
             "NOSCARNA/IMG_8351.jpg",
           ],
-          paragraphs:[]
+          paragraphs:[],
         }
       ],
       credits:[
@@ -3024,6 +3049,47 @@
   const scrollRoot = document.getElementById("project-scroll");
   const closeBtn = document.getElementById("project-close");
   let currentProjectId = null; // tracks which project is open so the ✕ Close button knows which list (Work/Play) to return to
+  /* 프로젝트 상세뷰 EN/한글 토글 — 세션(이 페이지를 새로 열어둔 동안) 동안만 유지되는 선택.
+     새로고침하면 항상 "en"으로 시작하고, prev/next로 다른 프로젝트로 넘어가는 동안은 유지됨
+     (localStorage에 영구 저장 안 함 — 방문할 때마다 기본은 영어). */
+  let projectLang = "en";
+  /* 블록의 한 필드를 현재 언어로 — projectLang이 "ko"인데 그 필드의 한글 버전이 비어있으면
+     (아직 번역 안 된 블록) 영어로 자연스럽게 폴백. */
+  function blockText(block, field){
+    if(projectLang === "ko"){
+      if(field === "label" && block.labelKo) return block.labelKo;
+      if(field === "heading" && block.headingKo) return block.headingKo;
+      if(field === "paragraphs" && block.paragraphsKo && block.paragraphsKo.length) return block.paragraphsKo;
+    }
+    return field === "label" ? block.label : field === "heading" ? (block.heading || "") : block.paragraphs;
+  }
+  function blockCopyHTML(block){
+    const headingText = blockText(block, "heading");
+    const heading = headingText ? `<div class="p-block-heading">${headingText}</div>` : "";
+    const paras = blockText(block, "paragraphs").map(t => `<p class="p-block-body${t.startsWith("[")?" muted":""}">${t}</p>`).join("");
+    return heading + paras;
+  }
+  /* 토글 클릭 시 scrollRoot를 통째로 다시 그리지 않고(스크롤 위치·재생 중인 히어로 동영상/
+     갤러리를 안 건드리기 위해) 각 블록의 라벨·본문 텍스트만 갈아끼움. 한글이 없는 블록은
+     blockText()가 알아서 영어로 폴백하므로 여기선 그냥 다시 그리기만 하면 됨. */
+  function applyProjectLang(project, lang){
+    projectLang = lang;
+    scrollRoot.querySelectorAll(".lang-toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.lang === lang));
+    project.blocks.forEach((block, bi) => {
+      const blockEl = scrollRoot.querySelector(`.p-block[data-block-index="${bi}"]`);
+      if(!blockEl) return;
+      const labelEl = blockEl.querySelector(".p-caption .label");
+      if(labelEl) labelEl.textContent = blockText(block, "label");
+      const copyEl = blockEl.querySelector(".p-block-copy");
+      if(copyEl) copyEl.innerHTML = blockCopyHTML(block);
+    });
+  }
+  scrollRoot.addEventListener("click", (e) => {
+    const langBtn = e.target.closest(".lang-toggle-btn");
+    if(!langBtn) return;
+    const project = PROJECTS.find(p => p.id === currentProjectId);
+    if(project) applyProjectLang(project, langBtn.dataset.lang);
+  });
 
   /* ---------------- lightbox: 갤러리 사진 클릭 시 확대 레이어 ----------------
      동영상(iframe/video)은 대상이 아니고 사진만 해당. 클릭한 사진이 속한 갤러리 안의
@@ -3310,25 +3376,30 @@
 
     const blocksHTML = project.blocks.map((block, bi) => {
       const blockId = `${project.id}-${bi}`;
-      const heading = block.heading ? `<div class="p-block-heading">${block.heading}</div>` : "";
-      const paras = block.paragraphs.map(t => `<p class="p-block-body${t.startsWith("[")?" muted":""}">${t}</p>`).join("");
       const media = (block.images && block.images.length) ? galleryHTML(block.images, blockId, block.galleryMode, block.galleryDirection, block.freeLayout, block.galleryGroups, block) : "";
       /* default (unset/"below") keeps the original order — a caption always
          comes first as the block's title bar, then either the text or the
          media, whichever the block wants to lead with. */
       const mediaAbove = block.mediaPosition === "above";
       return `
-        <div class="p-block">
+        <div class="p-block" data-block-index="${bi}">
           <div class="p-caption">
-            <span class="label">${block.label}</span>
+            <span class="label">${blockText(block, "label")}</span>
             <span class="idx">${String(bi+1).padStart(2,"0")}</span>
           </div>
           ${mediaAbove ? media : ""}
-          ${heading}
-          ${paras}
+          <div class="p-block-copy">${blockCopyHTML(block)}</div>
           ${mediaAbove ? "" : media}
         </div>`;
     }).join("");
+    /* 방문자가 이 프로젝트를 한글로도 볼 수 있는 토글 — 한글 콘텐츠가 하나도 없는 프로젝트
+       (아직 빌더에서 재발행 안 한 기존 프로젝트들)는 토글을 아예 안 보여줌. */
+    const hasKorean = project.blocks.some(b => b.headingKo || b.labelKo || (b.paragraphsKo||[]).length);
+    const langToggleHTML = hasKorean ? `
+      <div class="lang-toggle">
+        <button type="button" class="lang-toggle-btn${projectLang === "en" ? " active" : ""}" data-lang="en">ENG</button>
+        <button type="button" class="lang-toggle-btn${projectLang === "ko" ? " active" : ""}" data-lang="ko">KOR</button>
+      </div>` : "";
 
     /* 리스트에서 이미 재생 중이던 히어로 동영상을 그대로 넘겨받은 경우, 여기서 또 새로 만들어
        처음부터 로드하지 않도록 빈 슬롯만 남겨두고, innerHTML을 채운 직후 실제 재사용 중인
@@ -3360,6 +3431,7 @@
         ${socialHTML(project)}
       </div>
       <div class="p-detail">
+        ${langToggleHTML}
         ${blocksHTML}
         ${creditsHTML(project)}
       </div>
