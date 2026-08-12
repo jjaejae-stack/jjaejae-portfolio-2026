@@ -5232,6 +5232,9 @@
     .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;font-family:var(--font-medium);}
     .p-block .gallery{margin-top:26px;}
     .p-block .gallery-video-stack{margin-top:26px;}
+    .lang-toggle{display:flex;align-items:center;gap:4px;width:fit-content;margin:0 0 28px;padding:4px;border-radius:999px;background:rgba(17,17,17,.05);border:1px solid var(--line);}
+    .lang-toggle-btn{font-size:11px;letter-spacing:.04em;padding:5px 12px;border-radius:999px;color:var(--muted);transition:background .2s,color .2s;}
+    .lang-toggle-btn.active{background:var(--fg);color:var(--bg);}
     .p-credits{max-width:1620px;margin:0 auto 100px;padding-top:8px;}
     .p-credits h3{font-size:13px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:48px;}
     .credits-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:26px 24px;}
@@ -5625,6 +5628,11 @@
     '    else if((g.dataset.direction || "row") !== "column"){ showGalleryPage(g, parseInt(g.dataset.page || "0", 10)); }',
     '    else { layoutFrames(g, Array.prototype.slice.call(g.querySelectorAll(".gallery-frame.visible")), "column"); }',
     '  });',
+    '});',
+    'document.addEventListener("click", function(e){',
+    '  var langBtn = e.target.closest(".lang-toggle-btn");',
+    '  if(!langBtn) return;',
+    '  parent.postMessage({ type: "pf-preview-lang", lang: langBtn.dataset.lang }, "*");',
     '});'
   ].join("\n");
 
@@ -5797,6 +5805,16 @@
 
   const previewFrame = document.getElementById("preview-frame");
   const EMPTY_DOC = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;">프로젝트를 선택하세요</body></html>';
+
+  /* 프리뷰 iframe 안의 EN/KOR 토글 클릭(PREVIEW_RUNTIME_JS가 postMessage로 알림)을 받아서
+     previewLang을 바꾸고 다시 그림 — srcdoc iframe이라 같은 출처지만, 굳이 window.parent의
+     함수를 직접 부르지 않고 postMessage로 느슨하게 연결(iframe 내용이 통째로 새 문서로
+     바뀌는 구조라 이 편이 더 안전함). */
+  window.addEventListener("message", (e) => {
+    if(!e.data || e.data.type !== "pf-preview-lang") return;
+    previewLang = e.data.lang === "ko" ? "ko" : "en";
+    refreshPreview();
+  });
 
   const refreshPreview = debounce(function(){
     /* Re-measure the PC/Mobile box on every refresh (not just on window resize or
