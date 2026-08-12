@@ -943,6 +943,22 @@
   function galleryFrameHTML(im){
     return '<div class="gallery-frame">' + galleryFrameInner(im) + '</div>';
   }
+  /* 갤러리 카운터의 총 페이지 수 — index.html의 getPageGroupSizes()와 같은 규칙(커스텀
+     그룹 순서대로 소진, 남는 항목은 한 장씩)이지만 DOM에 올라가기 전(HTML 문자열 생성
+     시점)이라 count/perPage/groups를 직접 받는 버전. */
+  function computeTotalPages(count, perPage, isCustom, groups){
+    if(isCustom){
+      let consumed = 0, pages = 0;
+      for(const n of groups){
+        if(consumed >= count) break;
+        const c = Math.max(1, Math.min(parseInt(n, 10) || 1, count - consumed));
+        if(c > 0){ consumed += c; pages++; }
+      }
+      while(consumed < count){ consumed++; pages++; }
+      return pages || 1;
+    }
+    return Math.max(1, Math.ceil(count / (perPage || 1)));
+  }
   /* even-grid fallback position (percent) for a free-layout photo that has no saved position yet */
   function defaultFreePos(i, total){
     const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
@@ -1032,11 +1048,18 @@
     const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const groupsAttr = isCustom ? ' data-groups="' + JSON.stringify(groups.map(function(n){ return parseInt(n,10)||1; })) + '"' : "";
     const frames = images.map(galleryFrameHTML).join("");
-    const counterEnd = Math.min(perPage, images.length || 1);
-    return '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '"' + groupsAttr + '>'
+    const totalPages = computeTotalPages(count, perPage, isCustom, groups);
+    const nav = count > 1
+      ? '<div class="gallery-nav">'
+        + '<button type="button" class="gallery-nav-btn gallery-nav-prev" aria-label="Previous">←</button>'
+        + '<span class="gallery-counter">1/' + totalPages + '</span>'
+        + '<button type="button" class="gallery-nav-btn gallery-nav-next" aria-label="Next">→</button>'
+        + '</div>'
+      : "";
+    return '<div class="gallery-wrap">'
+      + '<div class="gallery' + modeClass + '" data-block="' + blockKey + '" data-index="0" data-count="' + count + '" data-per-page="' + perPage + '" data-mode="' + m + '" data-direction="' + dir + '"' + groupsAttr + '>'
       + '<div class="gallery-track">' + frames + '</div>'
-      + '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>'
-      + '<div class="gallery-hint">Click for next</div>'
+      + '</div>' + nav
       + '</div>';
   }
   /* mode/direction/groups here always describe the PHOTO layout. `block` (optional —
@@ -5020,9 +5043,10 @@
     .gallery-frame iframe{height:100%;width:auto;aspect-ratio:16/9;max-width:none;display:block;border:0;background:#000;}
     .gallery-zoom-btn{position:absolute;top:10px;right:10px;z-index:7;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;color:#fff;background:rgba(0,0,0,.45);border:none;border-radius:50%;cursor:pointer;opacity:.6;transition:opacity .2s,background .2s;}
     .gallery-zoom-btn:hover{opacity:1;background:rgba(0,0,0,.7);}
-    .gallery-counter{position:absolute;right:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;letter-spacing:.04em;pointer-events:none;}
-    .gallery-hint{position:absolute;left:14px;bottom:14px;z-index:6;font-size:11px;color:#fff;background:rgba(0,0,0,.45);padding:4px 8px;opacity:0;transition:opacity .2s;pointer-events:none;}
-    .gallery:hover .gallery-hint{opacity:1;}
+    .gallery-nav{display:flex;align-items:center;justify-content:center;gap:10px;width:fit-content;margin:12px auto 0;padding:4px;border-radius:999px;background:rgba(17,17,17,.05);border:1px solid var(--line);}
+    .gallery-nav-btn{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;color:var(--fg);transition:background .2s,color .2s;}
+    .gallery-nav-btn:hover{background:var(--fg);color:#fff;}
+    .gallery-nav .gallery-counter{font-size:11px;letter-spacing:.04em;color:var(--muted);padding:0 2px;}
     @media (max-width:760px){ .gallery{min-height:0;} }
     .gallery.mode-multi .gallery-frame{display:block;flex:0 0 auto;}
     .gallery.mode-multi.direction-column .gallery-frame{display:none;}
@@ -5135,12 +5159,20 @@
     '  };',
     '  waitMediaReady(media, apply);',
     '}',
-    'function rollGallery(gallery){',
+    'function galleryCounterEl(gallery){',
+    '  return gallery.parentElement && gallery.parentElement.querySelector(".gallery-counter");',
+    '}',
+    'function pauseGalleryVideos(gallery){',
+    '  gallery.querySelectorAll("video").forEach(function(v){ if(!v.paused) v.pause(); });',
+    '}',
+    'function rollGallery(gallery, dir){',
+    '  dir = dir || 1;',
     '  var count = parseInt(gallery.dataset.count, 10);',
     '  var index = parseInt(gallery.dataset.index, 10);',
-    '  index = (index + 1) % count;',
+    '  index = (index + dir + count) % count;',
     '  gallery.dataset.index = index;',
-    '  gallery.querySelector(".gallery-counter").textContent = String(index+1).padStart(2,"0") + " / " + String(count).padStart(2,"0");',
+    '  var counter = galleryCounterEl(gallery);',
+    '  if(counter) counter.textContent = (index+1) + "/" + count;',
     '  activateGalleryFrame(gallery, index);',
     '}',
     'function mediaRatio(media){',
@@ -5255,11 +5287,9 @@
     '  }',
     '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
-    'function updateMultiCounter(gallery, startIndex, visibleCount, total){',
-    '  var start = startIndex + 1;',
-    '  var end = startIndex + visibleCount;',
-    '  var counter = gallery.querySelector(".gallery-counter");',
-    '  if(counter) counter.textContent = (end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")) + " / " + String(total).padStart(2,"0");',
+    'function updateMultiCounter(gallery, page, totalPages){',
+    '  var counter = galleryCounterEl(gallery);',
+    '  if(counter) counter.textContent = (page+1) + "/" + totalPages;',
     '}',
     'function getPageGroupSizes(gallery, total){',
     '  if(gallery.dataset.groups){',
@@ -5314,7 +5344,6 @@
     '}',
     'function showGalleryPageRow(gallery, page){',
     '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
-    '  var total = frames.length;',
     '  gallery.dataset.page = page;',
     '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
     '  var remaining = mediaEls.length;',
@@ -5344,7 +5373,7 @@
     '      gallery.style.transition = prevTransition;',
     '    } else { setSize(); }',
     '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + offset + "px)";',
-    '    updateMultiCounter(gallery, layout.pageStarts[page] || 0, pageSize.count, total);',
+    '    updateMultiCounter(gallery, page, layout.pageSizes.length);',
     '  }',
     '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
     '}',
@@ -5356,21 +5385,41 @@
     '  gallery.dataset.page = page;',
     '  frames.forEach(function(f, i){ f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage); });',
     '  var visible = frames.filter(function(f){ return f.classList.contains("visible"); });',
-    '  updateMultiCounter(gallery, page*perPage, visible.length, total);',
+    '  updateMultiCounter(gallery, page, getPageGroupSizes(gallery, total).length);',
     '  layoutFrames(gallery, visible, "column");',
+    '}',
+    'function stepGalleryPage(g, dir){',
+    '  var total = parseInt(g.dataset.count, 10);',
+    '  var pages = getPageGroupSizes(g, total).length;',
+    '  var page = (parseInt(g.dataset.page || "0", 10) + dir + pages) % pages;',
+    '  pauseGalleryVideos(g);',
+    '  showGalleryPage(g, page);',
     '}',
     'function initGallery(g){',
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
     '  if(mode === "free"){ if(g.classList.contains("mode-free-grid")) layoutFreeGrid(g); return; }',
-    '  if(mode !== "custom" && perPage <= 1){ g.addEventListener("click", function(){ rollGallery(g); }); activateGalleryFrame(g, 0); return; }',
+    '  var navRoot = g.parentElement;',
+    '  var navPrev = navRoot && navRoot.querySelector(".gallery-nav-prev");',
+    '  var navNext = navRoot && navRoot.querySelector(".gallery-nav-next");',
+    '  if(mode !== "custom" && perPage <= 1){',
+    '    g.addEventListener("click", function(e){',
+    '      if(e.target.closest("video, iframe")) return;',
+    '      pauseGalleryVideos(g);',
+    '      rollGallery(g);',
+    '    });',
+    '    activateGalleryFrame(g, 0);',
+    '    if(navPrev) navPrev.addEventListener("click", function(){ pauseGalleryVideos(g); rollGallery(g, -1); });',
+    '    if(navNext) navNext.addEventListener("click", function(){ pauseGalleryVideos(g); rollGallery(g, 1); });',
+    '    return;',
+    '  }',
     '  showGalleryPage(g, 0);',
-    '  g.addEventListener("click", function(){',
-    '    var total = parseInt(g.dataset.count, 10);',
-    '    var pages = getPageGroupSizes(g, total).length;',
-    '    var page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;',
-    '    showGalleryPage(g, page);',
+    '  g.addEventListener("click", function(e){',
+    '    if(e.target.closest("video, iframe")) return;',
+    '    stepGalleryPage(g, 1);',
     '  });',
+    '  if(navPrev) navPrev.addEventListener("click", function(){ stepGalleryPage(g, -1); });',
+    '  if(navNext) navNext.addEventListener("click", function(){ stepGalleryPage(g, 1); });',
     '}',
     'var lightbox = document.getElementById("lightbox");',
     'var lightboxImg = document.getElementById("lightbox-img");',

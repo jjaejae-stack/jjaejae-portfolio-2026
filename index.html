@@ -315,9 +315,10 @@
   #list-view.open{display:block;}
   body.list-open{overflow:hidden;}
   .list-bg-media{position:absolute; inset:0; z-index:0; overflow:hidden; background:#0d0d0d;}
-  /* 목록을 열 때(또는 필터를 바꿀 때) 빈 레이어만 미리 깔아두고, 실제 동영상은 그 항목이
-     선택될 때 지연 로드함(buildListBgLayers()/ensureListBgLoaded()/setListPreview() 참고).
-     한 번 로드된 레이어는 opacity만 바꿔서 재사용됨. */
+  /* 레퍼런스처럼 선택 즉시 재생되게 하려면 그 시점에 새로 로드해선 늦음 — 목록을 열 때
+     (또는 필터를 바꿀 때) 그 안의 프로젝트 전부를 미리 백그라운드에 깔아두고(autoplay는 이미
+     걸려 있어서 안 보이는 상태에서도 로딩/재생이 진행됨) 마우스를 올리면 opacity만 바꿔서
+     이미 재생 중인 레이어를 그대로 드러내는 방식(buildListBgLayers()/setListPreview() 참고). */
   .list-bg-layer{position:absolute; inset:0; opacity:0; transition:opacity .35s ease; pointer-events:none;}
   .list-bg-layer.is-active{opacity:1;}
   .list-bg-layer img, .list-bg-layer video{width:100%; height:100%; object-fit:cover; position:absolute; inset:0;}
@@ -582,24 +583,30 @@
     transition:opacity .2s, background .2s;
   }
   .gallery-zoom-btn:hover{opacity:1; background:rgba(0,0,0,.7);}
-  .gallery-counter{
-    position:absolute; right:14px; bottom:14px; z-index:6;
-    font-size:11px; color:#fff;
-    background:rgba(0,0,0,.45);
-    padding:4px 8px;
-    letter-spacing:.04em;
-    pointer-events:none;
+  /* 페이지/프레임 넘기기 컨트롤 — 예전엔 사진 위에 반투명으로 겹쳐 보이는 카운터·hint 텍스트뿐이라,
+     동영상 프레임(자체 컨트롤이 있어 클릭이 재생으로 먹힘)에서는 다음 장으로 넘길 방법이 없었음.
+     리스트 하단의 Close/이름/화살표 바(.list-footer)와 같은 방식으로, 사진/영상 박스 밖으로
+     완전히 뺀 별도의 알약(pill) 바에 이전/다음 버튼 + 카운터를 둠 — 항상 보이고 항상 클릭 가능함. */
+  .gallery-nav{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:fit-content; margin:12px auto 0;
+    padding:4px;
+    border-radius:999px;
+    background:rgba(17,17,17,.05);
+    border:1px solid var(--line);
   }
-  .gallery-hint{
-    position:absolute; left:14px; bottom:14px; z-index:6;
-    font-size:11px; color:#fff;
-    background:rgba(0,0,0,.45);
-    padding:4px 8px;
-    opacity:0;
-    transition:opacity .2s;
-    pointer-events:none;
+  .gallery-nav-btn{
+    width:26px; height:26px;
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; line-height:1; color:var(--fg);
+    transition:background .2s, color .2s;
   }
-  .gallery:hover .gallery-hint{opacity:1;}
+  .gallery-nav-btn:hover{background:var(--fg); color:#fff;}
+  .gallery-nav .gallery-counter{
+    font-size:11px; letter-spacing:.04em; color:var(--muted);
+    padding:0 2px;
+  }
 
   /* 모바일 좁은 화면에서 가로로 넓은(와이드) 사진은 JS가 계산한 높이가 280px보다 작아질 수 있는데,
      그때 min-height:280px가 강제로 높이를 늘려버려서 overflow:hidden에 의해 사진 좌우가 잘려 보이던
@@ -990,6 +997,22 @@
   }
   function mediaFrameHTML(src){
     return `<div class="gallery-frame">${mediaFrameInner(src)}</div>`;
+  }
+  /* 갤러리 카운터에 쓸 총 페이지 수 — getPageGroupSizes()와 같은 규칙(커스텀 그룹 순서대로
+     소진, 남는 항목은 한 장씩)이지만 아직 DOM에 올라가기 전(HTML 문자열 생성 시점)이라
+     gallery.dataset를 읽는 그 함수 대신 count/perPage/groups를 직접 받는 버전. */
+  function computeTotalPages(count, perPage, isCustom, groups){
+    if(isCustom){
+      let consumed = 0, pages = 0;
+      for(const n of groups){
+        if(consumed >= count) break;
+        const c = Math.max(1, Math.min(parseInt(n, 10) || 1, count - consumed));
+        if(c > 0){ consumed += c; pages++; }
+      }
+      while(consumed < count){ consumed++; pages++; }
+      return pages || 1;
+    }
+    return Math.max(1, Math.ceil(count / (perPage || 1)));
   }
   function defaultFreePos(i, total){
     const cols = Math.max(1, Math.ceil(Math.sqrt(total)));
@@ -2870,49 +2893,37 @@
     pendingHeroMedia = { id: p.id, el };
   }
 
-  /* 목록을 열 때(또는 필터를 바꿀 때) 그 목록의 빈 배경 레이어만 미리 깔아둠 — 예전엔 여기서
-     모든 프로젝트의 iframe/video를 한꺼번에 만들어 autoplay까지 걸었는데, Vimeo 임베드가
-     많은 목록에서는 그게 다 동시에 로드를 시작하면서 초기 로딩이 느려지고 일부는 재생이
-     아예 씹히는 문제가 있었음. 실제 미디어는 ensureListBgLoaded()가 그 항목이 실제로
-     보여질 때(호버/선택)만 지연 로드함. */
+  /* 목록을 열 때(또는 필터를 바꿀 때) 그 목록의 프로젝트 전부를 미리 백그라운드에 깔아둠 —
+     전부 autoplay/loop/muted라 화면에 안 보이는 상태(opacity:0)에서도 이미 로딩·재생이 진행됨.
+     그래서 마우스를 올리는 순간엔 새로 로드할 게 없이 이미 재생 중인 레이어를 opacity만
+     바꿔서 보여주기만 하면 되므로 레퍼런스처럼 선택 즉시 재생됨(setListPreview() 참고).
+     (한 항목씩 선택될 때 지연 로드하는 방식도 시도해봤는데, Vimeo iframe이 그 시점에 새로
+     초기화를 시작하면서 선택할 때마다 몇 초씩 정지 이미지만 보이는 게 더 나쁜 트레이드오프라
+     되돌림 — 목록을 보는 동안 미리 다 로딩해두는 지금 방식이 최초 진입만 조금 무거울 뿐,
+     선택 시점의 끊김은 없음.) */
   function buildListBgLayers(list){
     listBgMedia.innerHTML = "";
-    listBgLayers = list.map(() => {
+    listBgLayers = list.map((p) => {
       const layer = document.createElement("div");
       layer.className = "list-bg-layer";
-      layer.dataset.loaded = "0";
+      const mediaEl = buildHeroMediaEl(p);
+      if(mediaEl){
+        layer.appendChild(mediaEl);
+      }else{
+        const img = document.createElement("img");
+        img.alt = p.title;
+        img.src = u(p.hero);
+        layer.appendChild(img);
+      }
       listBgMedia.appendChild(layer);
       return layer;
     });
   }
 
-  /* 레이어에 아직 미디어가 없으면(처음 보여지는 순간) 그때 채워 넣음 — 한 번 로드된 레이어는
-     계속 재생 상태로 남아있고(opacity만 바뀜), 다시 호버해도 새로 로드하지 않음.
-     정지 썸네일(포스터)을 항상 먼저 깔아서 그 프로젝트가 선택되자마자 뭔가 바로 보이게 하고
-     (work-card 썸네일과 같은 이미지라 대부분 이미 캐시돼 있어 사실상 즉시 뜸), 실제
-     동영상/iframe은 그 뒤에 얹되 로드가 끝나기 전까진 투명 상태로 숨겨둠 — iframe은 로드 전에
-     흰 배경만 보여서 무작정 먼저 얹으면 오히려 포스터를 가려버려 "로딩이 길다"는 인상을 줌. */
-  function ensureListBgLoaded(index){
-    const layer = listBgLayers[index];
-    const p = listItems[index];
-    if(!layer || !p || layer.dataset.loaded === "1") return;
-    layer.dataset.loaded = "1";
-    const poster = document.createElement("img");
-    poster.alt = p.title;
-    poster.src = u(p.hero);
-    layer.appendChild(poster);
-    const mediaEl = buildHeroMediaEl(p);
-    if(!mediaEl) return;
-    mediaEl.style.opacity = "0";
-    mediaEl.style.transition = "opacity .3s ease";
-    const reveal = () => { mediaEl.style.opacity = "1"; };
-    mediaEl.addEventListener(mediaEl.tagName === "IFRAME" ? "load" : "loadeddata", reveal, { once:true });
-    layer.appendChild(mediaEl);
-  }
-
-  /* 리스트 배경 미리보기 — 해당 레이어를 지연 로드(ensureListBgLoaded)한 뒤 opacity로
-     드러냄. 행에 마우스를 올릴 때(desktop hover), 위/아래 버튼으로 이동할 때, 목록을
-     열 때(기본값 = 첫 항목) 호출됨. 하단 바의 현재 이름/N of M 카운트도 여기서 같이 갱신. */
+  /* 리스트 배경 미리보기 — 이미 buildListBgLayers()로 깔아둔 레이어 중 하나를 opacity로
+     드러내기만 함(새로 로드하지 않음). 행에 마우스를 올릴 때(desktop hover), 위/아래
+     버튼으로 이동할 때, 목록을 열 때(기본값 = 첫 항목) 호출됨. 하단 바의 현재 이름/N of M
+     카운트도 여기서 같이 갱신. */
   /* 가만히 있으면(호버·클릭 등 다른 상호작용이 5초간 없으면) 다음 프로젝트로 자동 넘어감 —
      setListPreview는 호버·위아래 버튼·이 타이머 자신 전부를 거쳐가는 공통 지점이라, 여기
      한 곳에서만 재예약하면 "무슨 이유로든 선택이 바뀔 때마다 5초 카운트다운을 다시 시작"이
@@ -2938,10 +2949,7 @@
       listCurrentCount.textContent = "";
       return;
     }
-    if(listIndex > -1 && listBgLayers[listIndex]){
-      ensureListBgLoaded(listIndex);
-      listBgLayers[listIndex].classList.add("is-active");
-    }
+    if(listIndex > -1 && listBgLayers[listIndex]) listBgLayers[listIndex].classList.add("is-active");
     listCurrentName.textContent = p.title;
     listCurrentCount.textContent = listIndex > -1 ? (listIndex + 1) + " / " + listItems.length : "";
     scheduleListAutoAdvance();
@@ -3117,12 +3125,18 @@
     const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const groupsAttr = isCustom ? ` data-groups="${JSON.stringify(groups.map(n => parseInt(n,10)||1))}"` : "";
     const frames = srcs.map(mediaFrameHTML).join("");
-    const counterEnd = Math.min(perPage, srcs.length || 1);
+    const totalPages = computeTotalPages(count, perPage, isCustom, groups);
+    const nav = count > 1 ? `
+      <div class="gallery-nav">
+        <button type="button" class="gallery-nav-btn gallery-nav-prev" aria-label="Previous">←</button>
+        <span class="gallery-counter">1/${totalPages}</span>
+        <button type="button" class="gallery-nav-btn gallery-nav-next" aria-label="Next">→</button>
+      </div>` : "";
     return `
-      <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}"${groupsAttr}>
-        <div class="gallery-track">${frames}</div>
-        <div class="gallery-counter">${counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01"} / ${String(count).padStart(2,"0")}</div>
-        <div class="gallery-hint">Click for next</div>
+      <div class="gallery-wrap">
+        <div class="gallery${modeClass}" data-block="${blockId}" data-index="0" data-count="${count}" data-per-page="${perPage}" data-mode="${m}" data-direction="${dir}"${groupsAttr}>
+          <div class="gallery-track">${frames}</div>
+        </div>${nav}
       </div>`;
   }
   /* galleryMode/galleryDirection/groups/freeLayout here always describe the PHOTO
@@ -3490,13 +3504,20 @@
   function pauseGalleryVideos(gallery){
     gallery.querySelectorAll("video").forEach(v => { if(!v.paused) v.pause(); });
   }
+  /* .gallery-nav(카운터·이전/다음 버튼)는 .gallery 내부가 아니라 .gallery-wrap 안의
+     형제 엘리먼트로 렌더링됨(사진/영상 위에 겹쳐 보이지 않고 박스 밖 별도 탭으로 빼기 위함) —
+     그래서 .gallery 자신이 아니라 부모에서 찾아야 함. */
+  function galleryCounterEl(gallery){
+    return gallery.parentElement && gallery.parentElement.querySelector(".gallery-counter");
+  }
   function rollGallery(gallery, dir){
     dir = dir || 1;
     const count = parseInt(gallery.dataset.count, 10);
     let index = parseInt(gallery.dataset.index, 10);
     index = (index + dir + count) % count;
     gallery.dataset.index = index;
-    gallery.querySelector(".gallery-counter").textContent = `${String(index+1).padStart(2,"0")} / ${String(count).padStart(2,"0")}`;
+    const counter = galleryCounterEl(gallery);
+    if(counter) counter.textContent = `${index+1}/${count}`;
     activateGalleryFrame(gallery, index);
   }
 
@@ -3643,11 +3664,9 @@
     mediaEls.forEach(m => waitMediaReady(m, onReady));
   }
 
-  function updateMultiCounter(gallery, startIndex, visibleCount, total){
-    const start = startIndex + 1;
-    const end = startIndex + visibleCount;
-    const counter = gallery.querySelector(".gallery-counter");
-    if(counter) counter.textContent = `${end > start ? (String(start).padStart(2,"0") + "-" + String(end).padStart(2,"0")) : String(start).padStart(2,"0")} / ${String(total).padStart(2,"0")}`;
+  function updateMultiCounter(gallery, page, totalPages){
+    const counter = galleryCounterEl(gallery);
+    if(counter) counter.textContent = `${page+1}/${totalPages}`;
   }
   /* Custom per-page grouping (e.g. "1 photo alone, then the next 3 together") is
      stored as gallery.dataset.groups — a JSON array of how many photos are on each
@@ -3713,13 +3732,12 @@
   }
   function showGalleryPageRow(gallery, page){
     const frames = Array.from(gallery.querySelectorAll(".gallery-frame"));
-    const total = frames.length;
     gallery.dataset.page = page;
     const mediaEls = frames.map(f => f.querySelector("img, video, iframe"));
     let remaining = mediaEls.length;
     const onReady = () => { remaining--; if(remaining <= 0) apply(); };
     function apply(){
-      const { frameSizes, pageOffsets, pageSizes, pageStarts } = computeMultiPageLayout(gallery, frames);
+      const { frameSizes, pageOffsets, pageSizes } = computeMultiPageLayout(gallery, frames);
       frames.forEach((f, i) => {
         const sz = frameSizes[i]; if(!sz) return;
         f.style.width = sz.width + "px";
@@ -3745,7 +3763,7 @@
         setSize();
       }
       gallery.querySelector(".gallery-track").style.transform = `translateX(-${offset}px)`;
-      updateMultiCounter(gallery, pageStarts[page] || 0, pageSize.count, total);
+      updateMultiCounter(gallery, page, pageSizes.length);
     }
     mediaEls.forEach(m => waitMediaReady(m, onReady));
   }
@@ -3760,7 +3778,7 @@
     gallery.dataset.page = page;
     frames.forEach((f, i) => f.classList.toggle("visible", i >= page*perPage && i < page*perPage + perPage));
     const visible = frames.filter(f => f.classList.contains("visible"));
-    updateMultiCounter(gallery, page*perPage, visible.length, total);
+    updateMultiCounter(gallery, page, getPageGroupSizes(gallery, total).length);
     layoutFrames(gallery, visible, "column");
   }
 
@@ -3812,6 +3830,15 @@
     gallery.addEventListener("pointercancel", endDrag);
   }
 
+  /* mode-multi(페이지) 갤러리의 이전/다음 페이지 이동 — .gallery 클릭(다음으로만)과
+     .gallery-nav의 ←/→ 버튼(양방향) 둘 다 여기로 모임. */
+  function stepGalleryPage(g, dir){
+    const total = parseInt(g.dataset.count, 10);
+    const pages = getPageGroupSizes(g, total).length;
+    const page = (parseInt(g.dataset.page || "0", 10) + dir + pages) % pages;
+    pauseGalleryVideos(g);
+    showGalleryPage(g, page);
+  }
   function initGallery(g){
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
@@ -3819,32 +3846,32 @@
       if(g.classList.contains("mode-free-grid")) layoutFreeGrid(g);
       return;
     }
+    /* .gallery-nav(이전/다음 버튼)는 사진/영상 박스 밖의 .gallery-wrap 안 형제 엘리먼트 —
+       동영상 프레임은 자체 컨트롤이 있어 클릭이 재생으로 먹히므로(아래 "video, iframe 클릭은
+       넘기기 제외" 참고), 그 경우에도 항상 넘길 수 있는 수단으로 이 버튼들이 필요함. */
+    const navRoot = g.parentElement;
+    const navPrev = navRoot && navRoot.querySelector(".gallery-nav-prev");
+    const navNext = navRoot && navRoot.querySelector(".gallery-nav-next");
     if(mode !== "custom" && perPage <= 1){
       g.addEventListener("click", (e) => {
         if(g.dataset.dragged){ delete g.dataset.dragged; return; }
-        /* 동영상 프레임의 네이티브 재생 버튼을 누른 클릭까지 여기로 버블링되면, 막 재생을
-           누른 영상이 화면 밖으로 넘어가버리는데도 소리는 계속 나는 문제가 생김 —
-           비디오/iframe 자체를 누른 클릭은 넘기기 대상에서 제외. */
         if(e.target.closest("video, iframe")) return;
         pauseGalleryVideos(g);
         rollGallery(g);
       });
       activateGalleryFrame(g, 0);
       initGalleryDrag(g);
-      const hint = g.querySelector(".gallery-hint");
-      const count = parseInt(g.dataset.count, 10) || 1;
-      if(hint && count > 1) hint.textContent = "Drag or click for next · Tap + to zoom";
+      if(navPrev) navPrev.addEventListener("click", () => { pauseGalleryVideos(g); rollGallery(g, -1); });
+      if(navNext) navNext.addEventListener("click", () => { pauseGalleryVideos(g); rollGallery(g, 1); });
       return;
     }
     showGalleryPage(g, 0);
     g.addEventListener("click", (e) => {
       if(e.target.closest("video, iframe")) return;
-      const total = parseInt(g.dataset.count, 10);
-      const pages = getPageGroupSizes(g, total).length;
-      const page = (parseInt(g.dataset.page || "0", 10) + 1) % pages;
-      pauseGalleryVideos(g);
-      showGalleryPage(g, page);
+      stepGalleryPage(g, 1);
     });
+    if(navPrev) navPrev.addEventListener("click", () => stepGalleryPage(g, -1));
+    if(navNext) navNext.addEventListener("click", () => stepGalleryPage(g, 1));
   }
 
   window.addEventListener("resize", () => {
