@@ -5712,13 +5712,24 @@
     const boxVars = "--box-max-w:" + Math.round(680*wScale) + "px;--box-min-w:" + Math.round(240*wScale) + "px;"
       + "--box-h-min:" + Math.round(300*hScale) + "px;--box-h-max:" + Math.round(620*hScale) + "px;--box-h-vh:" + (46*hScale) + "vh;";
 
+    /* 실제 사이트의 EN/한글 토글을 프리뷰에서도 그대로 확인할 수 있게 — 한글 콘텐츠가 있는
+       프로젝트에서만 보임. 토글 클릭은 iframe 안에서 postMessage로 부모(빌더 메인 페이지)에
+       알려서 previewLang을 바꾸고 다시 렌더링함(PREVIEW_RUNTIME_JS의 리스너 참고). */
+    const hasKorean = project.blocks.some(b => b.headingKo || b.labelKo || (b.paragraphsKo||[]).length);
+    const langToggleHTML = hasKorean ? (
+      '<div class="lang-toggle">'
+      + '<button type="button" class="lang-toggle-btn' + (previewLang === "en" ? " active" : "") + '" data-lang="en">ENG</button>'
+      + '<button type="button" class="lang-toggle-btn' + (previewLang === "ko" ? " active" : "") + '" data-lang="ko">KOR</button>'
+      + '</div>'
+    ) : "";
+
     return '<div class="p-main">'
       +   '<div class="p-hero">' + heroMedia + '</div>'
       +   '<div class="p-colorbox" style="background:' + project.color + ';color:' + textColor + ';' + boxVars + '">'
       +     '<h1 style="letter-spacing:' + letterSpacing + ';line-height:' + lineHeight + ';' + fontFamily + '">' + escapeHTML(project.title||"Untitled") + '</h1></div>'
       +   socialBoxHTML
       + '</div>'
-      + '<div class="p-detail">' + blocksHTML + creditsHTML + '</div>'
+      + '<div class="p-detail">' + langToggleHTML + blocksHTML + creditsHTML + '</div>'
       + '<div id="lightbox">'
       +   '<button type="button" id="lightbox-close" aria-label="Close">✕</button>'
       +   '<button type="button" id="lightbox-prev" aria-label="Previous">&lt;</button>'
