@@ -1224,6 +1224,10 @@
      상태(어떤 필드가 보이는지일 뿐 project 데이터는 아님)는 재렌더링을 거치면 사라짐 — 어느
      블록이 KR 탭을 보고 있었는지만 따로 기억해서 renderEditor() 이후에도 유지되게 함. */
   const blockKoTabOpen = new Set();
+  /* 프리뷰(iframe)에서 실제 사이트처럼 EN/KOR 토글을 확인해볼 수 있게 — refreshPreview()가
+     자주(디바운스 120ms) 다시 그리므로, 매번 "en"으로 리셋되면 토글해서 확인하는 도중에도
+     계속 영어로 되돌아가 버림. 여기 상태만 별도로 들고 refreshPreview()가 참조. */
+  let previewLang = "en";
   /* collapsible sections (e.g. typography) re-render their whole HTML on every
      edit, which would otherwise reset them to collapsed each time — track open
      state here instead of relying on the DOM class surviving a re-render. */
@@ -5624,6 +5628,16 @@
     '});'
   ].join("\n");
 
+  /* index.html의 blockText()와 동일한 규칙 — previewLang이 "ko"인데 그 필드의 한글 버전이
+     비어있으면 영어로 자연스럽게 폴백. */
+  function previewBlockText(block, field){
+    if(previewLang === "ko"){
+      if(field === "label" && block.labelKo) return block.labelKo;
+      if(field === "heading" && block.headingKo) return block.headingKo;
+      if(field === "paragraphs" && block.paragraphsKo && block.paragraphsKo.length) return block.paragraphsKo;
+    }
+    return field === "label" ? block.label : field === "heading" ? (block.heading || "") : (block.paragraphs || []);
+  }
   function buildPreviewBodyHTML(project){
     const imgs = allImages(project);
     const hero = project.heroImage || imgs[0];
@@ -5636,12 +5650,15 @@
       : (hero ? '<img src="' + hero.url + '" alt="">' : "");
 
     const blocksHTML = project.blocks.map((block, bi) => {
-      const heading = block.heading ? '<div class="p-block-heading">' + escapeHTML(block.heading) + '</div>' : "";
-      const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
+      const labelText = previewBlockText(block, "label");
+      const headingText = previewBlockText(block, "heading");
+      const parasArr = previewBlockText(block, "paragraphs");
+      const heading = headingText ? '<div class="p-block-heading">' + escapeHTML(headingText) + '</div>' : "";
+      const paras = parasArr.filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
       const media = (block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.galleryGroups, block) : "";
       const mediaAbove = block.mediaPosition === "above";
       return '<div class="p-block">'
-        + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
+        + '<div class="p-caption"><span class="label">' + escapeHTML(labelText||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
         + (mediaAbove ? media : "")
         + heading + paras
         + (mediaAbove ? "" : media)
