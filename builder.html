@@ -190,6 +190,9 @@
   .file-drop-target{transition:border-color .15s, background .15s; border-radius:6px;}
   .file-drop-target.file-drag-over{outline:2px dashed var(--accent); outline-offset:-2px; background:color-mix(in srgb, var(--accent) 8%, var(--surface));}
   .block-card-head{display:flex; align-items:center; gap:8px; margin-bottom:8px;}
+  .block-reorder-btns{display:flex; gap:2px; flex:none;}
+  .block-reorder-btns .icon-btn{padding:2px 5px; font-size:11px;}
+  .block-reorder-btns .icon-btn:disabled{opacity:.3; cursor:default;}
   .drag-handle{cursor:grab; color:var(--muted); font-size:15px; user-select:none; flex:0 0 auto;}
   .block-card-head input{flex:1; font-weight:700;}
   .icon-btn{font-size:12px; color:var(--muted); padding:4px 6px; flex:0 0 auto;}
@@ -294,10 +297,18 @@
   #video-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
   #video-modal.open{display:flex;}
   #video-modal .modal-box{width:min(520px,92vw);}
+  #trim-existing-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
+  #trim-existing-modal.open{display:flex;}
+  #trim-existing-modal .modal-box{width:min(520px,92vw);}
   .existing-video-list{display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; margin-top:8px;}
   .existing-video-item{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:6px;}
   .existing-video-item .fname{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px;}
   .existing-video-empty{color:var(--muted); font-size:13px; padding:6px 2px;}
+  .trim-controls{margin-top:12px; padding-top:12px; border-top:1px solid var(--line);}
+  .trim-controls #video-trim-preview, .trim-controls #trim-existing-preview{width:100%; max-height:220px; background:#000; border-radius:6px; display:block; margin-bottom:8px;}
+  .trim-row{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  .trim-time-label{flex:none; width:78px; font-size:12px; color:var(--muted);}
+  .trim-row input[type=range]{flex:1;}
 
   /* ---------- credits-paste modal ---------- */
   #credits-paste-modal{display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:900; align-items:center; justify-content:center;}
@@ -681,6 +692,18 @@
           <span class="fname" id="video-file-name">선택된 파일 없음</span>
         </div>
         <p class="hint">추가하면 서버에서 자동으로 웹 최적화(H.264/mp4로 재인코딩)해서 프로젝트 폴더에 저장합니다. 파일이 크면 시간이 좀 걸릴 수 있어요.</p>
+        <div class="trim-controls" id="video-trim-controls" style="display:none;">
+          <video id="video-trim-preview" muted playsinline controls></video>
+          <div class="trim-row">
+            <span class="trim-time-label">시작 <b id="video-trim-start-label">0:00</b></span>
+            <input type="range" id="video-trim-start" min="0" max="0" step="0.1" value="0">
+          </div>
+          <div class="trim-row">
+            <span class="trim-time-label">끝 <b id="video-trim-end-label">0:00</b></span>
+            <input type="range" id="video-trim-end" min="0" max="0" step="0.1" value="0">
+          </div>
+          <p class="hint">필요하면 시작/끝 슬라이더를 움직여 이 구간만 남기고 다듬을 수 있습니다. 건드리지 않으면 전체 영상이 그대로 업로드됩니다.</p>
+        </div>
       </div>
       <div class="field-group" id="video-existing-panel" style="display:none;">
         <label class="field-label">이미 프로젝트 폴더에 올라간 동영상</label>
@@ -695,6 +718,28 @@
       <div class="modal-actions">
         <button class="btn-sm" id="video-cancel">Cancel</button>
         <button class="btn-primary" id="video-confirm">추가</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="trim-existing-modal">
+    <div class="modal-box">
+      <h3>동영상 다듬기</h3>
+      <p class="hint">이미 저장된 동영상을 같은 자리에서 다시 다듬습니다 — 다른 곳에서 이 영상을 쓰고 있어도 파일 경로는 그대로라 자동으로 반영됩니다. 이미 한 번 웹 최적화된 영상을 다시 인코딩하는 것이라, 여러 번 반복해서 다듬으면 화질이 조금씩 떨어질 수 있습니다.</p>
+      <div class="trim-controls" style="border-top:none; padding-top:0; margin-top:0;">
+        <video id="trim-existing-preview" muted playsinline controls></video>
+        <div class="trim-row">
+          <span class="trim-time-label">시작 <b id="trim-existing-start-label">0:00</b></span>
+          <input type="range" id="trim-existing-start" min="0" max="0" step="0.1" value="0">
+        </div>
+        <div class="trim-row">
+          <span class="trim-time-label">끝 <b id="trim-existing-end-label">0:00</b></span>
+          <input type="range" id="trim-existing-end" min="0" max="0" step="0.1" value="0">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-sm" id="trim-existing-cancel">Cancel</button>
+        <button class="btn-primary" id="trim-existing-confirm">다듬기 적용</button>
       </div>
     </div>
   </div>
@@ -716,7 +761,7 @@
 
   <div id="layout-modal">
     <div class="modal-box">
-      <h3>사진 레이아웃</h3>
+      <h3 id="layout-modal-title">사진 레이아웃</h3>
       <div class="view-toggle" id="layout-mode-toggle">
         <button type="button" data-value="1">1</button>
         <button type="button" data-value="2">2</button>
@@ -731,7 +776,7 @@
           <button type="button" data-value="column">위아래로 (세로)</button>
         </div>
       </div>
-      <p class="hint" id="layout-video-note" style="display:none;">🎬 이 블록의 동영상은 여기서 설정하는 레이아웃과 무관하게 항상 사진 위쪽에 고정으로 표시됩니다 — 아래 미리보기와 조작은 사진에만 적용됩니다.</p>
+      <p class="hint" id="layout-video-note" style="display:none;">🎬 이 블록의 동영상은 여기서 설정하는 레이아웃과 무관하게 항상 사진 위쪽에 고정으로 표시됩니다 — "동영상 레이아웃"이나 "통합 레이아웃"을 사용하면 동영상도 배치를 조정할 수 있습니다.</p>
       <div class="layout-preview-wrap">
         <div class="layout-preview" id="layout-preview"></div>
       </div>
@@ -936,63 +981,51 @@
     const col = restIndex % cols, row = Math.floor(restIndex / cols);
     return { x: col * w, y: heroH + row * h, w: w, h: h };
   }
-  function layoutSummaryText(block){
-    const mode = block.galleryMode || "1";
+  function layoutModeSummary(mode, direction, groups){
     if(mode === "free") return "Free (자유 배치)";
-    const dirLabel = (block.galleryDirection === "column") ? "세로" : "가로";
-    if(mode === "1") return "1장씩";
+    const dirLabel = (direction === "column") ? "세로" : "가로";
+    if(mode === "1" || !mode) return "1장씩";
     if(mode === "all") return "한번에 모두 · " + dirLabel;
-    if(mode === "custom") return (Array.isArray(block.galleryGroups) && block.galleryGroups.length ? block.galleryGroups.join("+") + "장" : "직접 지정") + " · " + dirLabel;
+    if(mode === "custom") return (Array.isArray(groups) && groups.length ? groups.join("+") + "장" : "직접 지정") + " · " + dirLabel;
     return mode + "장씩 · " + dirLabel;
   }
-  /* mode: "1" (default, one at a time — original filmstrip behavior), "2"/"3" (N per page,
-     click advances a page), "all" (every photo shown at once, no click needed), "free"
-     (each photo freely positioned/sized via freeLayout, index-aligned with images). */
-  function galleryBlockHTML(images, blockKey, mode, direction, groups){
+  function layoutSummaryText(block){
+    return layoutModeSummary(block.galleryMode || "1", block.galleryDirection, block.galleryGroups);
+  }
+  function videoLayoutSummaryText(block){
+    if(!block.videoGalleryMode) return "고정 (사진 위쪽)";
+    return layoutModeSummary(block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups);
+  }
+  /* Renders ONE already-homogeneous list of items (all photo, or all video — never
+     mixed) with a given mode/direction/groups. mode: "1" (default, one at a time —
+     original filmstrip behavior), "2"/"3" (N per page, click advances a page), "all"
+     (every item shown at once, no click needed), "free" (each item freely
+     positioned/sized via its own .free, index-aligned with images), "custom" (groups
+     controls per-page sizes). This is the core layout renderer, shared by the legacy
+     photo-only layout, an explicitly-configured independent video layout, and the
+     "사진+동영상 통합" combined layout — see galleryBlockHTML below for how those three
+     states pick which images/fields feed into this function. */
+  function galleryModeHTML(images, blockKey, mode, direction, groups){
     const m = mode || "1";
     const dir = direction === "column" ? "column" : "row";
-    /* Video and photo items are always split apart — a block's galleryMode/
-       galleryDirection (including "free", each item's x/y/w/h) only ever governs
-       how its PHOTOS lay out; a video always renders in its own fixed stack
-       instead of being pulled into whatever arrangement the photos are using.
-       Mirrors index.html's galleryHTML() — keep both in sync. */
-    const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
-    const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
-    const videoHTML = videoIms.length
-      ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
-      : "";
-    /* Stack order follows the array: whichever type (photo or video) appears
-       first in the original images list renders on top. Mirrors index.html. */
-    const firstVideoIdx = images.findIndex(im => isVideoPath(im.relPath || im.name || im.url));
-    const firstPhotoIdx = images.findIndex(im => !isVideoPath(im.relPath || im.name || im.url));
-    const photoFirst = firstPhotoIdx !== -1 && (firstVideoIdx === -1 || firstPhotoIdx < firstVideoIdx);
-    const stack = function(a, b){ return photoFirst ? b + a : a + b; };
     if(m === "free"){
-      const count = photoIms.length || 1;
-      const positions = photoIms.map((im, i) => im.free || defaultFreePos(i, photoIms.length));
+      const count = images.length || 1;
+      const positions = images.map((im, i) => im.free || defaultFreePos(i, images.length));
       const isGrid = positions.every(p => Math.abs((p.w||0) - (positions[0].w||0)) < 0.5);
       const rowClass = isGrid ? " mode-free-grid" : "";
       const grid = isGrid ? gridPositionIndexes(positions) : null;
-      const frames = photoIms.map((im, i) => {
+      const frames = images.map((im, i) => {
         const pos = positions[i];
         const gridAttrs = isGrid ? ' data-row="' + grid.rows[i] + '" data-col="' + grid.cols[i] + '"' : "";
         return '<div class="gallery-frame" style="left:' + pos.x + '%;top:' + pos.y + '%;width:' + pos.w + '%;height:' + pos.h + '%;"' + gridAttrs + '>' + galleryFrameInner(im) + '</div>';
       }).join("");
-      const photoHTML = '<div class="gallery mode-free' + rowClass + '" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
+      return '<div class="gallery mode-free' + rowClass + '" data-block="' + blockKey + '" data-count="' + count + '" data-mode="free">'
         + '<div class="gallery-track">' + frames + '</div>'
         + '</div>';
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
     }
     if(m === "all"){
-      const photoHTML = photoIms.length ? galleryBlockHTML(photoIms, blockKey + "-photos", "1", dir) : "";
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
+      return images.length ? galleryModeHTML(images, blockKey, "1", dir) : "";
     }
-    if(videoIms.length && photoIms.length){
-      const photoHTML = galleryBlockHTML(photoIms, blockKey + "-photos", m, dir, groups);
-      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
-    }
-    /* only reached for a block that's purely video or purely photo (the mixed
-       case always returns above), so `images` here is already single-type. */
     const count = images.length || 1;
     const isCustom = m === "custom" && Array.isArray(groups) && groups.length;
     const perPage = isCustom ? (groups[0] || 1) : (m === "1" ? 1 : parseInt(m, 10));
@@ -1005,6 +1038,51 @@
       + '<div class="gallery-counter">' + (counterEnd > 1 ? ("01-" + String(counterEnd).padStart(2,"0")) : "01") + ' / ' + String(count).padStart(2,"0") + '</div>'
       + '<div class="gallery-hint">Click for next</div>'
       + '</div>';
+  }
+  /* mode/direction/groups here always describe the PHOTO layout. `block` (optional —
+     internal recursive "-photos"/"-videos" sub-calls omit it) carries the three
+     video-handling states: block.mediaLayoutCombined (every image, photo and video
+     alike, laid out together via mode/direction/groups — the "통합" option), an
+     explicit block.videoGalleryMode (photo and video each independently laid out via
+     their own mode, then the two stacked adjacent per array order — the "동영상
+     레이아웃" option), or neither (the original, default behavior: a video always
+     renders in its own fixed always-visible stack, completely outside whatever mode
+     the photos are using). Mirrors index.html's galleryHTML() — keep both in sync. */
+  function galleryBlockHTML(images, blockKey, mode, direction, groups, block){
+    const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
+    const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
+    if(block && block.mediaLayoutCombined){
+      return galleryModeHTML(images, blockKey, mode, direction, groups);
+    }
+    const firstVideoIdx = images.findIndex(im => isVideoPath(im.relPath || im.name || im.url));
+    const firstPhotoIdx = images.findIndex(im => !isVideoPath(im.relPath || im.name || im.url));
+    const photoFirst = firstPhotoIdx !== -1 && (firstVideoIdx === -1 || firstPhotoIdx < firstVideoIdx);
+    const stack = function(a, b){ return photoFirst ? b + a : a + b; };
+    if(block && block.videoGalleryMode){
+      const videoHTML = videoIms.length ? galleryModeHTML(videoIms, blockKey + "-videos", block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups) : "";
+      const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey + "-photos", mode, direction, groups) : "";
+      if(videoHTML && photoHTML) return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
+      return videoHTML || photoHTML;
+    }
+    /* legacy default — unchanged from before this feature existed. */
+    const videoHTML = videoIms.length
+      ? '<div class="gallery-video-stack">' + videoIms.map(im => '<div class="gallery-video-frame">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
+      : "";
+    if(mode === "free"){
+      const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey, "free", direction, groups) : "";
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
+    }
+    if(mode === "all"){
+      const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey + "-photos", "1", direction) : "";
+      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
+    }
+    if(videoIms.length && photoIms.length){
+      const photoHTML = galleryModeHTML(photoIms, blockKey + "-photos", mode, direction, groups);
+      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
+    }
+    /* only reached for a block that's purely video or purely photo (the mixed
+       case always returns above), so `images` here is already single-type. */
+    return galleryModeHTML(images, blockKey, mode, direction, groups);
   }
   function cloneAsHeroImage(im){
     const clone = { id: uid(), relPath: im.relPath, name: im.name };
@@ -2144,10 +2222,15 @@
 
   function imageRowHTML(im, blockId){
     const isVideo = isVideoPath(im.relPath || im.name);
+    /* "다듬기" only makes sense for a video file this app actually optimized and
+       saved on disk — not a Vimeo/YouTube embed link (those aren't a file we can
+       re-encode) and not a still-unsaved local blob: preview. */
+    const isTrimmableVideo = isVideo && im.relPath && !/^https?:\/\//i.test(im.relPath);
     const thumb = isVideo
       ? '<div class="thumb video-thumb">🎬</div>'
       : '<img class="thumb" src="' + im.url + '" alt="" data-action="zoom-image" data-block-id="' + blockId + '" data-image-id="' + im.id + '">';
     const cropBtn = isVideo ? '' : '<button class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + im.id + '">크롭</button>';
+    const trimBtn = isTrimmableVideo ? '<button class="icon-btn" data-action="trim-existing-video" data-image-id="' + im.id + '">다듬기</button>' : '';
     const revertBtn = im.original ? '<button class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + im.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '';
     const isSelected = selectedBlockId === blockId && selectedImages.has(im.id);
     return '<div class="image-row' + (isSelected ? ' selected' : '') + '" data-sort-item data-item-id="' + im.id + '">'
@@ -2156,6 +2239,7 @@
       + thumb
       + '<span class="fname">' + escapeHTML(im.relPath || im.name) + '</span>'
       + cropBtn
+      + trimBtn
       + revertBtn
       + '<button class="icon-btn" data-action="remove-image" data-image-id="' + im.id + '">삭제</button>'
       + '</div>';
@@ -2175,13 +2259,23 @@
       + '</div>';
   }
 
-  function blockCardHTML(block, project){
+  function blockCardHTML(block, project, index, total){
     const rows = (block.images||[]).length
       ? block.images.map(im => imageRowHTML(im, block.id)).join("")
       : '<div class="image-list-empty">아직 사진이 없습니다.</div>';
+    /* drag still works for fine-grained reordering, but jumping a block far up/down
+       a long list by drag alone is fiddly — these buttons are a precise alternative
+       for the common "move this one up" / "send this straight to the top" moves. */
+    const isFirst = index === 0, isLast = index === total - 1;
+    const reorderBtns = '<span class="block-reorder-btns">'
+      +   '<button type="button" class="icon-btn" data-action="block-move-top" data-block-id="' + block.id + '" title="맨 위로 이동"' + (isFirst ? ' disabled' : '') + '>⤒</button>'
+      +   '<button type="button" class="icon-btn" data-action="block-move-up" data-block-id="' + block.id + '" title="위로 이동"' + (isFirst ? ' disabled' : '') + '>▲</button>'
+      +   '<button type="button" class="icon-btn" data-action="block-move-down" data-block-id="' + block.id + '" title="아래로 이동"' + (isLast ? ' disabled' : '') + '>▼</button>'
+      + '</span>';
     return '<div class="block-card" data-sort-item data-item-id="' + block.id + '" data-block-id="' + block.id + '">'
       + '<div class="block-card-head">'
       +   '<span class="drag-handle">⠿</span>'
+      +   reorderBtns
       +   '<input class="field-inline" data-field="label" data-block-id="' + block.id + '" placeholder="블록 이름 (예: Brand Film)" value="' + escapeHTML(block.label||"") + '">'
       +   '<button class="icon-btn" data-action="generate-block" data-block-id="' + block.id + '" title="이 블록의 헤드라인·본문만 GENERATE">GENERATE</button>'
       +   '<button class="icon-btn" data-action="translate-block-ko-en" data-block-id="' + block.id + '" title="이 블록만 한국어 → 영어로 번역">KR → EN</button>'
@@ -2192,9 +2286,25 @@
       +   '<input class="field" data-field="heading" data-block-id="' + block.id + '" value="' + escapeHTML(block.heading||"") + '"></div>'
       + '<div class="field-group"><label class="field-label">본문 (줄바꿈 = 문단 구분)</label>'
       +   '<textarea class="field" data-field="paragraphs" data-block-id="' + block.id + '">' + escapeHTML((block.paragraphs||[]).join("\n")) + '</textarea></div>'
-      + '<div class="field-group"><label class="field-label">사진 레이아웃</label>'
-      +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">사진 레이아웃 — ' + layoutSummaryText(block) + '</button>'
-      + '</div>'
+      + '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:8px; font-weight:400;">'
+      +   '<input type="checkbox" data-action="toggle-media-position" data-block-id="' + block.id + '"' + (block.mediaPosition === "above" ? ' checked' : '') + '> 사진/영상을 헤드라인·본문보다 위로 배치</label></div>'
+      + (function(){
+          const blockHasVideo = (block.images||[]).some(im => isVideoPath(im.relPath || im.name));
+          if(!blockHasVideo){
+            /* the common case (no video in this block) — unchanged from before this
+               feature existed, no combined/video-layout controls to show at all. */
+            return '<div class="field-group"><label class="field-label">사진 레이아웃</label>'
+              +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">사진 레이아웃 — ' + layoutSummaryText(block) + '</button>'
+              + '</div>';
+          }
+          const combined = !!block.mediaLayoutCombined;
+          return '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:8px; font-weight:400;">'
+            +   '<input type="checkbox" data-action="toggle-media-layout-combined" data-block-id="' + block.id + '"' + (combined ? ' checked' : '') + '> 사진+동영상 통합 레이아웃 (하나로 같이 배치)</label></div>'
+            + '<div class="field-group"><label class="field-label">' + (combined ? "미디어 레이아웃" : "사진 / 동영상 레이아웃") + '</label>'
+            +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">' + (combined ? "미디어 레이아웃 — " : "사진 레이아웃 — ") + layoutSummaryText(block) + '</button>'
+            +   (combined ? '' : ' <button type="button" class="btn-sm" data-action="open-video-layout" data-block-id="' + block.id + '">동영상 레이아웃 — ' + videoLayoutSummaryText(block) + '</button>')
+            + '</div>';
+        })()
       + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경, 체크박스로 여러 장 선택 후 한번에 이동 가능)</label>'
       + selectionToolbarHTML(block, project)
       + '<div class="image-list" data-sort-scope="images:' + block.id + '">' + rows + '</div>'
@@ -2253,7 +2363,7 @@
       editorEl.innerHTML = '<div class="empty-state">왼쪽에서 프로젝트를 선택하거나<br>새 프로젝트를 만들어주세요.</div>';
       return;
     }
-    const blocksHTML = project.blocks.map(b => blockCardHTML(b, project)).join("");
+    const blocksHTML = project.blocks.map((b, i) => blockCardHTML(b, project, i, project.blocks.length)).join("");
     const creditsHTML = (project.credits||[]).map((c,i) => creditsRowHTML(c,i)).join("");
 
     editorEl.innerHTML = ''
@@ -2360,6 +2470,7 @@
               +     '<button type="button" class="btn-sm" data-action="hero-video-upload">새 동영상 업로드</button>'
               +     '<button type="button" class="btn-sm" data-action="hero-video-pick-existing">이미 올린 동영상에서 선택</button>'
               +     '<span class="fname">' + (project.heroVideoFile ? escapeHTML(project.heroVideoFile.split("/").pop()) : "선택된 파일 없음") + '</span>'
+              +     (project.heroVideoFile ? '<button type="button" class="icon-btn" data-action="trim-hero-video">다듬기</button>' : '')
               +     (project.heroVideoFile ? '<button type="button" class="icon-btn" data-action="remove-hero-video-file">제거</button>' : '')
               +   '</div></div>'
               : '')
@@ -2566,8 +2677,12 @@
      파일에서 이 거대한 문자열 때문에 탭이 죽고 브라우저 오류 페이지가 뜨는 문제가 있었음.
      fetch에 File을 body로 바로 넘기면 브라우저가 문자열로 안 만들고 스트리밍해서 보내기
      때문에 이 문제가 근본적으로 없어짐. */
-  async function optimizeVideoRaw(file, folder){
-    const qs = "folder=" + encodeURIComponent(folder || "") + "&filename=" + encodeURIComponent(nfc(file.name));
+  async function optimizeVideoRaw(file, folder, trim){
+    let qs = "folder=" + encodeURIComponent(folder || "") + "&filename=" + encodeURIComponent(nfc(file.name));
+    if(trim){
+      if(trim.start != null) qs += "&trimStart=" + trim.start;
+      if(trim.end != null) qs += "&trimEnd=" + trim.end;
+    }
     const res = await fetch(GENERATE_SERVER + "/optimize-video-raw?" + qs, {
       method: "POST",
       headers: { "Content-Type": file.type || "application/octet-stream" },
@@ -3450,18 +3565,92 @@
     saveAndRefresh();
     closeVideoModal();
   });
+  /* ---- upload-time trim controls (file tab only) ----
+     Trimming is folded into the SAME server-side ffmpeg encode that already
+     optimizes the file — no separate pass. Not shown for the "폴더에서 선택"/"링크
+     첨부" tabs: an already-optimized existing file is trimmed via the "다듬기"
+     button (trimExistingVideo below) instead, and a Vimeo/YouTube link is never
+     downloaded/re-encoded by this app at all. */
+  const videoTrimControls = document.getElementById("video-trim-controls");
+  const videoTrimPreview = document.getElementById("video-trim-preview");
+  const videoTrimStartInput = document.getElementById("video-trim-start");
+  const videoTrimEndInput = document.getElementById("video-trim-end");
+  const videoTrimStartLabel = document.getElementById("video-trim-start-label");
+  const videoTrimEndLabel = document.getElementById("video-trim-end-label");
+  let videoTrimState = null; // { duration, start, end } — null means "no trim range known yet / not applicable"
+
+  function formatTrimTime(sec){
+    sec = Math.max(0, sec || 0);
+    const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
+    return m + ":" + String(s).padStart(2, "0");
+  }
+  function resetVideoTrimControls(){
+    if(videoTrimPreview.src) try{ URL.revokeObjectURL(videoTrimPreview.src); }catch(err){}
+    videoTrimPreview.removeAttribute("src");
+    videoTrimControls.style.display = "none";
+    videoTrimState = null;
+  }
+  function renderVideoTrimLabels(){
+    videoTrimStartLabel.textContent = formatTrimTime(videoTrimState.start);
+    videoTrimEndLabel.textContent = formatTrimTime(videoTrimState.end);
+  }
+  /* loads a locally-picked File into the hidden-until-ready preview video just to
+     read its duration and give the user a scrubbable reference while dragging the
+     trim sliders — this file never gets uploaded anywhere just to show a preview. */
+  function loadVideoTrimPreview(file){
+    resetVideoTrimControls();
+    if(!file) return;
+    videoTrimPreview.src = URL.createObjectURL(file);
+    videoTrimPreview.addEventListener("loadedmetadata", function onMeta(){
+      videoTrimPreview.removeEventListener("loadedmetadata", onMeta);
+      const duration = videoTrimPreview.duration;
+      if(!isFinite(duration) || duration <= 0) return; // some containers report Infinity until seeked; trim stays unavailable rather than showing a broken 0-length range
+      videoTrimState = { duration: duration, start: 0, end: duration };
+      videoTrimStartInput.min = "0"; videoTrimStartInput.max = String(duration); videoTrimStartInput.value = "0";
+      videoTrimEndInput.min = "0"; videoTrimEndInput.max = String(duration); videoTrimEndInput.value = String(duration);
+      renderVideoTrimLabels();
+      videoTrimControls.style.display = "block";
+    }, { once: true });
+  }
+  videoTrimStartInput.addEventListener("input", () => {
+    if(!videoTrimState) return;
+    const v = Math.min(parseFloat(videoTrimStartInput.value), videoTrimState.end - 0.1);
+    videoTrimState.start = Math.max(0, v);
+    videoTrimStartInput.value = String(videoTrimState.start);
+    videoTrimPreview.currentTime = videoTrimState.start;
+    renderVideoTrimLabels();
+  });
+  videoTrimEndInput.addEventListener("input", () => {
+    if(!videoTrimState) return;
+    const v = Math.max(parseFloat(videoTrimEndInput.value), videoTrimState.start + 0.1);
+    videoTrimState.end = Math.min(videoTrimState.duration, v);
+    videoTrimEndInput.value = String(videoTrimState.end);
+    videoTrimPreview.currentTime = videoTrimState.end;
+    renderVideoTrimLabels();
+  });
+  /* only send trim params when the user actually moved a handle — an untouched
+     full-range selection uploads exactly like before this feature existed (same
+     cache key, no wasted re-encode of "the whole thing" as if it were a trim). */
+  function currentVideoTrimParams(){
+    if(!videoTrimState) return null;
+    if(videoTrimState.start <= 0.05 && videoTrimState.end >= videoTrimState.duration - 0.05) return null;
+    return { start: videoTrimState.start.toFixed(2), end: videoTrimState.end.toFixed(2) };
+  }
+
   function openVideoModal(blockId){
     videoTargetBlockId = blockId;
     videoTab = "file";
     videoPendingFile = null;
     videoFileName.textContent = "선택된 파일 없음";
     videoLinkInput.value = "";
+    resetVideoTrimControls();
     renderVideoTabs();
     videoModal.classList.add("open");
   }
   function closeVideoModal(){
     videoModal.classList.remove("open");
     videoTargetBlockId = null;
+    resetVideoTrimControls();
   }
   /* a video file dropped directly onto a block (see the drag-and-drop handlers in
      section 6) still opens this modal rather than uploading silently — optimizing
@@ -3471,6 +3660,7 @@
     openVideoModal(blockId);
     videoPendingFile = file;
     videoFileName.textContent = file.name;
+    loadVideoTrimPreview(file);
   }
 
   videoTabToggle.addEventListener("click", (e) => {
@@ -3486,6 +3676,7 @@
     if(!file) return;
     videoPendingFile = file;
     videoFileName.textContent = file.name;
+    loadVideoTrimPreview(file);
   });
   /* best-effort guess at "which project folder do this project's other assets live in",
      reused as the save location for freshly optimized videos. */
@@ -3560,7 +3751,7 @@
     videoConfirmBtn.disabled = true;
     videoConfirmBtn.textContent = "웹 최적화 중... (몇 분 걸릴 수 있어요)";
     try{
-      const data = await optimizeVideoRaw(videoPendingFile, inferProjectFolder(project));
+      const data = await optimizeVideoRaw(videoPendingFile, inferProjectFolder(project), currentVideoTrimParams());
       snapshot();
       applyVideoRelPathToTarget(project, data.relPath);
       if(data.reused){
@@ -3583,6 +3774,96 @@
     renderEditor();
     saveAndRefresh();
     closeVideoModal();
+  });
+
+  /* ---- trim-existing modal — re-trim a video that's ALREADY saved on disk ("나중에
+     다시 다듬기"), as opposed to the video-add modal's trim controls above (trimming
+     during the very first upload). Re-encodes in place server-side and keeps the
+     same relPath, so no data-model change is needed here on success — just re-render
+     so every <video> pointing at that path picks up the new file content. */
+  const trimExistingModal = document.getElementById("trim-existing-modal");
+  const trimExistingPreview = document.getElementById("trim-existing-preview");
+  const trimExistingStartInput = document.getElementById("trim-existing-start");
+  const trimExistingEndInput = document.getElementById("trim-existing-end");
+  const trimExistingStartLabel = document.getElementById("trim-existing-start-label");
+  const trimExistingEndLabel = document.getElementById("trim-existing-end-label");
+  const trimExistingConfirmBtn = document.getElementById("trim-existing-confirm");
+  let trimExistingRelPath = null;
+  let trimExistingState = null; // { duration, start, end }
+
+  function renderTrimExistingLabels(){
+    trimExistingStartLabel.textContent = formatTrimTime(trimExistingState.start);
+    trimExistingEndLabel.textContent = formatTrimTime(trimExistingState.end);
+  }
+  function openTrimExistingModal(relPath){
+    trimExistingRelPath = relPath;
+    trimExistingState = null;
+    trimExistingConfirmBtn.disabled = true;
+    trimExistingPreview.src = relPath;
+    trimExistingModal.classList.add("open");
+    trimExistingPreview.addEventListener("loadedmetadata", function onMeta(){
+      trimExistingPreview.removeEventListener("loadedmetadata", onMeta);
+      const duration = trimExistingPreview.duration;
+      if(!isFinite(duration) || duration <= 0){
+        alert("동영상 길이를 읽지 못했습니다. 로컬 서버가 켜져 있는지, 파일이 아직 프로젝트 폴더에 있는지 확인해주세요.");
+        closeTrimExistingModal();
+        return;
+      }
+      trimExistingState = { duration: duration, start: 0, end: duration };
+      trimExistingStartInput.min = "0"; trimExistingStartInput.max = String(duration); trimExistingStartInput.value = "0";
+      trimExistingEndInput.min = "0"; trimExistingEndInput.max = String(duration); trimExistingEndInput.value = String(duration);
+      renderTrimExistingLabels();
+      trimExistingConfirmBtn.disabled = false;
+    }, { once: true });
+  }
+  function closeTrimExistingModal(){
+    trimExistingModal.classList.remove("open");
+    trimExistingPreview.removeAttribute("src");
+    trimExistingRelPath = null;
+    trimExistingState = null;
+  }
+  trimExistingStartInput.addEventListener("input", () => {
+    if(!trimExistingState) return;
+    const v = Math.min(parseFloat(trimExistingStartInput.value), trimExistingState.end - 0.1);
+    trimExistingState.start = Math.max(0, v);
+    trimExistingStartInput.value = String(trimExistingState.start);
+    trimExistingPreview.currentTime = trimExistingState.start;
+    renderTrimExistingLabels();
+  });
+  trimExistingEndInput.addEventListener("input", () => {
+    if(!trimExistingState) return;
+    const v = Math.max(parseFloat(trimExistingEndInput.value), trimExistingState.start + 0.1);
+    trimExistingState.end = Math.min(trimExistingState.duration, v);
+    trimExistingEndInput.value = String(trimExistingState.end);
+    trimExistingPreview.currentTime = trimExistingState.end;
+    renderTrimExistingLabels();
+  });
+  document.getElementById("trim-existing-cancel").addEventListener("click", closeTrimExistingModal);
+  trimExistingConfirmBtn.addEventListener("click", async () => {
+    if(!trimExistingRelPath || !trimExistingState) return;
+    if(trimExistingState.start <= 0.05 && trimExistingState.end >= trimExistingState.duration - 0.05){
+      alert("자를 구간을 슬라이더로 지정해주세요 — 전체 구간이 선택된 상태입니다.");
+      return;
+    }
+    trimExistingConfirmBtn.disabled = true;
+    trimExistingConfirmBtn.textContent = "다듬는 중... (몇 분 걸릴 수 있어요)";
+    try{
+      const res = await fetch(GENERATE_SERVER + "/trim-video-existing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ relPath: trimExistingRelPath, start: trimExistingState.start.toFixed(2), end: trimExistingState.end.toFixed(2) })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok || !data.ok) throw new Error(data.error || "동영상 다듬기에 실패했습니다.");
+      renderEditor();
+      saveAndRefresh();
+      closeTrimExistingModal();
+    }catch(err){
+      alert("동영상 다듬기 실패: " + err.message);
+    }finally{
+      trimExistingConfirmBtn.disabled = false;
+      trimExistingConfirmBtn.textContent = "다듬기 적용";
+    }
   });
 
   /* ---- credits-paste modal ----
@@ -3658,6 +3939,7 @@
   const layoutPresetRow = document.getElementById("layout-preset-row");
 
   let layoutTargetBlockId = null;
+  let layoutTarget = "photo"; // "photo" | "video" — which set of block fields this modal session reads/writes
   let layoutDraft = null; // { mode, direction, free: {imageId: {x,y,w,h}} }
   let layoutDrag = null;  // { imageId, mode:"move"|"resize", startX, startY, startPos, canvasRect }
 
@@ -3666,11 +3948,17 @@
     return isVideo ? '<div class="video-icon">🎬</div>' : '<img src="' + im.url + '" alt="">';
   }
 
-  /* the layout modal only ever configures PHOTOS — a block's video(s) always render
-     in their own fixed stack above the photos regardless of galleryMode (see
-     galleryBlockHTML), so they're excluded from this modal's preview/free-canvas
-     entirely rather than shown as just another draggable/paginated item. */
-  function layoutPhotoImages(block){
+  /* The layout modal edits one of three targets, chosen by openLayoutModal's `target`
+     arg: "photo" (block.galleryMode/galleryDirection/galleryGroups — the default,
+     unchanged from before this feature existed), "video" (the equivalent independent
+     block.videoGalleryMode/* fields — only meaningful once the user opens "동영상
+     레이아웃" for a block that has one), or "photo" again while
+     block.mediaLayoutCombined is true (in which case it covers every image
+     regardless of type, and the block card's button relabels to "미디어 레이아웃").
+     See galleryBlockHTML for how these three states render. */
+  function layoutTargetImages(block, target){
+    if(target === "video") return (block.images || []).filter(im => isVideoPath(im.relPath || im.name));
+    if(block.mediaLayoutCombined) return block.images || [];
     return (block.images || []).filter(im => !isVideoPath(im.relPath || im.name));
   }
   /* "직접 지정" (custom) mode lets each page mix different group sizes (e.g. one
@@ -3704,22 +3992,27 @@
     while(arr.length < need) arr.push(true);
     return arr;
   }
-  function openLayoutModal(blockId){
+  function openLayoutModal(blockId, target){
     const project = getCurrentProject();
     const block = project && project.blocks.find(b => b.id === blockId);
     if(!block) return;
     layoutTargetBlockId = blockId;
-    const photoIms = layoutPhotoImages(block);
+    layoutTarget = target === "video" ? "video" : "photo";
+    const images = layoutTargetImages(block, layoutTarget);
     const free = {};
-    photoIms.forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, photoIms.length); });
-    const breaks = ensureBreaksLength(groupsToBreaks(block.galleryGroups, photoIms.length), photoIms.length);
-    layoutDraft = { mode: block.galleryMode || "1", direction: block.galleryDirection || "row", free: free, breaks: breaks };
+    images.forEach((im, i) => { free[im.id] = im.free ? Object.assign({}, im.free) : defaultFreePos(i, images.length); });
+    const mode = layoutTarget === "video" ? (block.videoGalleryMode || "1") : (block.galleryMode || "1");
+    const direction = layoutTarget === "video" ? (block.videoGalleryDirection || "row") : (block.galleryDirection || "row");
+    const groups = layoutTarget === "video" ? block.videoGalleryGroups : block.galleryGroups;
+    const breaks = ensureBreaksLength(groupsToBreaks(groups, images.length), images.length);
+    layoutDraft = { mode: mode, direction: direction, free: free, breaks: breaks };
     renderLayoutModal();
     layoutModal.classList.add("open");
   }
   function closeLayoutModal(){
     layoutModal.classList.remove("open");
     layoutTargetBlockId = null;
+    layoutTarget = "photo";
     layoutDraft = null;
   }
   function renderLayoutModal(){
@@ -3732,19 +4025,26 @@
     document.getElementById("layout-custom-hint").style.display = layoutDraft.mode === "custom" ? "block" : "none";
     const project = getCurrentProject();
     const block = project.blocks.find(b => b.id === layoutTargetBlockId);
+    document.getElementById("layout-modal-title").textContent =
+      layoutTarget === "video" ? "동영상 레이아웃" : (block.mediaLayoutCombined ? "미디어 레이아웃 (사진+동영상 통합)" : "사진 레이아웃");
+    /* the "video always fixed above photos" note only makes sense in the legacy
+       photo-target state — once a video-specific layout exists, or the two are
+       combined, the video is no longer fixed, so the note would be misleading. */
     const hasVideo = (block.images || []).some(im => isVideoPath(im.relPath || im.name));
-    document.getElementById("layout-video-note").style.display = hasVideo ? "block" : "none";
+    const showLegacyNote = layoutTarget === "photo" && hasVideo && !block.mediaLayoutCombined && !block.videoGalleryMode;
+    document.getElementById("layout-video-note").style.display = showLegacyNote ? "block" : "none";
     renderLayoutPreview();
   }
   function renderLayoutPreview(){
     const project = getCurrentProject();
     const block = project.blocks.find(b => b.id === layoutTargetBlockId);
-    const images = layoutPhotoImages(block);
+    const images = layoutTargetImages(block, layoutTarget);
     layoutPreviewEl.className = "layout-preview";
     layoutPreviewEl.style.flexDirection = "";
     layoutPreviewEl.style.flexWrap = "";
     if(!images.length){
-      layoutPreviewEl.innerHTML = '<div style="color:#888;font-size:12px;display:flex;align-items:center;justify-content:center;width:100%;">사진을 먼저 추가하세요</div>';
+      const label = layoutTarget === "video" ? "동영상을" : "사진을";
+      layoutPreviewEl.innerHTML = '<div style="color:#888;font-size:12px;display:flex;align-items:center;justify-content:center;width:100%;">' + label + ' 먼저 추가하세요</div>';
       return;
     }
     if(layoutDraft.mode === "free"){
@@ -3815,9 +4115,9 @@
     const project = getCurrentProject();
     const block = project && project.blocks.find(b => b.id === layoutTargetBlockId);
     if(!block) return;
-    const photoIms = layoutPhotoImages(block);
-    photoIms.forEach((im, i) => {
-      layoutDraft.free[im.id] = heroGridFreePos(i, photoIms.length);
+    const images = layoutTargetImages(block, layoutTarget);
+    images.forEach((im, i) => {
+      layoutDraft.free[im.id] = heroGridFreePos(i, images.length);
     });
     renderLayoutPreview();
   });
@@ -3827,16 +4127,24 @@
     const block = project && project.blocks.find(b => b.id === layoutTargetBlockId);
     if(!block){ closeLayoutModal(); return; }
     snapshot();
-    block.galleryMode = layoutDraft.mode;
-    block.galleryDirection = layoutDraft.direction;
+    const images = layoutTargetImages(block, layoutTarget);
     if(layoutDraft.mode === "free"){
-      layoutPhotoImages(block).forEach(im => {
+      images.forEach(im => {
         if(layoutDraft.free[im.id]) im.free = layoutDraft.free[im.id];
       });
     }
-    if(layoutDraft.mode === "custom"){
-      const photoIms = layoutPhotoImages(block);
-      block.galleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, photoIms.length));
+    /* galleryGroups/videoGalleryGroups is only ever (re)written while mode is
+       "custom" — other modes leave a previous custom setup's groups untouched
+       (harmlessly stale, since export/render only reads it when mode === "custom")
+       so switching custom -> free -> back to custom doesn't lose the old breaks. */
+    if(layoutTarget === "video"){
+      block.videoGalleryMode = layoutDraft.mode;
+      block.videoGalleryDirection = layoutDraft.direction;
+      if(layoutDraft.mode === "custom") block.videoGalleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length));
+    } else {
+      block.galleryMode = layoutDraft.mode;
+      block.galleryDirection = layoutDraft.direction;
+      if(layoutDraft.mode === "custom") block.galleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length));
     }
     renderEditor();
     saveAndRefresh();
@@ -4419,7 +4727,9 @@
     }
 
     const openLayoutBtn = e.target.closest('[data-action="open-layout"]');
-    if(openLayoutBtn){ openLayoutModal(openLayoutBtn.dataset.blockId); return; }
+    if(openLayoutBtn){ openLayoutModal(openLayoutBtn.dataset.blockId, "photo"); return; }
+    const openVideoLayoutBtn = e.target.closest('[data-action="open-video-layout"]');
+    if(openVideoLayoutBtn){ openLayoutModal(openVideoLayoutBtn.dataset.blockId, "video"); return; }
 
     const addFolderBtn = e.target.closest('[data-action="add-folder"]');
     if(addFolderBtn){ pendingBlockId = addFolderBtn.dataset.blockId; folderInput.click(); return; }
@@ -4471,6 +4781,26 @@
       toggleImageSelection(toggleSelectCb.dataset.blockId, toggleSelectCb.dataset.imageId);
       return;
     }
+    const mediaPosCb = e.target.closest('[data-action="toggle-media-position"]');
+    if(mediaPosCb){
+      const block = project.blocks.find(b => b.id === mediaPosCb.dataset.blockId);
+      if(block){
+        snapshot();
+        block.mediaPosition = mediaPosCb.checked ? "above" : "below";
+        renderEditor(); saveAndRefresh();
+      }
+      return;
+    }
+    const mediaCombinedCb = e.target.closest('[data-action="toggle-media-layout-combined"]');
+    if(mediaCombinedCb){
+      const block = project.blocks.find(b => b.id === mediaCombinedCb.dataset.blockId);
+      if(block){
+        snapshot();
+        block.mediaLayoutCombined = mediaCombinedCb.checked;
+        renderEditor(); saveAndRefresh();
+      }
+      return;
+    }
     const moveTopBtn = e.target.closest('[data-action="move-selected-top"]');
     if(moveTopBtn){ moveSelectedImages(moveTopBtn.dataset.blockId, "top"); return; }
     const moveBottomBtn = e.target.closest('[data-action="move-selected-bottom"]');
@@ -4508,6 +4838,16 @@
 
     if(e.target.closest('[data-action="hero-video-upload"]')){ heroVideoFileInput.click(); return; }
     if(e.target.closest('[data-action="hero-video-pick-existing"]')){ openVideoModal(HERO_VIDEO_TARGET); return; }
+    if(e.target.closest('[data-action="trim-hero-video"]')){
+      if(project.heroVideoFile) openTrimExistingModal(project.heroVideoFile);
+      return;
+    }
+    const trimVideoBtn = e.target.closest('[data-action="trim-existing-video"]');
+    if(trimVideoBtn){
+      const found = findImage(project, trimVideoBtn.dataset.imageId);
+      if(found && found.im.relPath) openTrimExistingModal(found.im.relPath);
+      return;
+    }
 
     const removeHeroVideoFileBtn = e.target.closest('[data-action="remove-hero-video-file"]');
     if(removeHeroVideoFileBtn){
@@ -4535,6 +4875,38 @@
       snapshot();
       project.blocks.push(newBlock());
       renderEditor(); saveAndRefresh();
+      return;
+    }
+
+    const blockMoveTopBtn = e.target.closest('[data-action="block-move-top"]');
+    if(blockMoveTopBtn && !blockMoveTopBtn.disabled){
+      const idx = project.blocks.findIndex(b => b.id === blockMoveTopBtn.dataset.blockId);
+      if(idx > 0){
+        snapshot();
+        const [b] = project.blocks.splice(idx, 1);
+        project.blocks.unshift(b);
+        renderEditor(); saveAndRefresh();
+      }
+      return;
+    }
+    const blockMoveUpBtn = e.target.closest('[data-action="block-move-up"]');
+    if(blockMoveUpBtn && !blockMoveUpBtn.disabled){
+      const idx = project.blocks.findIndex(b => b.id === blockMoveUpBtn.dataset.blockId);
+      if(idx > 0){
+        snapshot();
+        [project.blocks[idx-1], project.blocks[idx]] = [project.blocks[idx], project.blocks[idx-1]];
+        renderEditor(); saveAndRefresh();
+      }
+      return;
+    }
+    const blockMoveDownBtn = e.target.closest('[data-action="block-move-down"]');
+    if(blockMoveDownBtn && !blockMoveDownBtn.disabled){
+      const idx = project.blocks.findIndex(b => b.id === blockMoveDownBtn.dataset.blockId);
+      if(idx > -1 && idx < project.blocks.length - 1){
+        snapshot();
+        [project.blocks[idx], project.blocks[idx+1]] = [project.blocks[idx+1], project.blocks[idx]];
+        renderEditor(); saveAndRefresh();
+      }
       return;
     }
 
@@ -5060,10 +5432,13 @@
     const blocksHTML = project.blocks.map((block, bi) => {
       const heading = block.heading ? '<div class="p-block-heading">' + escapeHTML(block.heading) + '</div>' : "";
       const paras = (block.paragraphs||[]).filter(t => t && t.trim()).map(t => '<p class="p-block-body">' + escapeHTML(t) + '</p>').join("");
+      const media = (block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.galleryGroups, block) : "";
+      const mediaAbove = block.mediaPosition === "above";
       return '<div class="p-block">'
         + '<div class="p-caption"><span class="label">' + escapeHTML(block.label||"") + '</span><span class="idx">' + String(bi+1).padStart(2,"0") + '</span></div>'
+        + (mediaAbove ? media : "")
         + heading + paras
-        + ((block.images||[]).length ? galleryBlockHTML(block.images, "b" + bi, block.galleryMode, block.galleryDirection, block.galleryGroups) : "")
+        + (mediaAbove ? "" : media)
         + '</div>';
     }).join("");
 
@@ -5291,14 +5666,23 @@
     project.blocks.forEach((b, i) => {
       L.push("    {");
       L.push("      label:" + JSON.stringify(b.label||"") + ",");
+      if(b.mediaPosition === "above") L.push("      mediaPosition:" + JSON.stringify(b.mediaPosition) + ",");
       if(b.heading) L.push("      heading:" + JSON.stringify(b.heading) + ",");
       if(b.galleryMode && b.galleryMode !== "1") L.push("      galleryMode:" + JSON.stringify(b.galleryMode) + ",");
       if(b.galleryDirection === "column") L.push("      galleryDirection:" + JSON.stringify(b.galleryDirection) + ",");
       if(b.galleryMode === "custom" && Array.isArray(b.galleryGroups) && b.galleryGroups.length) L.push("      galleryGroups:" + JSON.stringify(b.galleryGroups) + ",");
+      if(b.mediaLayoutCombined) L.push("      mediaLayoutCombined:true,");
+      if(b.videoGalleryMode) L.push("      videoGalleryMode:" + JSON.stringify(b.videoGalleryMode) + ",");
+      if(b.videoGalleryMode && b.videoGalleryDirection === "column") L.push("      videoGalleryDirection:" + JSON.stringify(b.videoGalleryDirection) + ",");
+      if(b.videoGalleryMode === "custom" && Array.isArray(b.videoGalleryGroups) && b.videoGalleryGroups.length) L.push("      videoGalleryGroups:" + JSON.stringify(b.videoGalleryGroups) + ",");
       L.push("      images:[");
       b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
       L.push("      ],");
-      if(b.galleryMode === "free"){
+      /* freeLayout is a single array, index-aligned to the FULL images list above
+         regardless of item type — it's needed whenever ANY of the three layout
+         states (photo, independent video, or combined) is using "free" mode, since
+         each covers its own item's positions from this same array by original index. */
+      if(b.galleryMode === "free" || b.videoGalleryMode === "free"){
         L.push("      freeLayout:[");
         b.images.forEach((im, i) => {
           const pos = im.free || defaultFreePos(i, b.images.length);

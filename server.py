@@ -320,7 +320,7 @@ def crop_image(payload):
     return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
-def _run_ffmpeg(input_source, out_abs):
+def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
     # Cap the LONGER edge at 1920 (not just width) so portrait video is capped by
     # height instead of width — the old "scale=min(1920,iw):-2" only ever capped
     # width, so a portrait 4K clip (e.g. 2160x3840) got scaled to 1920x3413 instead
@@ -328,8 +328,16 @@ def _run_ffmpeg(input_source, out_abs):
     # long edge (including a normal 1080p or 1080x1920 vertical clip) passes through
     # with no resize at all — full resolution preserved, only re-encoded.
     scale_filter = "scale='if(gt(iw,ih),min(1920,iw),-2)':'if(gt(iw,ih),-2,min(1920,ih))'"
-    cmd = [
-        "ffmpeg", "-y", "-i", input_source,
+    cmd = ["ffmpeg", "-y", "-i", input_source]
+    # -ss/-to as OUTPUT options (after -i) are both interpreted against the ORIGINAL
+    # input timeline, so trim_start/trim_end are plain absolute seconds into the
+    # source video — frame-accurate (unlike -ss before -i, which seeks to the
+    # nearest keyframe) since we're already re-encoding the whole file regardless.
+    if trim_start is not None:
+        cmd += ["-ss", str(trim_start)]
+    if trim_end is not None:
+        cmd += ["-to", str(trim_end)]
+    cmd += [
         "-vf", scale_filter,
         # crf 18 + preset slow: visually near-lossless x264 (crf 23/medium noticeably
         # softened fine detail/motion on portfolio footage) — bigger files, but this
@@ -364,7 +372,7 @@ def _save_video_cache(cache):
         pass
 
 
-def optimize_video_from_bytes(raw, folder, filename):
+def optimize_video_from_bytes(raw, folder, filename, trim_start=None, trim_end=None):
     """Core of the upload path: re-encode raw video bytes to a web-friendly H.264/AAC
     mp4 with faststart, server-side via ffmpeg, and cache the result by content hash
     (sha256 of the raw bytes) in .video_cache.json — reusing the same source video
@@ -375,7 +383,13 @@ def optimize_video_from_bytes(raw, folder, filename):
     from the request body — no base64/JSON involved, so multi-hundred-MB phone-shot
     vertical videos don't have to be held in memory as a giant base64 string first,
     which is what was crashing the browser tab on large uploads) and, for backward
-    compatibility, by optimize_video()'s legacy dataUrl JSON path."""
+    compatibility, by optimize_video()'s legacy dataUrl JSON path.
+
+    trim_start/trim_end (seconds, optional) cut the clip during the SAME encode pass
+    instead of a separate step — trimming folds into the optimize pipeline for free.
+    The cache key incorporates the trim range so a trimmed clip never collides with
+    (or gets served in place of) the untrimmed original, or a different trim of the
+    same source file."""
     folder = _sanitize_folder(folder)
     filename = (filename or "video").strip() or "video"
     name_noext = os.path.splitext(filename)[0] or "video"
@@ -384,6 +398,8 @@ def optimize_video_from_bytes(raw, folder, filename):
     os.makedirs(out_dir, exist_ok=True)
 
     content_hash = hashlib.sha256(raw).hexdigest()
+    if trim_start is not None or trim_end is not None:
+        content_hash += ":trim:%s-%s" % (trim_start, trim_end)
     cached = _load_video_cache().get(content_hash)
     if cached and os.path.isfile(os.path.join(BASE_DIR, cached["relPath"])):
         return {"relPath": cached["relPath"], "width": cached.get("width"), "height": cached.get("height"), "reused": True}
@@ -396,7 +412,7 @@ def optimize_video_from_bytes(raw, folder, filename):
         tmp.write(raw)
         tmp_path = tmp.name
     try:
-        _run_ffmpeg(tmp_path, out_abs)
+        _run_ffmpeg(tmp_path, out_abs, trim_start=trim_start, trim_end=trim_end)
     finally:
         try:
             os.unlink(tmp_path)
@@ -425,6 +441,48 @@ def _probe_video_dims(out_abs):
     except Exception:
         pass
     return None, None
+
+
+def trim_video_existing(payload):
+    """Re-trim an ALREADY-SAVED video in place by relPath — the "다듬기" button on a
+    video that's already been uploaded, as opposed to trimming during the initial
+    upload (see optimize_video_from_bytes's trim_start/trim_end, which folds
+    trimming into the very first encode instead). Re-encodes into a temp file in
+    the same directory, then atomically replaces the original so relPath (and every
+    project that references it) never has to change — no new file, no orphaned
+    duplicate. Re-trims an already-encoded file, so repeated trims of the same clip
+    lose a little quality each time (the pre-optimization source isn't kept around
+    to trim from instead) — the same tradeoff any editor without a non-destructive
+    history makes; acceptable for a one-off portfolio-clip edit."""
+    rel_path = (payload.get("relPath") or "").strip()
+    if not rel_path:
+        raise ValueError("relPath가 필요합니다.")
+    abs_path = os.path.normpath(os.path.join(BASE_DIR, rel_path))
+    if not (abs_path + os.sep).startswith(BASE_DIR + os.sep):
+        raise ValueError("허용되지 않는 경로입니다.")
+    if not os.path.isfile(abs_path):
+        raise ValueError("동영상 파일을 찾을 수 없습니다: %s" % rel_path)
+
+    trim_start = payload.get("start")
+    trim_end = payload.get("end")
+    if trim_start is None and trim_end is None:
+        raise ValueError("시작/끝 시간이 필요합니다.")
+
+    out_dir = os.path.dirname(abs_path) or BASE_DIR
+    fd, tmp_out = tempfile.mkstemp(suffix=".mp4", dir=out_dir)
+    os.close(fd)
+    try:
+        _run_ffmpeg(abs_path, tmp_out, trim_start=trim_start, trim_end=trim_end)
+        os.replace(tmp_out, abs_path)
+    except Exception:
+        try:
+            os.unlink(tmp_out)
+        except OSError:
+            pass
+        raise
+
+    width, height = _probe_video_dims(abs_path)
+    return {"relPath": rel_path, "width": width, "height": height}
 
 
 def optimize_video(payload):
@@ -1206,6 +1264,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             qs = urllib.parse.parse_qs(parsed.query)
             folder = (qs.get("folder") or [""])[0]
             filename = (qs.get("filename") or ["video"])[0]
+            trim_start_raw = (qs.get("trimStart") or [None])[0]
+            trim_end_raw = (qs.get("trimEnd") or [None])[0]
+            try:
+                trim_start = float(trim_start_raw) if trim_start_raw not in (None, "") else None
+                trim_end = float(trim_end_raw) if trim_end_raw not in (None, "") else None
+            except ValueError:
+                self._send_json(400, {"error": "trimStart/trimEnd는 숫자(초)여야 합니다."})
+                return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 raw = self.rfile.read(length) if length else b""
@@ -1216,7 +1282,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self._send_json(400, {"error": "동영상 데이터가 비어 있습니다."})
                 return
             try:
-                result = optimize_video_from_bytes(raw, folder, filename)
+                result = optimize_video_from_bytes(raw, folder, filename, trim_start=trim_start, trim_end=trim_end)
             except ValueError as e:
                 self._send_json(400, {"error": str(e)})
                 return
@@ -1226,7 +1292,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, dict({"ok": True}, **result))
             return
 
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video", "/trim-video-existing"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -1257,6 +1323,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             except Exception as e:
                 self._send_json(500, {"error": "동영상 최적화 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
+            return
+
+        if parsed.path == "/trim-video-existing":
+            try:
+                result = trim_video_existing(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "동영상 다듬기 실패: %s" % e})
                 return
             self._send_json(200, dict({"ok": True}, **result))
             return
