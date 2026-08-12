@@ -125,30 +125,32 @@
      like #frame-day/#frame-clock already do. Shares the same show/hide + 40%-on-detail-pages
      rules as the header and the corner frame items.
 
-     filter and mix-blend-mode are split across TWO elements (.brand-logo-blend wrapper +
-     the <img> inside it) rather than both on the <img> itself — combining them on one
-     element is a known WebKit/Safari bug (confirmed on iOS + macOS Safari; Chromium/Firefox
-     render it fine either way) where the filtered result no longer blends against the real
-     page backdrop, so it renders as plain inverted white regardless of background instead
-     of auto-contrasting. Splitting them onto separate elements sidesteps it: the <img>'s
-     filter runs first, then the wrapper (which has no filter of its own) blends that
-     already-inverted image against the actual page behind it. */
+     filter and mix-blend-mode must be split across TWO elements (.brand-logo itself +
+     the <img> inside it) rather than both on the <img> itself, to sidestep a known
+     WebKit/Safari bug where combining them on one element stops the blend from reading
+     the real page backdrop. Just as important: mix-blend-mode has to live on .brand-logo
+     directly (the position:fixed + z-index element) and NOT on some other non-positioned
+     wrapper nested inside it — confirmed via Chromium that a mix-blend-mode on a plain
+     static child of a position:fixed/z-index ancestor fails to composite against the
+     actual page backdrop (renders as flat unblended white instead of auto-contrasting),
+     even though the same blend-mode works fine when it's on the fixed/z-index element
+     itself. */
   .brand-logo{
     position:fixed; top:20px; left:28px; z-index:500;
     opacity:0;
     pointer-events:none;
     cursor:pointer;
     transition:opacity .35s ease;
+    mix-blend-mode:difference;
   }
-  .brand-logo-blend{ mix-blend-mode:difference; }
-  .brand-logo-blend img{display:block; height:26px; width:auto; filter:invert(1);}
+  .brand-logo img{display:block; height:26px; width:auto; filter:invert(1);}
   body.past-hero .brand-logo{opacity:1; pointer-events:auto;}
   body.project-open .brand-logo, body.info-open .brand-logo{opacity:.4; pointer-events:auto;}
   body.project-open .brand-logo:hover, body.info-open .brand-logo:hover{opacity:1;}
   /* Info 페이지는 배경이 사진(구름/캐릭터)이라 difference 블렌드가 로고를 배경색에 물들여
      보이게 하므로, frame-item과 동일하게 Info 페이지에서는 원래의 솔리드 블랙으로 되돌림 */
-  body.info-open .brand-logo-blend{ mix-blend-mode:normal; }
-  body.info-open .brand-logo-blend img{ filter:none; }
+  body.info-open .brand-logo{ mix-blend-mode:normal; }
+  body.info-open .brand-logo img{ filter:none; }
 
   /* ---------- corner frame: day / clock / email / ig ----------
      hidden on the main greeting screen, fades in once you scroll past it
@@ -879,7 +881,7 @@
     <button id="project-close">✕ Close</button>
   </header>
 
-  <div class="brand-logo" data-go="home"><div class="brand-logo-blend"><img src="jjaejae-wordmark-black.png" alt="jjaejae"></div></div>
+  <div class="brand-logo" data-go="home"><img src="jjaejae-wordmark-black.png" alt="jjaejae"></div>
 
   <div class="frame-item" id="frame-day"></div>
   <div class="frame-item" id="frame-clock"></div>
