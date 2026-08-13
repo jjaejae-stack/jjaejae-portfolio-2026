@@ -5805,6 +5805,7 @@
     '  openLightbox(imgs.map(function(im){ return im.getAttribute("src"); }), imgs.indexOf(img));',
     '}, true);',
     'document.querySelectorAll(".gallery").forEach(function(g){ initGallery(g); });',
+    'Array.prototype.slice.call(document.querySelectorAll(".gallery-video-stack video:not([data-no-autoplay])")).forEach(function(v){ galleryVideoAutoplayObserver.observe(v); });',
     'window.addEventListener("resize", function(){',
     '  document.querySelectorAll(".gallery").forEach(function(g){',
     '    var mode = g.dataset.mode || "1";',

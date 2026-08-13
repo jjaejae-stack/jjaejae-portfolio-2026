@@ -2915,7 +2915,7 @@
       id:"baskin-robbins-2025-christmas-campaign-afnkk",
       title:"BASKIN ROBBINS\nChristmas Campaign 2025",
       category:"work",
-      order:2,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:2, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#ff8fe1",
       textColor:"#000000",
       titleLetterSpacing:-0.035,
@@ -2979,8 +2979,6 @@
         },
         {
           label:"Making",
-          galleryMode:"custom",
-          galleryGroups:[2,2,1,1,1,1],
           videoGalleryMode:"free",
           images:[
             "BASKIN ROBBINS Christmas Campaign 2025/BASKIN ROBBINS - Making (1080p No Audio)-web.mp4",
@@ -3867,6 +3865,10 @@
     }
 
     scrollRoot.querySelectorAll(".gallery").forEach(g => initGallery(g));
+    /* .gallery-video-stack(사진+동영상이 섞였는데 videoGalleryMode를 따로 안 정한 블록의
+       "항상 보이는 고정 영상" 기본 배치)은 .gallery 클래스가 없어서 위 initGallery 루프를
+       안 타므로, 스크롤 자동재생 관찰 대상에서 빠져있었음 — 따로 등록. */
+    scrollRoot.querySelectorAll(".gallery-video-stack video:not([data-no-autoplay])").forEach(v => galleryVideoAutoplayObserver.observe(v));
     if(visibleProjects.length > 1){
       scrollRoot.querySelector("[data-prev]").addEventListener("click", (e) => { e.preventDefault(); goProject(prev.id); });
       scrollRoot.querySelector("[data-next]").addEventListener("click", (e) => { e.preventDefault(); goProject(next.id); });
