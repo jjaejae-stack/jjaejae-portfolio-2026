@@ -1042,20 +1042,24 @@
   function posterUrlFor(src){
     return u(src.replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, "-poster.jpg"));
   }
-  function mediaFrameInner(src){
+  function mediaFrameInner(src, noAutoplaySet){
     if(!isVideoSrc(src)) return `<img src="${u(src)}" alt=""><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>`;
     const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
     if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
     if(yt) return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
-    /* muted — 스크롤로 화면에 들어오면 자동재생되는데(아래 galleryVideoAutoplayObserver
-       참고) 브라우저 자동재생 정책상 소리가 있으면 막히므로, 항상 무음으로 시작하고
-       controls는 그대로 둬서 보다가 원하면 직접 눌러 소리를 켤 수 있게 함. */
+    /* muted — 스크롤로 화면에 들어오면 자동재생되는 영상은(아래 galleryVideoAutoplayObserver
+       참고) 브라우저 자동재생 정책상 소리가 있으면 막히므로 무음으로 시작함. 자동재생을 끈
+       영상(block.noAutoplay)은 애초에 관찰 대상에서 빠지므로, 방문자가 직접 눌러야만
+       재생되고 그때는 소리도 정상 재생됨. */
+    const autoplayEnabled = !(noAutoplaySet && noAutoplaySet.has(src));
+    const mutedAttr = autoplayEnabled ? " muted" : "";
+    const noAutoplayAttr = autoplayEnabled ? "" : ` data-no-autoplay="1"`;
     const posterAttr = /^https?:\/\//i.test(src) ? "" : ` poster="${posterUrlFor(src)}"`;
-    return `<video src="${u(src)}" controls muted playsinline${posterAttr}></video>`;
+    return `<video src="${u(src)}" controls${mutedAttr} playsinline${posterAttr}${noAutoplayAttr}></video>`;
   }
-  function mediaFrameHTML(src){
-    return `<div class="gallery-frame">${mediaFrameInner(src)}</div>`;
+  function mediaFrameHTML(src, noAutoplaySet){
+    return `<div class="gallery-frame">${mediaFrameInner(src, noAutoplaySet)}</div>`;
   }
   /* "직접 지정" 모드의 groups 배열 항목은 순수 숫자(한 줄 페이지, 예: 4) 또는
      {count, cols} 객체(그리드 페이지, 예: {count:4, cols:2} = 2열로 줄바꿈)일 수 있음 —
@@ -1065,18 +1069,18 @@
   /* 그리드 페이지 하나를 "여러 줄이 중첩된 프레임 하나"로 만듦 — 페이지 슬라이딩/크기 계산
      (computeMultiPageLayout)은 이걸 그냥 가로세로 비율이 있는 프레임 하나로만 취급하므로
      기존 로직을 안 건드리고 그대로 재사용 가능(frameMediaRatio/layoutCollageRows 참고). */
-  function collageFrameHTML(chunk, cols){
+  function collageFrameHTML(chunk, cols, noAutoplaySet){
     const rows = [];
     for(let i = 0; i < chunk.length; i += cols) rows.push(chunk.slice(i, i + cols));
     const rowsHTML = rows.map(row =>
-      `<div class="collage-row">${row.map(src => `<div class="collage-cell">${mediaFrameInner(src)}</div>`).join("")}</div>`
+      `<div class="collage-row">${row.map(src => `<div class="collage-cell">${mediaFrameInner(src, noAutoplaySet)}</div>`).join("")}</div>`
     ).join("");
     return `<div class="gallery-frame gallery-collage" data-cols="${cols}">${rowsHTML}</div>`;
   }
   /* custom 모드일 때만 쓰임 — 그룹마다 groupCols()가 있으면(그리고 그 그룹이 cols보다 많은
      사진을 담고 있어서 실제로 줄바꿈이 필요하면) collageFrameHTML로 묶고, 아니면 지금처럼
      사진마다 개별 프레임을 그대로 만듦. */
-  function customFramesHTML(srcs, groups){
+  function customFramesHTML(srcs, groups, noAutoplaySet){
     const parts = [];
     let cursor = 0;
     groups.forEach(g => {
@@ -1086,13 +1090,13 @@
       const chunk = srcs.slice(cursor, cursor + count);
       cursor += count;
       if(cols && chunk.length > cols){
-        parts.push(collageFrameHTML(chunk, cols));
+        parts.push(collageFrameHTML(chunk, cols, noAutoplaySet));
       }else{
-        chunk.forEach(src => parts.push(mediaFrameHTML(src)));
+        chunk.forEach(src => parts.push(mediaFrameHTML(src, noAutoplaySet)));
       }
     });
     /* getPageGroupSizes()와 마찬가지로, 선언된 그룹을 다 쓰고도 사진이 남으면 한 장씩 추가 페이지로 */
-    for(; cursor < srcs.length; cursor++) parts.push(mediaFrameHTML(srcs[cursor]));
+    for(; cursor < srcs.length; cursor++) parts.push(mediaFrameHTML(srcs[cursor], noAutoplaySet));
     return parts.join("");
   }
   /* 갤러리 카운터에 쓸 총 페이지 수 — getPageGroupSizes()와 같은 규칙(커스텀 그룹 순서대로
@@ -3576,7 +3580,7 @@
      stash a per-item position). This is the core layout renderer, shared by the
      legacy photo-only layout, an explicitly-configured independent video layout,
      and the "사진+동영상 통합" combined layout — see galleryHTML below. */
-  function galleryModeHTML(srcs, blockId, mode, direction, groups, freeLayout){
+  function galleryModeHTML(srcs, blockId, mode, direction, groups, freeLayout, noAutoplaySet){
     const m = mode || "1";
     const dir = direction === "column" ? "column" : "row";
     if(m === "free"){
@@ -3596,7 +3600,7 @@
       const frames = srcs.map((src, i) => {
         const pos = positions[i];
         const gridAttrs = isGrid ? ` data-row="${grid.rows[i]}" data-col="${grid.cols[i]}"` : "";
-        return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;"${gridAttrs}>${mediaFrameInner(src)}</div>`;
+        return `<div class="gallery-frame" style="left:${pos.x}%;top:${pos.y}%;width:${pos.w}%;height:${pos.h}%;"${gridAttrs}>${mediaFrameInner(src, noAutoplaySet)}</div>`;
       }).join("");
       return `
       <div class="gallery mode-free${rowClass}" data-block="${blockId}" data-count="${count}" data-mode="free">
@@ -3604,14 +3608,14 @@
       </div>`;
     }
     if(m === "all"){
-      return srcs.length ? galleryModeHTML(srcs, blockId, "1", dir) : "";
+      return srcs.length ? galleryModeHTML(srcs, blockId, "1", dir, undefined, undefined, noAutoplaySet) : "";
     }
     const count = srcs.length || 1;
     const isCustom = m === "custom" && Array.isArray(groups) && groups.length;
     const perPage = isCustom ? groupCount(groups[0]) : (m === "1" ? 1 : parseInt(m, 10));
     const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
     const groupsAttr = isCustom ? ` data-groups="${JSON.stringify(groups.map(g => groupCount(g)))}"` : "";
-    const frames = isCustom ? customFramesHTML(srcs, groups) : srcs.map(mediaFrameHTML).join("");
+    const frames = isCustom ? customFramesHTML(srcs, groups, noAutoplaySet) : srcs.map(src => mediaFrameHTML(src, noAutoplaySet)).join("");
     const totalPages = computeTotalPages(count, perPage, isCustom, groups);
     const nav = count > 1 ? `
       <div class="gallery-nav">
@@ -3638,6 +3642,7 @@
   function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout, groups, block){
     const m = galleryMode || "1";
     const dir = galleryDirection === "column" ? "column" : "row";
+    const noAutoplaySet = new Set((block && block.noAutoplay) || []);
     /* freeLayout is positionally aligned with the ORIGINAL images array (that's how
        builder.html exports it), so photoFreeLayout/videoFreeLayout have to be built
        by walking both arrays together rather than just filtering images alone. */
@@ -3650,7 +3655,7 @@
       else { photoSrcs.push(src); photoFreeLayout.push(freeLayout && freeLayout[i]); }
     });
     if(block && block.mediaLayoutCombined){
-      return galleryModeHTML(images, blockId, m, dir, groups, freeLayout);
+      return galleryModeHTML(images, blockId, m, dir, groups, freeLayout, noAutoplaySet);
     }
     /* Stack order follows the array: whichever type (photo or video) appears
        first in the original images list renders on top. Only their relative
@@ -3660,30 +3665,30 @@
     const photoFirst = firstPhotoIdx !== -1 && (firstVideoIdx === -1 || firstPhotoIdx < firstVideoIdx);
     const stack = (a, b) => photoFirst ? b + a : a + b;
     if(block && block.videoGalleryMode){
-      const videoHTML = videoSrcs.length ? galleryModeHTML(videoSrcs, blockId + "-videos", block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, videoFreeLayout) : "";
-      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, photoFreeLayout) : "";
+      const videoHTML = videoSrcs.length ? galleryModeHTML(videoSrcs, blockId + "-videos", block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, videoFreeLayout, noAutoplaySet) : "";
+      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, photoFreeLayout, noAutoplaySet) : "";
       if(videoHTML && photoHTML) return `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
       return videoHTML || photoHTML;
     }
     /* legacy default — unchanged from before this feature existed. */
     const videoHTML = videoSrcs.length
-      ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src)}</div>`).join("")}</div>`
+      ? `<div class="gallery-video-stack">${videoSrcs.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src, noAutoplaySet)}</div>`).join("")}</div>`
       : "";
     if(m === "free"){
-      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId, "free", dir, groups, photoFreeLayout) : "";
+      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId, "free", dir, groups, photoFreeLayout, noAutoplaySet) : "";
       return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(m === "all"){
-      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", "1", dir) : "";
+      const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", "1", dir, undefined, undefined, noAutoplaySet) : "";
       return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(videoSrcs.length && photoSrcs.length){
-      const photoHTML = galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, null);
+      const photoHTML = galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, null, noAutoplaySet);
       return `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
-    return galleryModeHTML(images, blockId, m, dir, groups, freeLayout);
+    return galleryModeHTML(images, blockId, m, dir, groups, freeLayout, noAutoplaySet);
   }
 
   function socialHTML(project){
@@ -4416,7 +4421,7 @@
     });
   }, { threshold: 0.5 });
   function initGallery(g){
-    g.querySelectorAll("video").forEach(v => galleryVideoAutoplayObserver.observe(v));
+    g.querySelectorAll("video:not([data-no-autoplay])").forEach(v => galleryVideoAutoplayObserver.observe(v));
     const mode = g.dataset.mode || "1";
     const perPage = parseInt(g.dataset.perPage, 10) || 1;
     if(mode === "free"){
