@@ -343,6 +343,16 @@
   .layout-frame .video-icon{display:flex; align-items:center; justify-content:center; width:100%; height:100%; color:#fff; font-size:20px; background:#222;}
   .layout-preview.free-canvas .layout-frame{position:absolute; cursor:move; border:1px solid rgba(255,255,255,.4); box-sizing:border-box;}
   .layout-frame .resize-handle{position:absolute; right:-6px; bottom:-6px; width:14px; height:14px; background:#fff; border:1.5px solid var(--accent); border-radius:50%; cursor:nwse-resize; z-index:2;}
+  /* "직접 지정" 모드에서 3장 이상 묶인 페이지마다 한 줄로(row, 기본) 볼지 2/3열 그리드로
+     줄바꿈해서 볼지 고르는 목록 — 시각 스트립(.custom-strip) 자체는 안 건드리고 그 아래에
+     별도 목록으로 둠(스트립이 고정 높이 가로 필름스트립이라 그룹마다 세로로 토글을 끼워
+     넣기 어려움). */
+  .layout-group-row{display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line);}
+  .layout-group-row:last-child{border-bottom:0;}
+  .layout-group-label{font-size:12px; color:var(--muted); flex:1;}
+  .layout-group-cols{display:flex; gap:4px;}
+  .layout-group-cols button{font-size:11px; padding:4px 9px; border:1px solid var(--line-strong); border-radius:999px; color:var(--muted);}
+  .layout-group-cols button.active{background:var(--fg); color:var(--bg); border-color:var(--fg);}
   /* alignment guides — shown only while dragging/resizing a free-layout frame close
      enough to snap against another frame's edge/center or the canvas's. */
   /* fixed bright color, not var(--accent) — .layout-preview's background is always
@@ -791,6 +801,10 @@
       </div>
       <p class="hint" id="layout-hint">Free 모드에서는 사진을 드래그해서 위치를, 우하단 모서리를 드래그해서 크기를 자유롭게 조절할 수 있습니다.</p>
       <p class="hint" id="layout-custom-hint" style="display:none;">사진 사이의 구분선을 클릭해서 묶고 나눌 수 있습니다 — 붙어있으면 한 페이지로 같이 보이고, 나뉘어 있으면 클릭할 때 다음 페이지로 넘어갑니다. (예: 1장 | 3장 3장 | → 1장은 혼자, 나머지는 3장씩 묶어서 보임)</p>
+      <div class="field-group" id="layout-custom-groups-row" style="display:none;">
+        <label class="field-label">페이지별 배치 (3장 이상 묶인 페이지만)</label>
+        <div id="layout-custom-groups"></div>
+      </div>
       <div class="field-group" id="layout-preset-row" style="display:none;">
         <label class="field-label">프리셋</label>
         <button type="button" class="btn-sm" id="layout-preset-hero">1장 크게 + 나머지 모아보기</button>
@@ -939,6 +953,12 @@
   function nfc(s){ return (s || "").normalize("NFC"); }
   /* im.url may be a blob: URL with no extension (freshly uploaded video), so video detection
      always runs against relPath/name — the url is only ever used as the actual playback src. */
+  /* server.py(_extract_poster)가 영상을 최적화 인코딩할 때마다 같은 자리에 "-poster.jpg"로
+     첫 프레임 썸네일을 같이 만들어둠 — index.html과 동일한 파일명 컨벤션. blob: URL(방금
+     첨부해서 아직 서버 파일이 없는 새 영상)은 relPath가 없으므로 자연히 poster 없이 렌더됨. */
+  function posterUrlFor(relPath){
+    return relPath.replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, "-poster.jpg");
+  }
   function galleryFrameInner(im){
     const detectSrc = im.relPath || im.name || im.url;
     const playSrc = im.url;
@@ -947,10 +967,42 @@
     const yt = detectSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
     if(vimeo) return '<iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
     if(yt) return '<iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
-    return '<video src="' + playSrc + '" controls playsinline></video>';
+    const posterAttr = (im.relPath && !/^https?:\/\//i.test(im.relPath)) ? ' poster="' + posterUrlFor(im.relPath) + '"' : "";
+    return '<video src="' + playSrc + '" controls muted playsinline' + posterAttr + '></video>';
   }
   function galleryFrameHTML(im){
     return '<div class="gallery-frame">' + galleryFrameInner(im) + '</div>';
+  }
+  /* "직접 지정" 모드의 groups 배열 항목은 순수 숫자(한 줄 페이지) 또는 {count, cols} 객체
+     (그리드 페이지, 예: {count:4, cols:2} = 2열로 줄바꿈)일 수 있음 — index.html과 동일한
+     규칙, 하위호환을 위해 숫자는 그대로 통과시킴. */
+  function groupCount(g){ return (g && typeof g === "object") ? (parseInt(g.count, 10) || 1) : (parseInt(g, 10) || 1); }
+  function groupCols(g){ return (g && typeof g === "object" && (g.cols === 2 || g.cols === 3)) ? g.cols : null; }
+  function collageFrameHTML(chunk, cols){
+    const rows = [];
+    for(let i = 0; i < chunk.length; i += cols) rows.push(chunk.slice(i, i + cols));
+    const rowsHTML = rows.map(row =>
+      '<div class="collage-row">' + row.map(im => '<div class="collage-cell">' + galleryFrameInner(im) + '</div>').join("") + '</div>'
+    ).join("");
+    return '<div class="gallery-frame gallery-collage" data-cols="' + cols + '">' + rowsHTML + '</div>';
+  }
+  function customFramesHTML(images, groups){
+    const parts = [];
+    let cursor = 0;
+    groups.forEach(g => {
+      const count = Math.min(groupCount(g), images.length - cursor);
+      if(count <= 0) return;
+      const cols = groupCols(g);
+      const chunk = images.slice(cursor, cursor + count);
+      cursor += count;
+      if(cols && chunk.length > cols){
+        parts.push(collageFrameHTML(chunk, cols));
+      }else{
+        chunk.forEach(im => parts.push(galleryFrameHTML(im)));
+      }
+    });
+    for(; cursor < images.length; cursor++) parts.push(galleryFrameHTML(images[cursor]));
+    return parts.join("");
   }
   /* 갤러리 카운터의 총 페이지 수 — index.html의 getPageGroupSizes()와 같은 규칙(커스텀
      그룹 순서대로 소진, 남는 항목은 한 장씩)이지만 DOM에 올라가기 전(HTML 문자열 생성
@@ -958,9 +1010,9 @@
   function computeTotalPages(count, perPage, isCustom, groups){
     if(isCustom){
       let consumed = 0, pages = 0;
-      for(const n of groups){
+      for(const g of groups){
         if(consumed >= count) break;
-        const c = Math.max(1, Math.min(parseInt(n, 10) || 1, count - consumed));
+        const c = Math.max(1, Math.min(groupCount(g), count - consumed));
         if(c > 0){ consumed += c; pages++; }
       }
       while(consumed < count){ consumed++; pages++; }
@@ -1011,7 +1063,7 @@
     const dirLabel = (direction === "column") ? "세로" : "가로";
     if(mode === "1" || !mode) return "1장씩";
     if(mode === "all") return "한번에 모두 · " + dirLabel;
-    if(mode === "custom") return (Array.isArray(groups) && groups.length ? groups.join("+") + "장" : "직접 지정") + " · " + dirLabel;
+    if(mode === "custom") return (Array.isArray(groups) && groups.length ? groups.map(g => groupCount(g) + (groupCols(g) ? "(" + groupCols(g) + "열)" : "")).join("+") + "장" : "직접 지정") + " · " + dirLabel;
     return mode + "장씩 · " + dirLabel;
   }
   function layoutSummaryText(block){
@@ -1053,10 +1105,10 @@
     }
     const count = images.length || 1;
     const isCustom = m === "custom" && Array.isArray(groups) && groups.length;
-    const perPage = isCustom ? (groups[0] || 1) : (m === "1" ? 1 : parseInt(m, 10));
+    const perPage = isCustom ? groupCount(groups[0]) : (m === "1" ? 1 : parseInt(m, 10));
     const modeClass = (isCustom || perPage > 1) ? (" mode-multi" + (dir === "column" ? " direction-column" : "")) : "";
-    const groupsAttr = isCustom ? ' data-groups="' + JSON.stringify(groups.map(function(n){ return parseInt(n,10)||1; })) + '"' : "";
-    const frames = images.map(galleryFrameHTML).join("");
+    const groupsAttr = isCustom ? ' data-groups="' + JSON.stringify(groups.map(function(g){ return groupCount(g); })) + '"' : "";
+    const frames = isCustom ? customFramesHTML(images, groups) : images.map(galleryFrameHTML).join("");
     const totalPages = computeTotalPages(count, perPage, isCustom, groups);
     const nav = count > 1
       ? '<div class="gallery-nav">'
@@ -4038,19 +4090,33 @@
     if(Array.isArray(groups) && groups.length){
       let idx = 0;
       groups.forEach(g => {
-        const count = Math.max(1, parseInt(g, 10) || 1);
+        const count = Math.max(1, groupCount(g));
         for(let k = 1; k < count && idx+k-1 < breaks.length; k++){ breaks[idx+k-1] = false; }
         idx += count;
       });
     }
     return breaks;
   }
-  function breaksToGroups(breaks){
-    const groups = [];
+  /* groupsToBreaks가 그룹별 사진 개수만 뽑아내는 것과 별개로, 기존에 저장돼 있던 그룹별
+     cols(그리드 열 개수, {count,cols} 형태였던 것)도 같은 순서로 뽑아둠 — 모달을 다시 열었을
+     때 이전에 설정한 그리드가 그대로 보이게 하기 위함(순수 숫자 그룹은 cols 없음 = 행). */
+  function groupsToInitialCols(groups){
+    const colsMap = {};
+    if(Array.isArray(groups)) groups.forEach((g, i) => { const c = groupCols(g); if(c) colsMap[i] = c; });
+    return colsMap;
+  }
+  /* draftGroupCols: 그룹 순서(0부터) → 2 또는 3(그리드) — 없으면 기본 행. 브레이크를
+     토글해서 그룹 경계가 바뀌면 인덱스가 살짝 어긋날 수 있지만(드문 케이스), 큰 폭의
+     재구성 없이 그리드만 껐다 켰다 하는 일반적인 사용 흐름에서는 문제없음. */
+  function breaksToGroups(breaks, draftGroupCols){
+    const counts = [];
     let count = 1;
-    breaks.forEach(b => { if(b){ groups.push(count); count = 1; } else { count++; } });
-    groups.push(count);
-    return groups;
+    breaks.forEach(b => { if(b){ counts.push(count); count = 1; } else { count++; } });
+    counts.push(count);
+    return counts.map((c, i) => {
+      const cols = draftGroupCols && draftGroupCols[i];
+      return cols ? { count: c, cols: cols } : c;
+    });
   }
   function ensureBreaksLength(breaks, total){
     const need = Math.max(0, total-1);
@@ -4071,7 +4137,7 @@
     const direction = layoutTarget === "video" ? (block.videoGalleryDirection || "row") : (block.galleryDirection || "row");
     const groups = layoutTarget === "video" ? block.videoGalleryGroups : block.galleryGroups;
     const breaks = ensureBreaksLength(groupsToBreaks(groups, images.length), images.length);
-    layoutDraft = { mode: mode, direction: direction, free: free, breaks: breaks };
+    layoutDraft = { mode: mode, direction: direction, free: free, breaks: breaks, groupCols: groupsToInitialCols(groups) };
     renderLayoutModal();
     layoutModal.classList.add("open");
   }
@@ -4089,6 +4155,7 @@
     layoutHint.style.display = layoutDraft.mode === "free" ? "block" : "none";
     layoutPresetRow.style.display = layoutDraft.mode === "free" ? "block" : "none";
     document.getElementById("layout-custom-hint").style.display = layoutDraft.mode === "custom" ? "block" : "none";
+    document.getElementById("layout-custom-groups-row").style.display = layoutDraft.mode === "custom" ? "block" : "none";
     const project = getCurrentProject();
     const block = project.blocks.find(b => b.id === layoutTargetBlockId);
     document.getElementById("layout-modal-title").textContent =
@@ -4142,6 +4209,7 @@
         }
       });
       layoutPreviewEl.innerHTML = parts.join("");
+      renderLayoutCustomGroups();
       return;
     }
     const perPage = mode === "all" ? images.length : parseInt(mode, 10);
@@ -4156,6 +4224,36 @@
       return '<div class="layout-frame" style="' + style + '">' + layoutPreviewThumb(im) + '</div>';
     }).join("");
   }
+  /* "직접 지정" 모드에서 현재 breaks가 만들어내는 각 페이지(그룹)마다, 3장 이상이면 한 줄로
+     볼지 2/3열 그리드로 줄바꿈해서 볼지 고르는 목록을 그림 — 실제 반영은 layoutDraft.groupCols에
+     저장해뒀다가 확정(layout-confirm) 시 breaksToGroups()가 {count,cols} 형태로 합쳐 넣음. */
+  function renderLayoutCustomGroups(){
+    const el = document.getElementById("layout-custom-groups");
+    const counts = [];
+    let count = 1;
+    layoutDraft.breaks.forEach(b => { if(b){ counts.push(count); count = 1; } else { count++; } });
+    counts.push(count);
+    el.innerHTML = counts.map((c, i) => {
+      if(c < 3) return "";
+      const cols = layoutDraft.groupCols[i];
+      return '<div class="layout-group-row">'
+        + '<span class="layout-group-label">' + (i+1) + '번째 페이지 (' + c + '장)</span>'
+        + '<div class="layout-group-cols">'
+        +   '<button type="button" class="' + (!cols ? "active" : "") + '" data-group-index="' + i + '" data-cols="0">한 줄</button>'
+        +   '<button type="button" class="' + (cols===2 ? "active" : "") + '" data-group-index="' + i + '" data-cols="2">2열</button>'
+        +   '<button type="button" class="' + (cols===3 ? "active" : "") + '" data-group-index="' + i + '" data-cols="3">3열</button>'
+        + '</div>'
+        + '</div>';
+    }).join("");
+  }
+  document.getElementById("layout-custom-groups").addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-group-index]");
+    if(!btn) return;
+    const gi = parseInt(btn.dataset.groupIndex, 10);
+    const cols = parseInt(btn.dataset.cols, 10);
+    if(cols) layoutDraft.groupCols[gi] = cols; else delete layoutDraft.groupCols[gi];
+    renderLayoutCustomGroups();
+  });
 
   layoutModeToggle.addEventListener("click", (e) => {
     const btn = e.target.closest("button");
@@ -4206,11 +4304,11 @@
     if(layoutTarget === "video"){
       block.videoGalleryMode = layoutDraft.mode;
       block.videoGalleryDirection = layoutDraft.direction;
-      if(layoutDraft.mode === "custom") block.videoGalleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length));
+      if(layoutDraft.mode === "custom") block.videoGalleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length), layoutDraft.groupCols);
     } else {
       block.galleryMode = layoutDraft.mode;
       block.galleryDirection = layoutDraft.direction;
-      if(layoutDraft.mode === "custom") block.galleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length));
+      if(layoutDraft.mode === "custom") block.galleryGroups = breaksToGroups(ensureBreaksLength(layoutDraft.breaks, images.length), layoutDraft.groupCols);
     }
     renderEditor();
     saveAndRefresh();
@@ -5202,6 +5300,11 @@
     .gallery-frame img{height:100%;width:auto;max-width:none;display:block;transition:width .65s cubic-bezier(.65,0,.35,1),height .65s cubic-bezier(.65,0,.35,1);}
     .gallery-frame video{height:100%;width:auto;max-width:none;display:block;background:#000;transition:width .65s cubic-bezier(.65,0,.35,1),height .65s cubic-bezier(.65,0,.35,1);}
     .gallery-frame iframe{height:100%;width:auto;aspect-ratio:16/9;max-width:none;display:block;border:0;background:#000;}
+    .gallery-collage{display:flex;flex-direction:column;}
+    .collage-row{display:flex;flex-direction:row;}
+    .collage-cell{position:relative;flex:0 0 auto;}
+    .collage-cell img,.collage-cell video{display:block;-webkit-user-drag:none;user-select:none;}
+    .collage-cell iframe{display:block;border:0;background:#000;}
     .gallery-zoom-btn{position:absolute;top:10px;right:10px;z-index:7;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:16px;line-height:1;color:#fff;background:rgba(0,0,0,.45);border:none;border-radius:50%;cursor:pointer;opacity:.6;transition:opacity .2s,background .2s;}
     .gallery-zoom-btn:hover{opacity:1;background:rgba(0,0,0,.7);}
     .gallery-nav{display:flex;align-items:center;justify-content:center;gap:10px;width:fit-content;margin:12px auto 0;padding:4px;border-radius:999px;background:rgba(17,17,17,.05);border:1px solid var(--line);}
@@ -5363,6 +5466,49 @@
     '    if(tries < 60) requestAnimationFrame(poll);',
     '  })();',
     '}',
+    'function collageMedias(frame){',
+    '  return Array.prototype.slice.call(frame.querySelectorAll(".collage-cell img, .collage-cell video, .collage-cell iframe"));',
+    '}',
+    'function frameMediaRatio(frame){',
+    '  if(!frame.classList.contains("gallery-collage")) return mediaRatio(frame.querySelector("img, video, iframe"));',
+    '  var rows = Array.prototype.slice.call(frame.querySelectorAll(".collage-row"));',
+    '  var sumInvRowRatio = 0;',
+    '  rows.forEach(function(rowEl){',
+    '    var medias = Array.prototype.slice.call(rowEl.querySelectorAll(".collage-cell img, .collage-cell video, .collage-cell iframe"));',
+    '    var rowRatioSum = medias.reduce(function(s, m){ return s + mediaRatio(m); }, 0) || 1;',
+    '    sumInvRowRatio += 1 / rowRatioSum;',
+    '  });',
+    '  return sumInvRowRatio > 0 ? 1 / sumInvRowRatio : 16/9;',
+    '}',
+    'function waitFrameMediaReady(frame, cb){',
+    '  if(!frame.classList.contains("gallery-collage")){',
+    '    var m = frame.querySelector("img, video, iframe");',
+    '    if(!m){ cb(); return; }',
+    '    waitMediaReady(m, cb);',
+    '    return;',
+    '  }',
+    '  var medias = collageMedias(frame);',
+    '  if(!medias.length){ cb(); return; }',
+    '  var remaining = medias.length;',
+    '  medias.forEach(function(m){ waitMediaReady(m, function(){ remaining--; if(remaining <= 0) cb(); }); });',
+    '}',
+    'function layoutCollageRows(frame, width){',
+    '  Array.prototype.slice.call(frame.querySelectorAll(".collage-row")).forEach(function(rowEl){',
+    '    var cells = Array.prototype.slice.call(rowEl.querySelectorAll(".collage-cell"));',
+    '    var medias = cells.map(function(c){ return c.querySelector("img, video, iframe"); });',
+    '    var ratios = medias.map(mediaRatio);',
+    '    var rowRatioSum = ratios.reduce(function(a,b){ return a+b; }, 0) || 1;',
+    '    var rowHeight = width / rowRatioSum;',
+    '    cells.forEach(function(cell, i){',
+    '      var w = rowHeight * ratios[i];',
+    '      cell.style.width = w + "px";',
+    '      cell.style.height = rowHeight + "px";',
+    '      var media = medias[i];',
+    '      if(media){ media.style.width = w + "px"; media.style.height = rowHeight + "px"; }',
+    '    });',
+    '    rowEl.style.height = rowHeight + "px";',
+    '  });',
+    '}',
     'function layoutFreeGrid(gallery){',
     '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
     '  if(!frames.length) return;',
@@ -5420,11 +5566,10 @@
     '}',
     'function layoutFrames(gallery, frames, direction){',
     '  if(!frames.length) return;',
-    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
-    '  var remaining = mediaEls.length;',
+    '  var remaining = frames.length;',
     '  function onReady(){ remaining--; if(remaining <= 0) apply(); }',
     '  function apply(){',
-    '    var ratios = mediaEls.map(mediaRatio);',
+    '    var ratios = frames.map(frameMediaRatio);',
     '    if(direction === "column"){',
     '      var width = gallery.parentElement.clientWidth || gallery.clientWidth;',
     '      if(!width) return;',
@@ -5432,6 +5577,7 @@
     '      frames.forEach(function(f, i){',
     '        var h = width / ratios[i];',
     '        f.style.width = width + "px"; f.style.height = h + "px";',
+    '        if(f.classList.contains("gallery-collage")) layoutCollageRows(f, width);',
     '        totalHeight += h;',
     '      });',
     '      gallery.style.width = width + "px";',
@@ -5443,13 +5589,15 @@
     '      var totalWidth = ratios.reduce(function(sum, r){ return sum + height*r; }, 0);',
     '      if(availWidth > 0 && totalWidth > availWidth){ height = height * (availWidth / totalWidth); totalWidth = availWidth; }',
     '      frames.forEach(function(f, i){',
-    '        f.style.width = (height * ratios[i]) + "px"; f.style.height = height + "px";',
+    '        var w = height * ratios[i];',
+    '        f.style.width = w + "px"; f.style.height = height + "px";',
+    '        if(f.classList.contains("gallery-collage")) layoutCollageRows(f, w);',
     '      });',
     '      gallery.style.height = height + "px";',
     '      gallery.style.width = totalWidth + "px";',
     '    }',
     '  }',
-    '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
+    '  frames.forEach(function(f){ waitFrameMediaReady(f, onReady); });',
     '}',
     'function updateMultiCounter(gallery, page, totalPages){',
     '  var counter = galleryCounterEl(gallery);',
@@ -5477,8 +5625,7 @@
     '  return sizes2;',
     '}',
     'function computeMultiPageLayout(gallery, frames){',
-    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
-    '  var ratios = mediaEls.map(mediaRatio);',
+    '  var ratios = frames.map(frameMediaRatio);',
     '  if(!gallery.dataset.baseHeight){ gallery.dataset.baseHeight = defaultBaseHeight(); }',
     '  var baseHeight = parseFloat(gallery.dataset.baseHeight);',
     '  var availWidth = gallery.parentElement.clientWidth;',
@@ -5509,8 +5656,7 @@
     'function showGalleryPageRow(gallery, page){',
     '  var frames = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame"));',
     '  gallery.dataset.page = page;',
-    '  var mediaEls = frames.map(function(f){ return f.querySelector("img, video, iframe"); });',
-    '  var remaining = mediaEls.length;',
+    '  var remaining = frames.length;',
     '  function onReady(){ remaining--; if(remaining <= 0) apply(); }',
     '  function apply(){',
     '    var layout = computeMultiPageLayout(gallery, frames);',
@@ -5518,8 +5664,12 @@
     '      var sz = layout.frameSizes[i]; if(!sz) return;',
     '      f.style.width = sz.width + "px";',
     '      f.style.height = sz.height + "px";',
-    '      var media = mediaEls[i];',
-    '      if(media){ media.style.width = sz.width + "px"; media.style.height = sz.height + "px"; }',
+    '      if(f.classList.contains("gallery-collage")){',
+    '        layoutCollageRows(f, sz.width);',
+    '      } else {',
+    '        var media = f.querySelector("img, video, iframe");',
+    '        if(media){ media.style.width = sz.width + "px"; media.style.height = sz.height + "px"; }',
+    '      }',
     '    });',
     '    var pageSize = layout.pageSizes[page] || { width: gallery.clientWidth, height: parseFloat(gallery.dataset.baseHeight || 280), count: 0 };',
     '    var offset = layout.pageOffsets[page] || 0;',
@@ -5539,7 +5689,7 @@
     '    gallery.querySelector(".gallery-track").style.transform = "translateX(-" + offset + "px)";',
     '    updateMultiCounter(gallery, page, layout.pageSizes.length);',
     '  }',
-    '  mediaEls.forEach(function(m){ waitMediaReady(m, onReady); });',
+    '  frames.forEach(function(f){ waitFrameMediaReady(f, onReady); });',
     '}',
     'function showGalleryPage(gallery, page){',
     '  var perPage = parseInt(gallery.dataset.perPage, 10) || 1;',
@@ -5559,7 +5709,15 @@
     '  pauseGalleryVideos(g);',
     '  showGalleryPage(g, page);',
     '}',
+    'var galleryVideoAutoplayObserver = new IntersectionObserver(function(entries){',
+    '  entries.forEach(function(entry){',
+    '    var video = entry.target;',
+    '    if(entry.isIntersecting){ video.muted = true; video.play().catch(function(){}); }',
+    '    else { video.pause(); }',
+    '  });',
+    '}, { threshold: 0.5 });',
     'function initGallery(g){',
+    '  Array.prototype.slice.call(g.querySelectorAll("video")).forEach(function(v){ galleryVideoAutoplayObserver.observe(v); });',
     '  var mode = g.dataset.mode || "1";',
     '  var perPage = parseInt(g.dataset.perPage, 10) || 1;',
     '  if(mode === "free"){ if(g.classList.contains("mode-free-grid")) layoutFreeGrid(g); return; }',
@@ -5611,7 +5769,8 @@
     '  if(!gallery) return;',
     '  e.stopPropagation();',
     '  var imgs = Array.prototype.slice.call(gallery.querySelectorAll(".gallery-frame img"));',
-    '  var img = frame.querySelector("img");',
+    '  var cell = btn.closest(".collage-cell");',
+    '  var img = (cell || frame).querySelector("img");',
     '  openLightbox(imgs.map(function(im){ return im.getAttribute("src"); }), imgs.indexOf(img));',
     '}, true);',
     'document.querySelectorAll(".gallery").forEach(function(g){ initGallery(g); });',

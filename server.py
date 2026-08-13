@@ -353,6 +353,27 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
         raise RuntimeError("ffmpeg 인코딩 실패: " + proc.stderr.strip()[-1500:])
 
 
+def _poster_path_for(video_abs):
+    """비디오 파일 경로 옆에 나란히 둘 썸네일 JPG 경로 — 이름 충돌을 피하려고 "-poster.jpg"
+    접미사를 붙임(우연히 같은 이름의 실제 업로드 사진과 안 겹치게)."""
+    base, _ext = os.path.splitext(video_abs)
+    return base + "-poster.jpg"
+
+
+def _extract_poster(video_abs):
+    """인코딩(또는 재다듬기) 직후 첫 프레임 근처를 썸네일 JPG로 뽑아 옆에 저장 — <video>의
+    poster 속성으로 써서, 재생 누르기 전까지 화면이 새까맣게 나오던 문제(특히 사파리)를
+    없앰. 실패해도(아주 짧은 영상 등) 조용히 무시 — poster가 없으면 그냥 예전처럼 보일
+    뿐 재생 자체엔 영향 없음."""
+    try:
+        subprocess.run(
+            ["ffmpeg", "-y", "-ss", "0", "-i", video_abs, "-frames:v", "1", "-q:v", "3", _poster_path_for(video_abs)],
+            capture_output=True, text=True, timeout=30,
+        )
+    except Exception:
+        pass
+
+
 def _video_cache_path():
     return os.path.join(BASE_DIR, ".video_cache.json")
 
@@ -419,6 +440,7 @@ def optimize_video_from_bytes(raw, folder, filename, trim_start=None, trim_end=N
             os.unlink(tmp_path)
         except OSError:
             pass
+    _extract_poster(out_abs)
 
     width, height = _probe_video_dims(out_abs)
 
@@ -475,6 +497,7 @@ def trim_video_existing(payload):
     try:
         _run_ffmpeg(abs_path, tmp_out, trim_start=trim_start, trim_end=trim_end)
         os.replace(tmp_out, abs_path)
+        _extract_poster(abs_path)
     except Exception:
         try:
             os.unlink(tmp_out)
