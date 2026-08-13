@@ -3103,21 +3103,54 @@
      초기화를 시작하면서 선택할 때마다 몇 초씩 정지 이미지만 보이는 게 더 나쁜 트레이드오프라
      되돌림 — 목록을 보는 동안 미리 다 로딩해두는 지금 방식이 최초 진입만 조금 무거울 뿐,
      선택 시점의 끊김은 없음.) */
+  /* 진짜 호버가 있는 기기(데스크탑/트랙패드)에서만 목록 전체를 한꺼번에 미리 로드함 —
+     터치 기기는 mouseenter가 애초에 안 일어나서(projectCard 참고, 탭하면 바로 goProject로
+     들어가버림) 리스트를 여는 동안 첫 항목 말고는 아무도 실제로 보지 못하는 배경을 계속
+     autoplay만 시켜온 셈이었음. 모바일에서 "가끔 페이지 오류(사파리가 메모리 부족으로 탭을
+     강제 리로드)"가 나던 것도 리스트 하나 열 때마다 10개 넘는 Vimeo/영상이 동시에 재생을
+     시작해서였을 가능성이 큼 — 화면에 보이지도 않을 나머지 항목들은 터치 기기에서 지연
+     로드로 바꿔서 그 부담을 없앰(호버가 되는 기기의 "선택 즉시 재생" 경험은 그대로 유지). */
+  const supportsHoverPreload = window.matchMedia("(hover: hover)").matches;
+  function loadListBgLayer(layer, p){
+    if(layer.dataset.loaded === "1") return;
+    layer.dataset.loaded = "1";
+    const mediaEl = buildHeroMediaEl(p);
+    if(!mediaEl){
+      const img = document.createElement("img");
+      img.alt = p.title;
+      img.src = u(p.hero);
+      layer.appendChild(img);
+      return;
+    }
+    /* 로컬 업로드 video만 정지 썸네일 → loadeddata 페이드인(같은 출처라 이벤트가 안정적).
+       Vimeo/유튜브 iframe은 그대로 바로 얹음 — load 이벤트에 기대 페이드인시키려 했던 적이
+       있었는데 붙기 전(detached) iframe의 load 타이밍이 브라우저마다 달라 포스터에서 영영
+       안 넘어가는 문제가 있었음. */
+    if(mediaEl.tagName === "VIDEO"){
+      const poster = document.createElement("img");
+      poster.alt = p.title;
+      poster.src = u(p.hero);
+      layer.appendChild(poster);
+      mediaEl.style.opacity = "0";
+      mediaEl.style.transition = "opacity .3s ease";
+      mediaEl.addEventListener("loadeddata", () => { mediaEl.style.opacity = "1"; }, { once:true });
+    }
+    layer.appendChild(mediaEl);
+  }
+  function ensureListBgLoaded(index){
+    const layer = listBgLayers[index];
+    const p = listItems[index];
+    if(!layer || !p) return;
+    loadListBgLayer(layer, p);
+  }
   function buildListBgLayers(list){
     listBgMedia.innerHTML = "";
     listBgLayers = list.map((p) => {
       const layer = document.createElement("div");
       layer.className = "list-bg-layer";
-      const mediaEl = buildHeroMediaEl(p);
-      if(mediaEl){
-        layer.appendChild(mediaEl);
-      }else{
-        const img = document.createElement("img");
-        img.alt = p.title;
-        img.src = u(p.hero);
-        layer.appendChild(img);
-      }
+      layer.dataset.loaded = "0";
       listBgMedia.appendChild(layer);
+      if(supportsHoverPreload) loadListBgLayer(layer, p);
       return layer;
     });
   }
@@ -3151,7 +3184,10 @@
       listCurrentCount.textContent = "";
       return;
     }
-    if(listIndex > -1 && listBgLayers[listIndex]) listBgLayers[listIndex].classList.add("is-active");
+    if(listIndex > -1 && listBgLayers[listIndex]){
+      ensureListBgLoaded(listIndex);
+      listBgLayers[listIndex].classList.add("is-active");
+    }
     listCurrentName.textContent = p.title;
     listCurrentCount.textContent = listIndex > -1 ? (listIndex + 1) + " / " + listItems.length : "";
     scheduleListAutoAdvance();
