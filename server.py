@@ -312,9 +312,9 @@ def crop_image(payload):
         if ext.lower() in (".jpg", ".jpeg"):
             if cropped.mode not in ("RGB", "L"):
                 cropped = cropped.convert("RGB")
-            save_kwargs["quality"] = 92
+            save_kwargs["quality"] = 100
         elif ext.lower() == ".webp":
-            save_kwargs["quality"] = 92
+            save_kwargs["quality"] = 100
         cropped.save(out_abs, **save_kwargs)
         out_w, out_h = cropped.size
 
@@ -1139,7 +1139,7 @@ def save_info_bg_image(payload):
     img = Image.open(io.BytesIO(raw))
     if img.mode not in ("RGB", "L"):
         img = img.convert("RGB")
-    img.save(out_path, quality=92)
+    img.save(out_path, quality=100)
     return {"ok": True, "target": target}
 
 
@@ -1190,9 +1190,9 @@ def save_project_image(payload):
         if ext.lower() in (".jpg", ".jpeg"):
             if img.mode not in ("RGB", "L"):
                 img = img.convert("RGB")
-            save_kwargs["quality"] = 92
+            save_kwargs["quality"] = 100
         elif ext.lower() == ".webp":
-            save_kwargs["quality"] = 92
+            save_kwargs["quality"] = 100
         elif ext.lower() == ".png":
             save_kwargs["optimize"] = True
         img.save(out_abs, **save_kwargs)
