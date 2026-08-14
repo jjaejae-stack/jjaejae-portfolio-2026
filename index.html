@@ -1045,7 +1045,7 @@
   function mediaFrameInner(src, noAutoplaySet){
     if(!isVideoSrc(src)) return `<img src="${u(src)}" alt=""><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>`;
     const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-    const yt = src.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    const yt = src.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]+)/);
     if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
     if(yt) return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
     /* muted — 스크롤로 화면에 들어오면 자동재생되는 영상은(아래 galleryVideoAutoplayObserver
@@ -3101,6 +3101,144 @@
         }
       ],
       credits:null
+    },
+    {
+      id:"kolon-sport-cz72e",
+      title:"KOLON SPORT",
+      category:"work",
+      order:6, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      color:"#22262f",
+      textColor:"#f0f7ff",
+      titleLetterSpacing:-0.02,
+      titleLineHeight:1.02,
+      boxWidthScale:1.24,
+      boxHeightScale:1,
+      meta:"",
+      client:"KOLON SPORT",
+      agency:"Cheil Worldwide",
+      hero:"Thumbnail.jpg",
+      heroType:"upload",
+      heroVideoFile:"KOLON SPORT/KOLON_Antarctica-web.mp4",
+      social:{ youtube:"https://www.youtube.com/watch?v=noJwmzoGK4w", vimeo:"#", instagram:"https://www.instagram.com/_kolonsport/" },
+      tag:"Campaign",
+      year:"2023",
+      blocks:[
+        {
+          label:"Campaign",
+          mediaPosition:"above",
+          images:[
+            "KOLON SPORT/Top-crop.jpg",
+          ],
+          paragraphs:["KOLON SPORT is a Korean outdoor fashion brand, highly popular among women for its hero product, ANTARCTICA. In the winter of 2023, by featuring the year's hottest actor Lee Jung-ha, we aimed to cover the men's line and strengthen the brand's leadership for the winter season. I was in charge of the art direction for the 2023 KOLON SPORT winter campaign."],
+          paragraphsKo:["KOLON SPORT는 대한민국의 아웃도어 패션 브랜드로 ANTARCTICA라는 히어로 제품을 통해 여성들에게 더 인기가 많은 브랜드입니다.", "2023년 겨울, 가장 뜨거웠던 배우 이정하를 모델로 KOLON SPORT의 남성 라인까지 커버하여 겨울 시즌의 리더십을 강화하고자 하였습니다.​​​​​​​", "2023년 코오롱스포츠 겨울 캠페인의 아트디렉션을 담당했습니다."],
+        },
+        {
+          label:"Tone & Mood",
+          mediaPosition:"above",
+          images:[
+            "KOLON SPORT/T&M.png",
+          ],
+          paragraphs:["To make the products look appealing. We wanted the power of nature and the city, which symbolize the outdoors, to be felt. Instead of clumsily compositing natural backgrounds, we used large LED screens to add a fashionable image and create a trendy tone and manner. We decided to show a new side of actor Lee Jung-ha, breaking away from the nice character he played in 'Moving'."],
+          paragraphsKo:["제품이 매력적으로 보일 수 있게. 아웃도어를 상징하는 자연과 도시의 힘이 느껴지면서도", "자연배경을 어설프게 합성하는 방법이 아닌, 대형 LED 스크린을 활용하여 패션의 이미지를 더해 트렌디한 톤앤매너를 구현하고자 했습니다.", "우리는 배우 이정하를 무빙에서 보여줬던 착한 캐릭터가 아닌, 새로운 이정하의 모습을 보여주기로 했습니다."],
+        },
+        {
+          label:"ANTARCTICA",
+          galleryMode:"custom",
+          galleryDirection:"column",
+          galleryGroups:[4],
+          mediaLayoutCombined:true,
+          noAutoplay:["KOLON SPORT/KOLON_Hestia-web.mp4"],
+          images:[
+            "KOLON SPORT/KOLON_Antarctica-web.mp4",
+            "KOLON SPORT/antarctica-conti.png",
+            "KOLON SPORT/KOLON_Hestia-web.mp4",
+            "KOLON SPORT/HESTIA-conti.png",
+          ],
+          paragraphs:["We captured KOLON SPORT's two hero products, Antarctica and Hestia, in separate films."],
+          paragraphsKo:["KOLON SPORT의 두가지 히어로 제품인 안타티카와 헤스티아를 각각의 영상으로 담아냈습니다."],
+        },
+        {
+          label:"Key Visual",
+          galleryMode:"all",
+          images:[
+            "KOLON SPORT/코오롱스포츠-안타티카-이정하-KV.jpg",
+            "KOLON SPORT/코오롱스포츠-헤스티아-이정하-KV.jpg",
+            "KOLON SPORT/코오롱스포츠-안타티카KV_C.jpg",
+            "KOLON SPORT/코오롱스포츠-헤스티아KV_C.jpg",
+          ],
+          paragraphs:[],
+          labelKo:"키 비주얼",
+        },
+        {
+          label:"Photography",
+          galleryMode:"custom",
+          galleryGroups:[4,4,5],
+          images:[
+            "KOLON SPORT/KolonKV1-1884s.JPG",
+            "KOLON SPORT/Kolonpm-535s.JPG",
+            "KOLON SPORT/Kolonpm-066s.JPG",
+            "KOLON SPORT/Kolonpm-068s.JPG",
+            "KOLON SPORT/Kolonpm-329s.JPG",
+            "KOLON SPORT/Kolonpm-374s.JPG",
+            "KOLON SPORT/Kolonpm-757s.JPG",
+            "KOLON SPORT/Kolonpm-953s.JPG",
+            "KOLON SPORT/Kolonpm-1287s.JPG",
+            "KOLON SPORT/Kolonpm-1361s.JPG",
+            "KOLON SPORT/Kolonpm-1371s.JPG",
+            "KOLON SPORT/Kolonpm-1522s.JPG",
+            "KOLON SPORT/Kolonpm-1650s.JPG",
+          ],
+          paragraphs:[],
+          labelKo:"사진",
+        },
+        {
+          label:"Short-form Content",
+          images:[
+            "KOLON SPORT/Shorts_Media_amTvOGfZPOw_001_1080p-web.mp4",
+          ],
+          paragraphs:[],
+          labelKo:"숏폼 콘텐츠",
+        },
+        {
+          label:"BTS",
+          galleryMode:"custom",
+          galleryGroups:[4,2],
+          images:[
+            "KOLON SPORT/IMG_8421.jpg",
+            "KOLON SPORT/IMG_8436.jpg",
+            "KOLON SPORT/0H9A2549.JPG",
+            "KOLON SPORT/IMG_8522.jpg",
+            "KOLON SPORT/IMG_8685.JPG",
+            "KOLON SPORT/IMG_8698.JPG",
+          ],
+          paragraphs:[],
+          labelKo:"제작 배경",
+        }
+      ],
+      credits:[
+        ["Creative Director", "Sehyun Kim"],
+        ["CopyWriter", "Jihwan Park"],
+        ["Art Director", "Jaehoon Choi, Jiyeon Oh"],
+        ["Producer", "Wondeok Jang"],
+        ["Account Executive", "Annie Ok ,Jieun Heo ,Seyoon Kim ,Heeyeon Kim ,Jinhyeong Jo"],
+        ["Director", "Jinho Lee"],
+        ["Assistant Director", "Jaehee Kim, Hyunjun Jang"],
+        ["D.O.P", "Jisung Kim"],
+        ["Gaffer", "Kyungmoon Ha"],
+        ["Art Team", "Kyungeun Lee"],
+        ["Model", "Jungha Lee @jungha.km(https://www.instagram.com/jungha.km/)"],
+        ["Hair", "Jonghee Choi"],
+        ["Make up", "Jiyoung Lee"],
+        ["Styllist", "Sangyeong Yoon"],
+        ["Model Agency", "Oceanstar"],
+        ["Color Grading", "Seoul Vision(Changbin Yoo)"],
+        ["Edit", "KISTONEPLAY(Taehee Yoon)"],
+        ["2D", "KISTONEPLAY(Juyong Lee)"],
+        ["Sound", "음향연구소(Hocheol Joo)"],
+        ["Audio Producer", "Audio Village(Inwoo Hwang)"],
+        ["Photography", "Jongho Kang"],
+        ["CG/Retouching", "Sebin Lim"],
+      ]
     }
     /* 다른 프로젝트는 SSF SHOP 포맷이 확정되면 이어서 추가합니다. */
   ];

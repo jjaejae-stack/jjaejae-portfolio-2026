@@ -967,7 +967,7 @@
     const playSrc = im.url;
     if(!isVideoPath(detectSrc)) return '<img src="' + playSrc + '" alt=""><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>';
     const vimeo = detectSrc.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-    const yt = detectSrc.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]+)/);
+    const yt = detectSrc.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]+)/);
     if(vimeo) return '<iframe src="https://player.vimeo.com/video/' + vimeo[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
     if(yt) return '<iframe src="https://www.youtube.com/embed/' + yt[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
     const posterAttr = (im.relPath && !/^https?:\/\//i.test(im.relPath)) ? ' poster="' + posterUrlFor(im.relPath) + '"' : "";
@@ -3844,7 +3844,7 @@
        matching how the title reads as one line everywhere else in the UI. */
     return (project.title || "").replace(/\s+/g, " ").trim();
   }
-  const VIDEO_PLATFORM_RE = /vimeo\.com\/|youtube\.com\/watch\?v=|youtu\.be\//i;
+  const VIDEO_PLATFORM_RE = /vimeo\.com\/|youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\//i;
 
   document.getElementById("video-cancel").addEventListener("click", closeVideoModal);
   videoConfirmBtn.addEventListener("click", async () => {
