@@ -4005,6 +4005,33 @@
      original, default behavior: a video always renders in its own fixed
      always-visible stack, completely outside whatever mode the photos are using).
      Mirrors builder.html's galleryBlockHTML() — keep both in sync. */
+  /* "순서대로" 모드(block.mediaSequential) — 사진/영상 배열을 원래 순서 그대로 훑으면서
+     연속된 같은 타입 구간(런)마다 하나의 섹션으로 렌더링함: 사진 런은 기존 사진 레이아웃
+     (mode/direction/groups)을 그대로 재사용해서 "모아보기"가 되고, 영상 런은 여러 개면
+     동영상 레이아웃(videoGalleryMode) 설정을, 하나면 단일 프레임으로 보여줌. 섹션 사이
+     간격/방향은 mixedWrapAttrs와 동일한 필드(mixedGap/mixedDirection)를 재사용.
+     Mirrors builder.html's mediaSequenceHTML() — keep both in sync. */
+  function mediaSequenceHTML(images, blockId, mode, direction, groups, freeLayout, block, noAutoplaySet){
+    const runs = [];
+    images.forEach((src, i) => {
+      const isVideo = isVideoSrc(src);
+      const last = runs[runs.length - 1];
+      if(last && last.isVideo === isVideo){ last.items.push(src); last.freeLayout.push(freeLayout && freeLayout[i]); }
+      else runs.push({ isVideo, items: [src], freeLayout: [freeLayout && freeLayout[i]] });
+    });
+    if(runs.length <= 1) return galleryModeHTML(images, blockId, mode, direction, groups, freeLayout, noAutoplaySet);
+    const sections = runs.map((run, i) => {
+      const runId = blockId + "-seq" + i;
+      if(run.isVideo){
+        if(run.items.length > 1 && block.videoGalleryMode){
+          return galleryModeHTML(run.items, runId, block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, run.freeLayout, noAutoplaySet);
+        }
+        return `<div class="gallery-video-stack">${run.items.map(src => `<div class="gallery-video-frame">${mediaFrameInner(src, noAutoplaySet)}</div>`).join("")}</div>`;
+      }
+      return galleryModeHTML(run.items, runId, mode, direction, groups, run.freeLayout, noAutoplaySet);
+    });
+    return `<div ${mixedWrapAttrs(block)} data-block="${blockId}">${sections.join("")}</div>`;
+  }
   function galleryHTML(images, blockId, galleryMode, galleryDirection, freeLayout, groups, block){
     const m = galleryMode || "1";
     const dir = galleryDirection === "column" ? "column" : "row";
@@ -4022,6 +4049,9 @@
     });
     if(block && block.mediaLayoutCombined){
       return galleryModeHTML(images, blockId, m, dir, groups, freeLayout, noAutoplaySet);
+    }
+    if(block && block.mediaSequential){
+      return mediaSequenceHTML(images, blockId, m, dir, groups, freeLayout, block, noAutoplaySet);
     }
     /* Stack order follows the array: whichever type (photo or video) appears
        first in the original images list renders on top. Only their relative

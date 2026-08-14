@@ -1076,7 +1076,7 @@
     return layoutModeSummary(block.galleryMode || "1", block.galleryDirection, block.galleryGroups);
   }
   function videoLayoutSummaryText(block){
-    if(!block.videoGalleryMode) return "고정 (사진 위쪽)";
+    if(!block.videoGalleryMode) return block.mediaSequential ? "1개씩 (순서 그대로)" : "고정 (사진 위쪽)";
     return layoutModeSummary(block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups);
   }
   /* Renders ONE already-homogeneous list of items (all photo, or all video — never
@@ -1145,12 +1145,42 @@
     const gap = (block && block.mixedGap) || 0;
     return 'class="gallery-mixed' + (row ? " mixed-row" : "") + '" style="--mixed-gap:' + gap + 'px"';
   }
+  /* "순서대로" 모드(block.mediaSequential) — 사진/영상 배열을 원래 순서 그대로 훑으면서
+     연속된 같은 타입 구간(런)마다 하나의 섹션으로 렌더링함: 사진 런은 기존 사진 레이아웃
+     (mode/direction/groups)을 그대로 재사용해서 "모아보기"가 되고, 영상 런은 여러 장이면
+     동영상 레이아웃(videoGalleryMode) 설정을, 한 장이면 단일 프레임으로 보여줌. 섹션 사이
+     간격/방향은 mixedWrapAttrs와 동일한 필드(mixedGap/mixedDirection)를 재사용.
+     Mirrors index.html's mediaSequenceHTML() — keep both in sync. */
+  function mediaSequenceHTML(images, blockKey, mode, direction, groups, block, noAutoplaySet){
+    const runs = [];
+    images.forEach(im => {
+      const isVideo = isVideoPath(im.relPath || im.name || im.url);
+      const last = runs[runs.length - 1];
+      if(last && last.isVideo === isVideo) last.items.push(im);
+      else runs.push({ isVideo: isVideo, items: [im] });
+    });
+    if(runs.length <= 1) return galleryModeHTML(images, blockKey, mode, direction, groups, noAutoplaySet);
+    const sections = runs.map(function(run, i){
+      const runId = blockKey + "-seq" + i;
+      if(run.isVideo){
+        if(run.items.length > 1 && block.videoGalleryMode){
+          return galleryModeHTML(run.items, runId, block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, noAutoplaySet);
+        }
+        return '<div class="gallery-video-stack">' + run.items.map(function(im){ return '<div class="gallery-video-frame">' + galleryFrameInner(im, noAutoplaySet) + '</div>'; }).join("") + '</div>';
+      }
+      return galleryModeHTML(run.items, runId, mode, direction, groups, noAutoplaySet);
+    });
+    return '<div ' + mixedWrapAttrs(block) + ' data-block="' + blockKey + '">' + sections.join("") + '</div>';
+  }
   function galleryBlockHTML(images, blockKey, mode, direction, groups, block){
     const noAutoplaySet = new Set((block && block.noAutoplay) || []);
     const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
     const photoIms = images.filter(im => !isVideoPath(im.relPath || im.name || im.url));
     if(block && block.mediaLayoutCombined){
       return galleryModeHTML(images, blockKey, mode, direction, groups, noAutoplaySet);
+    }
+    if(block && block.mediaSequential){
+      return mediaSequenceHTML(images, blockKey, mode, direction, groups, block, noAutoplaySet);
     }
     const firstVideoIdx = images.findIndex(im => isVideoPath(im.relPath || im.name || im.url));
     const firstPhotoIdx = images.findIndex(im => !isVideoPath(im.relPath || im.name || im.url));
@@ -2435,7 +2465,8 @@
               +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">사진 레이아웃 — ' + layoutSummaryText(block) + '</button>'
               + '</div>';
           }
-          const combined = !!block.mediaLayoutCombined;
+          const arrangeMode = block.mediaLayoutCombined ? "combined" : (block.mediaSequential ? "sequential" : "fixed");
+          const combined = arrangeMode === "combined";
           const blockHasPhoto = (block.images||[]).some(im => !isVideoPath(im.relPath || im.name));
           const mixedRow = block.mixedDirection === "row";
           const gapControls = (combined || !blockHasPhoto) ? '' :
@@ -2445,10 +2476,15 @@
             + '</label></div>'
             + '<div class="field-group"><label class="field-label" data-mixed-gap-label="' + block.id + '">' + (mixedRow ? "좌우" : "위 아래") + ' 간격 <span class="slider-value" data-value-for="mixedGap-' + block.id + '">' + (block.mixedGap||0) + 'px</span></label>'
             +   '<input type="range" class="field" data-field="mixedGap" data-block-id="' + block.id + '" min="0" max="120" step="4" value="' + (block.mixedGap||0) + '"></div>';
-          return '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:8px; font-weight:400;">'
-            +   '<input type="checkbox" data-action="toggle-media-layout-combined" data-block-id="' + block.id + '"' + (combined ? ' checked' : '') + '> 사진+동영상 통합 레이아웃 (하나로 같이 배치)</label></div>'
-            + '<div class="field-group"><label class="field-label">' + (combined ? "미디어 레이아웃" : "사진 / 동영상 레이아웃") + '</label>'
-            +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">' + (combined ? "미디어 레이아웃 — " : "사진 레이아웃 — ") + layoutSummaryText(block) + '</button>'
+          const layoutBtnLabel = combined ? "미디어 레이아웃 — " : "사진 레이아웃 — ";
+          return '<div class="field-group"><label class="field-label">사진+동영상 배치 방식</label>'
+            +   '<div class="radio-row">'
+            +     '<label><input type="radio" name="mediaArrange-' + block.id + '" data-action="set-media-arrange" data-block-id="' + block.id + '" value="fixed"' + (arrangeMode==="fixed"?' checked':'') + '> 고정 (영상 항상 위/아래)</label>'
+            +     '<label><input type="radio" name="mediaArrange-' + block.id + '" data-action="set-media-arrange" data-block-id="' + block.id + '" value="sequential"' + (arrangeMode==="sequential"?' checked':'') + '> 순서대로 (연속 사진은 모아보기)</label>'
+            +     '<label><input type="radio" name="mediaArrange-' + block.id + '" data-action="set-media-arrange" data-block-id="' + block.id + '" value="combined"' + (arrangeMode==="combined"?' checked':'') + '> 완전 통합 (한 갤러리)</label>'
+            +   '</div></div>'
+            + '<div class="field-group"><label class="field-label">' + (combined ? "미디어 레이아웃" : "사진 레이아웃") + '</label>'
+            +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">' + layoutBtnLabel + layoutSummaryText(block) + '</button>'
             +   (combined ? '' : ' <button type="button" class="btn-sm" data-action="open-video-layout" data-block-id="' + block.id + '">동영상 레이아웃 — ' + videoLayoutSummaryText(block) + '</button>')
             + '</div>'
             + gapControls;
@@ -4224,7 +4260,7 @@
        photo-target state — once a video-specific layout exists, or the two are
        combined, the video is no longer fixed, so the note would be misleading. */
     const hasVideo = (block.images || []).some(im => isVideoPath(im.relPath || im.name));
-    const showLegacyNote = layoutTarget === "photo" && hasVideo && !block.mediaLayoutCombined && !block.videoGalleryMode;
+    const showLegacyNote = layoutTarget === "photo" && hasVideo && !block.mediaLayoutCombined && !block.videoGalleryMode && !block.mediaSequential;
     document.getElementById("layout-video-note").style.display = showLegacyNote ? "block" : "none";
     renderLayoutPreview();
   }
@@ -5122,12 +5158,13 @@
       }
       return;
     }
-    const mediaCombinedCb = e.target.closest('[data-action="toggle-media-layout-combined"]');
-    if(mediaCombinedCb){
-      const block = project.blocks.find(b => b.id === mediaCombinedCb.dataset.blockId);
+    const mediaArrangeRadio = e.target.closest('[data-action="set-media-arrange"]');
+    if(mediaArrangeRadio){
+      const block = project.blocks.find(b => b.id === mediaArrangeRadio.dataset.blockId);
       if(block){
         snapshot();
-        block.mediaLayoutCombined = mediaCombinedCb.checked;
+        block.mediaLayoutCombined = mediaArrangeRadio.value === "combined";
+        block.mediaSequential = mediaArrangeRadio.value === "sequential";
         renderEditor(); saveAndRefresh();
       }
       return;
@@ -6168,6 +6205,7 @@
       if(b.galleryDirection === "column") L.push("      galleryDirection:" + JSON.stringify(b.galleryDirection) + ",");
       if(b.galleryMode === "custom" && Array.isArray(b.galleryGroups) && b.galleryGroups.length) L.push("      galleryGroups:" + JSON.stringify(b.galleryGroups) + ",");
       if(b.mediaLayoutCombined) L.push("      mediaLayoutCombined:true,");
+      if(b.mediaSequential) L.push("      mediaSequential:true,");
       if(b.videoGalleryMode) L.push("      videoGalleryMode:" + JSON.stringify(b.videoGalleryMode) + ",");
       if(b.videoGalleryMode && b.videoGalleryDirection === "column") L.push("      videoGalleryDirection:" + JSON.stringify(b.videoGalleryDirection) + ",");
       if(b.videoGalleryMode === "custom" && Array.isArray(b.videoGalleryGroups) && b.videoGalleryGroups.length) L.push("      videoGalleryGroups:" + JSON.stringify(b.videoGalleryGroups) + ",");
