@@ -35,6 +35,10 @@ INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 MAX_IMAGE_DIM = 2000
+# GitHub hard-rejects any pushed blob over 100MB. Target a bit under that so the
+# safety margin absorbs container/muxing overhead on the final mp4.
+MAX_VIDEO_BYTES = 95 * 1024 * 1024
+AUDIO_BITRATE_BPS = 192_000
 CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 CLAUDE_TIMEOUT_SEC = 180
 MAX_BUDGET_USD = "0.50"
@@ -324,6 +328,17 @@ def crop_image(payload):
     return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
+def _probe_duration(path):
+    proc = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        capture_output=True, text=True, timeout=30,
+    )
+    try:
+        return float(proc.stdout.strip())
+    except (ValueError, TypeError):
+        return None
+
+
 def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
     # Cap the LONGER edge at 1920 (not just width) so portrait video is capped by
     # height instead of width — the old "scale=min(1920,iw):-2" only ever capped
@@ -332,17 +347,20 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
     # long edge (including a normal 1080p or 1080x1920 vertical clip) passes through
     # with no resize at all — full resolution preserved, only re-encoded.
     scale_filter = "scale='if(gt(iw,ih),min(1920,iw),-2)':'if(gt(iw,ih),-2,min(1920,ih))'"
-    cmd = ["ffmpeg", "-y", "-i", input_source]
-    # -ss/-to as OUTPUT options (after -i) are both interpreted against the ORIGINAL
-    # input timeline, so trim_start/trim_end are plain absolute seconds into the
-    # source video — frame-accurate (unlike -ss before -i, which seeks to the
-    # nearest keyframe) since we're already re-encoding the whole file regardless.
-    if trim_start is not None:
-        cmd += ["-ss", str(trim_start)]
-    if trim_end is not None:
-        cmd += ["-to", str(trim_end)]
-    cmd += [
-        "-vf", scale_filter,
+
+    def base_cmd():
+        cmd = ["ffmpeg", "-y", "-i", input_source]
+        # -ss/-to as OUTPUT options (after -i) are both interpreted against the ORIGINAL
+        # input timeline, so trim_start/trim_end are plain absolute seconds into the
+        # source video — frame-accurate (unlike -ss before -i, which seeks to the
+        # nearest keyframe) since we're already re-encoding the whole file regardless.
+        if trim_start is not None:
+            cmd += ["-ss", str(trim_start)]
+        if trim_end is not None:
+            cmd += ["-to", str(trim_end)]
+        return cmd + ["-vf", scale_filter]
+
+    cmd = base_cmd() + [
         # crf 18 + preset slow: visually near-lossless x264 (crf 23/medium noticeably
         # softened fine detail/motion on portfolio footage) — bigger files, but this
         # runs once at upload time on a local machine, so the extra encode time is cheap.
@@ -354,6 +372,40 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError("ffmpeg 인코딩 실패: " + proc.stderr.strip()[-1500:])
+
+    # crf 18 has no size ceiling -- a long or high-motion clip (e.g. a 60s ad) can
+    # land north of GitHub's 100MB push limit, which only surfaces much later as a
+    # confusing "git push" failure. If that happens here, redo it as a 2-pass encode
+    # with a bitrate computed to fit MAX_VIDEO_BYTES, which (unlike a crf retry)
+    # actually guarantees the output size regardless of content complexity.
+    if os.path.getsize(out_abs) <= MAX_VIDEO_BYTES:
+        return
+    duration = _probe_duration(out_abs)
+    if not duration or duration <= 0:
+        return  # can't size a target bitrate without a duration -- leave the crf-18 file
+    target_video_bps = max(int((MAX_VIDEO_BYTES * 8) / duration) - AUDIO_BITRATE_BPS, 300_000)
+    passlogfile = out_abs + ".passlog"
+    try:
+        vcodec_args = ["-c:v", "libx264", "-preset", "slow", "-b:v", str(target_video_bps)]
+        pass1 = base_cmd() + vcodec_args + ["-pass", "1", "-passlogfile", passlogfile, "-an", "-f", "null", os.devnull]
+        proc1 = subprocess.run(pass1, capture_output=True, text=True, timeout=1800)
+        if proc1.returncode != 0:
+            raise RuntimeError("ffmpeg 1-pass 인코딩 실패: " + proc1.stderr.strip()[-1500:])
+        pass2 = base_cmd() + vcodec_args + [
+            "-pass", "2", "-passlogfile", passlogfile,
+            "-c:a", "aac", "-b:a", "192k",
+            "-movflags", "+faststart",
+            out_abs,
+        ]
+        proc2 = subprocess.run(pass2, capture_output=True, text=True, timeout=1800)
+        if proc2.returncode != 0:
+            raise RuntimeError("ffmpeg 2-pass 인코딩 실패: " + proc2.stderr.strip()[-1500:])
+    finally:
+        for suffix in ("-0.log", "-0.log.mbtree"):
+            try:
+                os.unlink(passlogfile + suffix)
+            except OSError:
+                pass
 
 
 def _poster_path_for(video_abs):
