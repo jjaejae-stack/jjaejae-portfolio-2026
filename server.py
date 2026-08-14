@@ -314,7 +314,10 @@ def crop_image(payload):
                 cropped = cropped.convert("RGB")
             save_kwargs["quality"] = 100
         elif ext.lower() == ".webp":
-            save_kwargs["quality"] = 100
+            # webp's encoder barely compresses past ~90 -- quality 100 is close to
+            # lossless and can end up *larger* than a lower-quality, visually
+            # identical encode, defeating the point of web-optimizing it.
+            save_kwargs["quality"] = 90
         cropped.save(out_abs, **save_kwargs)
         out_w, out_h = cropped.size
 
@@ -1192,7 +1195,7 @@ def save_project_image(payload):
                 img = img.convert("RGB")
             save_kwargs["quality"] = 100
         elif ext.lower() == ".webp":
-            save_kwargs["quality"] = 100
+            save_kwargs["quality"] = 90
         elif ext.lower() == ".png":
             save_kwargs["optimize"] = True
         img.save(out_abs, **save_kwargs)
