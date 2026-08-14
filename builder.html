@@ -1138,6 +1138,13 @@
      레이아웃" option), or neither (the original, default behavior: a video always
      renders in its own fixed always-visible stack, completely outside whatever mode
      the photos are using). Mirrors index.html's galleryHTML() — keep both in sync. */
+  /* .gallery-mixed(영상 구역 + 사진 구역을 이어붙인 래퍼)의 배치 방향/간격 속성.
+     Mirrors index.html's mixedWrapAttrs() — keep both in sync. */
+  function mixedWrapAttrs(block){
+    const row = block && block.mixedDirection === "row";
+    const gap = (block && block.mixedGap) || 0;
+    return 'class="gallery-mixed' + (row ? " mixed-row" : "") + '" style="--mixed-gap:' + gap + 'px"';
+  }
   function galleryBlockHTML(images, blockKey, mode, direction, groups, block){
     const noAutoplaySet = new Set((block && block.noAutoplay) || []);
     const videoIms = images.filter(im => isVideoPath(im.relPath || im.name || im.url));
@@ -1152,7 +1159,7 @@
     if(block && block.videoGalleryMode){
       const videoHTML = videoIms.length ? galleryModeHTML(videoIms, blockKey + "-videos", block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, noAutoplaySet) : "";
       const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey + "-photos", mode, direction, groups, noAutoplaySet) : "";
-      if(videoHTML && photoHTML) return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
+      if(videoHTML && photoHTML) return '<div ' + mixedWrapAttrs(block) + ' data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
       return videoHTML || photoHTML;
     }
     /* legacy default — unchanged from before this feature existed. */
@@ -1161,15 +1168,15 @@
       : "";
     if(mode === "free"){
       const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey, "free", direction, groups, noAutoplaySet) : "";
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
+      return videoHTML ? ('<div ' + mixedWrapAttrs(block) + ' data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
     }
     if(mode === "all"){
       const photoHTML = photoIms.length ? galleryModeHTML(photoIms, blockKey + "-photos", "1", direction, undefined, noAutoplaySet) : "";
-      return videoHTML ? ('<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
+      return videoHTML ? ('<div ' + mixedWrapAttrs(block) + ' data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>') : photoHTML;
     }
     if(videoIms.length && photoIms.length){
       const photoHTML = galleryModeHTML(photoIms, blockKey + "-photos", mode, direction, groups, noAutoplaySet);
-      return '<div class="gallery-mixed" data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
+      return '<div ' + mixedWrapAttrs(block) + ' data-block="' + blockKey + '">' + stack(videoHTML, photoHTML) + '</div>';
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
@@ -2429,12 +2436,22 @@
               + '</div>';
           }
           const combined = !!block.mediaLayoutCombined;
+          const blockHasPhoto = (block.images||[]).some(im => !isVideoPath(im.relPath || im.name));
+          const mixedRow = block.mixedDirection === "row";
+          const gapControls = (combined || !blockHasPhoto) ? '' :
+            '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:12px; font-weight:400;">배치 방향'
+            +   '<label style="font-weight:400; display:flex; align-items:center; gap:4px;"><input type="radio" name="mixedDir-' + block.id + '" data-field="mixedDirection" data-block-id="' + block.id + '" value="column"' + (mixedRow ? '' : ' checked') + '> 위·아래</label>'
+            +   '<label style="font-weight:400; display:flex; align-items:center; gap:4px;"><input type="radio" name="mixedDir-' + block.id + '" data-field="mixedDirection" data-block-id="' + block.id + '" value="row"' + (mixedRow ? ' checked' : '') + '> 좌·우</label>'
+            + '</label></div>'
+            + '<div class="field-group"><label class="field-label" data-mixed-gap-label="' + block.id + '">' + (mixedRow ? "좌우" : "위 아래") + ' 간격 <span class="slider-value" data-value-for="mixedGap-' + block.id + '">' + (block.mixedGap||0) + 'px</span></label>'
+            +   '<input type="range" class="field" data-field="mixedGap" data-block-id="' + block.id + '" min="0" max="120" step="4" value="' + (block.mixedGap||0) + '"></div>';
           return '<div class="field-group"><label class="field-label" style="display:flex; align-items:center; gap:8px; font-weight:400;">'
             +   '<input type="checkbox" data-action="toggle-media-layout-combined" data-block-id="' + block.id + '"' + (combined ? ' checked' : '') + '> 사진+동영상 통합 레이아웃 (하나로 같이 배치)</label></div>'
             + '<div class="field-group"><label class="field-label">' + (combined ? "미디어 레이아웃" : "사진 / 동영상 레이아웃") + '</label>'
             +   '<button type="button" class="btn-sm" data-action="open-layout" data-block-id="' + block.id + '">' + (combined ? "미디어 레이아웃 — " : "사진 레이아웃 — ") + layoutSummaryText(block) + '</button>'
             +   (combined ? '' : ' <button type="button" class="btn-sm" data-action="open-video-layout" data-block-id="' + block.id + '">동영상 레이아웃 — ' + videoLayoutSummaryText(block) + '</button>')
-            + '</div>';
+            + '</div>'
+            + gapControls;
         })()
       + '<label class="field-label">사진 / 동영상 (드래그로 순서 변경, 체크박스로 여러 장 선택 후 한번에 이동 가능)</label>'
       + selectionToolbarHTML(block, project)
@@ -2717,6 +2734,22 @@
       case "social-youtube": project.social.youtube = el.value; break;
       case "social-vimeo": project.social.vimeo = el.value; break;
       case "social-instagram": project.social.instagram = el.value; break;
+      case "mixedDirection": {
+        if(block){
+          block.mixedDirection = el.value;
+          const gapLabel = document.querySelector('[data-mixed-gap-label="' + block.id + '"]');
+          if(gapLabel) gapLabel.firstChild.textContent = (el.value === "row" ? "좌우" : "위 아래") + " 간격 ";
+        }
+        break;
+      }
+      case "mixedGap": {
+        if(block){
+          block.mixedGap = parseInt(el.value, 10) || 0;
+          const disp6 = document.querySelector('[data-value-for="mixedGap-' + block.id + '"]');
+          if(disp6) disp6.textContent = block.mixedGap + "px";
+        }
+        break;
+      }
       case "label": if(block) block.label = el.value; break;
       case "heading": if(block) block.heading = el.value; break;
       case "paragraphs": if(block) block.paragraphs = el.value.split("\n"); break;
@@ -5371,6 +5404,10 @@
     .gallery-video-stack{display:flex;flex-direction:column;gap:8px;}
     .gallery-video-frame{position:relative;width:100%;background:#111;border-radius:18px;overflow:hidden;}
     .gallery-video-frame iframe,.gallery-video-frame video{display:block;width:100%;height:auto;aspect-ratio:16/9;border:0;background:#000;}
+    .gallery-mixed{display:flex;flex-direction:column;gap:var(--mixed-gap,0px);}
+    .gallery-mixed.mixed-row{flex-direction:row;align-items:flex-start;}
+    .gallery-mixed.mixed-row>.gallery,.gallery-mixed.mixed-row>.gallery-video-stack{flex:1;min-width:0;}
+    @media (max-width:760px){ .gallery-mixed.mixed-row{flex-direction:column;} }
     .p-caption{display:flex;justify-content:space-between;align-items:baseline;gap:24px;padding-bottom:14px;border-bottom:1px solid var(--line);}
     .p-caption .idx{font-size:12px;color:var(--muted);white-space:nowrap;}
     .p-caption .label{font-size:1rem;}
@@ -5378,6 +5415,8 @@
     .p-block-body{margin-top:12px;font-size:.98rem;line-height:1.6;color:#2b2a26;white-space:pre-line;font-family:var(--font-medium);}
     .p-block .gallery{margin-top:26px;}
     .p-block .gallery-video-stack{margin-top:26px;}
+    .p-block .gallery-mixed{margin-top:26px;}
+    .p-block .gallery-mixed .gallery,.p-block .gallery-mixed .gallery-video-stack{margin-top:0;}
     .lang-toggle{display:flex;align-items:center;gap:4px;width:fit-content;margin:0 0 28px;padding:4px;border-radius:999px;background:rgba(17,17,17,.05);border:1px solid var(--line);}
     .lang-toggle-btn{font-size:11px;letter-spacing:.04em;padding:5px 12px;border-radius:999px;color:var(--muted);transition:background .2s,color .2s;}
     .lang-toggle-btn.active{background:var(--fg);color:var(--bg);}
@@ -6134,6 +6173,8 @@
       if(b.videoGalleryMode && b.videoGalleryDirection === "column") L.push("      videoGalleryDirection:" + JSON.stringify(b.videoGalleryDirection) + ",");
       if(b.videoGalleryMode === "custom" && Array.isArray(b.videoGalleryGroups) && b.videoGalleryGroups.length) L.push("      videoGalleryGroups:" + JSON.stringify(b.videoGalleryGroups) + ",");
       if(Array.isArray(b.noAutoplay) && b.noAutoplay.length) L.push("      noAutoplay:" + JSON.stringify(b.noAutoplay) + ",");
+      if(b.mixedDirection === "row") L.push("      mixedDirection:" + JSON.stringify(b.mixedDirection) + ",");
+      if(b.mixedGap) L.push("      mixedGap:" + b.mixedGap + ",");
       L.push("      images:[");
       b.images.forEach(im => L.push("        " + JSON.stringify(im.relPath || im.name) + ","));
       L.push("      ],");

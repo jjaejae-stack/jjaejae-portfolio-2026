@@ -673,6 +673,12 @@
   .gallery-video-stack{display:flex; flex-direction:column; gap:8px;}
   .gallery-video-frame{position:relative; width:100%; background:#111; border-radius:18px; overflow:hidden;}
   .gallery-video-frame iframe, .gallery-video-frame video{display:block; width:100%; height:auto; aspect-ratio:16/9; border:0; background:#000;}
+  /* 영상 구역 + 사진 구역을 이어붙이는 래퍼 — 기본은 위아래(세로), mixed-row면 좌우로 나란히.
+     간격은 block.mixedGap이 --mixed-gap으로 인라인 지정됨(없으면 0, 기존 발행 프로젝트와 동일). */
+  .gallery-mixed{display:flex; flex-direction:column; gap:var(--mixed-gap,0px);}
+  .gallery-mixed.mixed-row{flex-direction:row; align-items:flex-start;}
+  .gallery-mixed.mixed-row > .gallery, .gallery-mixed.mixed-row > .gallery-video-stack{flex:1; min-width:0;}
+  @media (max-width:760px){ .gallery-mixed.mixed-row{flex-direction:column;} }
 
   /* 블록 이름(라벨)·헤딩·본문은 사진 위에 겹치는 게 아니라, 페이지 안에서 사진 "윗부분"(위쪽)에
      일반 텍스트로 먼저 오고 그 아래에 사진이 옴 */
@@ -700,6 +706,8 @@
   .p-block-body.muted{color:var(--muted); font-style:italic;}
   .p-block .gallery{margin-top:26px;}
   .p-block .gallery-video-stack{margin-top:26px;}
+  .p-block .gallery-mixed{margin-top:26px;}
+  .p-block .gallery-mixed .gallery, .p-block .gallery-mixed .gallery-video-stack{margin-top:0;}
   /* heading+본문을 감싸기만 하는 래퍼 — EN/한글 토글 시 이 안쪽 innerHTML만 갈아끼우기 위한
      JS 훅(applyProjectLang)이고, display:contents라 레이아웃엔 전혀 영향 없음(감싸지 않은 것과
      동일하게 부모 .p-block의 흐름에 자식들이 그대로 참여함). */
@@ -1060,6 +1068,14 @@
   }
   function mediaFrameHTML(src, noAutoplaySet){
     return `<div class="gallery-frame">${mediaFrameInner(src, noAutoplaySet)}</div>`;
+  }
+  /* "동영상 레이아웃"/레거시 고정 모드가 만드는 .gallery-mixed(영상 구역 + 사진 구역 둘을
+     이어붙인 래퍼)의 배치 방향(위아래/좌우)과 간격 — block.mixedDirection/mixedGap이 없으면
+     기존 발행 프로젝트와 똑같이 세로·간격 0으로 렌더링됨(하위호환). */
+  function mixedWrapAttrs(block){
+    const row = block && block.mixedDirection === "row";
+    const gap = (block && block.mixedGap) || 0;
+    return `class="gallery-mixed${row ? " mixed-row" : ""}" style="--mixed-gap:${gap}px"`;
   }
   /* "직접 지정" 모드의 groups 배열 항목은 순수 숫자(한 줄 페이지, 예: 4) 또는
      {count, cols} 객체(그리드 페이지, 예: {count:4, cols:2} = 2열로 줄바꿈)일 수 있음 —
@@ -3106,7 +3122,7 @@
       id:"kolon-sport-cz72e",
       title:"KOLON SPORT",
       category:"work",
-      order:9,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:10, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#22262f",
       textColor:"#f0f7ff",
       titleLetterSpacing:-0.02,
@@ -3218,6 +3234,7 @@
         ["Art Director", "Jaehoon Choi, Jiyeon Oh"],
         ["Producer", "Wondeok Jang"],
         ["Account Executive", "Annie Ok ,Jieun Heo ,Seyoon Kim ,Heeyeon Kim ,Jinhyeong Jo"],
+        ["Production", "Objective X"],
         ["Director", "Jinho Lee"],
         ["Assistant Director", "Jaehee Kim, Hyunjun Jang"],
         ["D.O.P", "Jisung Kim"],
@@ -3317,6 +3334,79 @@
         ["__section__", "Photography"],
         ["Photographer", "Soyoon Jeon(Studio706)"],
         ["Art Team", "Calla7"],
+      ]
+    },
+    {
+      id:"samsung-tv-sports-leadership-campaign-lth3w",
+      title:"Samsung TV\nSports Leadership Campaign",
+      category:"work",
+      order:5, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      color:"#2a3347",
+      textColor:"#fff3ef",
+      titleLetterSpacing:-0.02,
+      titleLineHeight:1.02,
+      boxWidthScale:1,
+      boxHeightScale:1,
+      meta:"",
+      client:"Samsung",
+      agency:"Cheil Worldwide",
+      hero:"Samsung TV Sports Leadership Campaign/Thumbnail-3.jpg",
+      heroType:"upload",
+      heroVideoFile:"Samsung TV Sports Leadership Campaign/0705_SamsungTV_60s.mp4-web-web.mp4",
+      social:{ youtube:"#", vimeo:"#", instagram:"#" },
+      tag:"Campaign",
+      year:"2024",
+      blocks:[
+        {
+          label:"Overview",
+          mediaPosition:"above",
+          images:[
+            "Samsung TV Sports Leadership Campaign/1.jpg",
+          ],
+          paragraphs:["In the summer of 2024, sports became the hottest cultural momentum, driven by events like Euro 2024, the Paris Olympics, and the growing popularity of tennis. Samsung TV utilized this momentum to establish a clear perception: when it comes to watching sports, it has to be Samsung TV."],
+          paragraphsKo:["2024년 여름, 스포츠는 가장 뜨거운 문화적 모멘텀이었습니다. 유로 2024, 파리 올림픽, 테니스의 인기 등으로 스포츠 팬들의 관심과 몰입은 어느 때보다 높아졌습니다. 삼성 TV는 이 흐름을 통해 하나의 명확한 인식을 만들고자 했습니다. 스포츠를 볼 때는, 삼성 TV."],
+        },
+        {
+          label:"Film",
+          galleryMode:"2",
+          images:[
+            "Samsung TV Sports Leadership Campaign/0705_SamsungTV_60s.mp4-web-web.mp4",
+            "Samsung TV Sports Leadership Campaign/1-f.gif",
+            "Samsung TV Sports Leadership Campaign/2-f.gif",
+          ],
+          paragraphs:["Rather than just highlighting product features, we focused on the real emotions felt by sports fans. Through a fast-paced edit of relatable moments—anticipation, tension, cheering rituals, the joy of watching together, and the explosion of excitement—we created a film that sports lovers could naturally connect with. Featuring various sports moments like football, baseball, and tennis, we delivered a single message: Samsung TV is the screen where sports feel more alive."],
+          paragraphsKo:["제품 기능만을 말하기보다, 스포츠 팬들이 실제로 느끼는 감정에 집중했습니다. 기대감, 긴장감, 응원 루틴, 함께 보는 즐거움, 터져 나오는 환희까지. 스포츠 팬이라면 누구나 공감할 수 있는 순간들을 빠른 편집감으로 연결해, 스포츠를 사랑하는 사람들이 삼성 TV도 자연스럽게 좋아할 수 있는 영상을 만들었습니다. 축구, 야구, 테니스 등 다양한 스포츠 모먼트를 통해 하나의 메시지를 전했습니다. 스포츠가 더 생생해지는 스크린, 삼성 TV."],
+        },
+        {
+          label:"Individual Sports Edits",
+          videoGalleryMode:"3",
+          images:[
+            "Samsung TV Sports Leadership Campaign/3.png",
+            "Samsung TV Sports Leadership Campaign/0704_SAMSUNG_TV_15s_SOCCER-web.mp4",
+            "Samsung TV Sports Leadership Campaign/0708_SAMSUNG_TV_15s_BASEBALL-web.mp4",
+            "Samsung TV Sports Leadership Campaign/0704_SAMSUNG_TV_15s_TENNIS-web.mp4",
+          ],
+          paragraphs:["We also produced separate edits tailored to specific sports fandoms, including football, baseball, and tennis. Each version captured the unique viewing moments of its respective sport, naturally reinforcing Samsung TV’s leadership in sports entertainment."],
+          paragraphsKo:["축구, 야구, 테니스 등 각 스포츠 관심자에 맞춘 개별 편도 제작했습니다. 각 편은 스포츠별 고유한 시청 모먼트를 담아내면서, 스포츠 엔터테인먼트 리더십을 삼성 TV로 연결했습니다."],
+        }
+      ],
+      credits:[
+        ["CREATIVE DIRECTOR", "Sehyun Kim"],
+        ["CopyWriter", "Jihwan Park"],
+        ["Art Director", "Jaehoon Choi, Eunji Lee"],
+        ["Producer", "Dongkyung Shin"],
+        ["ACCOUNT EXECUTIVE", "Cheonhak Lim, Hyeoung Hong, Hyeyoon Seol, Junhyung Park"],
+        ["Production", "NYS Production"],
+        ["Director", "Vanilla"],
+        ["ASSISTANT DIRECTOR", "Taeyoung Seok"],
+        ["E. PRODUCER", "Sungyoon Lee"],
+        ["D.O.P", "Jinhyuck Lee"],
+        ["COLOR GRADING", "COLOR GRAFF."],
+        ["EDIT", "편집인(Jongin Kim)"],
+        ["2D", "GIANTSTEP."],
+        ["Sound", "KEATS SEOUL"],
+        ["Audio Producer", "INSERT COIN"],
+        ["Music", "2309 SOUND"],
       ]
     }
     /* 다른 프로젝트는 SSF SHOP 포맷이 확정되면 이어서 추가합니다. */
@@ -3944,7 +4034,7 @@
     if(block && block.videoGalleryMode){
       const videoHTML = videoSrcs.length ? galleryModeHTML(videoSrcs, blockId + "-videos", block.videoGalleryMode, block.videoGalleryDirection, block.videoGalleryGroups, videoFreeLayout, noAutoplaySet) : "";
       const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, photoFreeLayout, noAutoplaySet) : "";
-      if(videoHTML && photoHTML) return `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
+      if(videoHTML && photoHTML) return `<div ${mixedWrapAttrs(block)} data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
       return videoHTML || photoHTML;
     }
     /* legacy default — unchanged from before this feature existed. */
@@ -3953,15 +4043,15 @@
       : "";
     if(m === "free"){
       const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId, "free", dir, groups, photoFreeLayout, noAutoplaySet) : "";
-      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
+      return videoHTML ? `<div ${mixedWrapAttrs(block)} data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(m === "all"){
       const photoHTML = photoSrcs.length ? galleryModeHTML(photoSrcs, blockId + "-photos", "1", dir, undefined, undefined, noAutoplaySet) : "";
-      return videoHTML ? `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
+      return videoHTML ? `<div ${mixedWrapAttrs(block)} data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>` : photoHTML;
     }
     if(videoSrcs.length && photoSrcs.length){
       const photoHTML = galleryModeHTML(photoSrcs, blockId + "-photos", m, dir, groups, null, noAutoplaySet);
-      return `<div class="gallery-mixed" data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
+      return `<div ${mixedWrapAttrs(block)} data-block="${blockId}">${stack(videoHTML, photoHTML)}</div>`;
     }
     /* only reached for a block that's purely video or purely photo (the mixed
        case always returns above), so `images` here is already single-type. */
