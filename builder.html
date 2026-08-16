@@ -4663,12 +4663,17 @@
      번역해서 static index.html에 그대로 박아 넣는 방식(기존 runTranslateBlock/runTranslate와
      같은 로컬 claude CLI 경로 재사용). 채운 결과는 IndexedDB에도 저장해서 이 publish 한 번으로
      끝나는 게 아니라 이후에도 남아있음. 반환값: 뭔가 번역해서 채웠으면 true. */
+  /* 공백만 있는 문자열("" 은 물론 " ", "\n" 등)도 "내용 없음"으로 취급 — plain Boolean은
+     공백 문자열도 truthy라서, 영문/한글 둘 다 실질적으로 비어있는 블록인데도 번역 대상으로
+     잡혀 claude가 빈 입력에 엉뚱한 안내문을 지어내는 경우가 있었음. */
+  function hasText(s){ return !!(s && s.trim()); }
+  function hasAnyText(arr){ return (arr||[]).some(hasText); }
   async function fillMissingKoreanTranslations(project){
     const needsBlocks = [];
     const needsIdx = [];
     project.blocks.forEach((b, i) => {
-      const hasEn = !!(b.label || b.heading || (b.paragraphs||[]).filter(Boolean).length);
-      const hasKo = !!(b.labelKo || b.headingKo || (b.paragraphsKo||[]).filter(Boolean).length);
+      const hasEn = hasText(b.label) || hasText(b.heading) || hasAnyText(b.paragraphs);
+      const hasKo = hasText(b.labelKo) || hasText(b.headingKo) || hasAnyText(b.paragraphsKo);
       if(hasEn && !hasKo){
         needsBlocks.push({ label: b.label||"", heading: b.heading||"", paragraphs: b.paragraphs||[] });
         needsIdx.push(i);
@@ -4695,9 +4700,9 @@
          없는데도 claude가 "번역 준비 완료..." 같은 엉뚱한 안내문을 지어내 응답하는 경우가
          있어서, 모델 응답을 믿지 않고 원본이 있던 필드만 반영함(원본이 비었으면 결과도
          비어있는 게 맞음). */
-      if(src.label && tb.label != null) block.labelKo = tb.label;
-      if(src.heading && tb.heading != null) block.headingKo = tb.heading;
-      if(src.paragraphs.filter(Boolean).length && Array.isArray(tb.paragraphs)) block.paragraphsKo = tb.paragraphs;
+      if(hasText(src.label) && tb.label != null) block.labelKo = tb.label;
+      if(hasText(src.heading) && tb.heading != null) block.headingKo = tb.heading;
+      if(hasAnyText(src.paragraphs) && Array.isArray(tb.paragraphs)) block.paragraphsKo = tb.paragraphs;
     });
     await dbPut(project);
     return true;
