@@ -1782,7 +1782,7 @@
       id:"neo-qled-8k",
       title:"Samsung\nNeo QLED 8K :\nOnly for Neo Owners.",
       category:"work",
-      order:4,/* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
+      order:4, /* Work/Play 리스트 페이지 표시 순서 — 빌더 사이드바에서 드래그로 바꾼 순서를 그대로 반영 */
       color:"#123634",
       textColor:"#fff3ef",
       titleLetterSpacing:-0.01,
@@ -1819,6 +1819,7 @@
           label:"Private Theater",
           heading:"Main Film : TVC",
           galleryMode:"2",
+          mixedGap:12,
           images:[
             "https://vimeo.com/865826736?fl=pl&fe=sh",
             "Neo QLED 8K Digital/955141170266779.6489b62689798.gif",
@@ -1840,6 +1841,7 @@
         {
           label:"Private Training",
           galleryMode:"3",
+          mixedGap:12,
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Training-web.mp4",
             "Neo QLED 8K Digital/cea0b9174932955.64abaaf25bfbe.gif",
@@ -1847,10 +1849,13 @@
             "Neo QLED 8K Digital/c9ccab174932955.64abbc0db432b.gif",
           ],
           paragraphs:[],
+          headingKo:"요청 상태",
+          paragraphsKo:["제공하신 JSON의 모든 필드(title, tag, meta, heading, paragraphs)가 비어있습니다.", "label 필드만 채워져 있으나, 이는 이미 레이블로 번역 대상이 아닙니다.", "번역을 진행하려면 실제 영어 텍스트가 포함된 JSON을 제공해주세요."],
         },
         {
           label:"Private Gaming Hub",
           galleryMode:"3",
+          mixedGap:12,
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Gaming Hub-web.mp4",
             "Neo QLED 8K Digital/01b01a174932955.64abbc0eb8234.gif",
@@ -1858,10 +1863,13 @@
             "Neo QLED 8K Digital/99ca68174932955.64abbc0eb8ecb.gif",
           ],
           paragraphs:[],
+          headingKo:"다음 단계",
+          paragraphsKo:["1. heading 및 paragraphs에 영어 텍스트가 있는 JSON을 제공해주세요", "2. label(Private Training, Private Gaming Hub 등)도 함께 번역할지 확인해주세요", "3. title, tag, meta 필드에 내용이 있는지 확인해주세요"],
         },
         {
           label:"Private Gaming Lounge",
           galleryMode:"3",
+          mixedGap:12,
           images:[
             "Neo QLED 8K Digital/Neo QLED 8K - Private Gaming Lounge-web.mp4",
             "Neo QLED 8K Digital/c3bdf4174932955.64abbc0f86426.gif",
@@ -1869,6 +1877,7 @@
             "Neo QLED 8K Digital/916ab4174932955.64abbc0f855d0.gif",
           ],
           paragraphs:[],
+          labelKo:"프라이빗 게이밍 라운지",
         },
         {
           label:"Print",
@@ -1884,6 +1893,7 @@
             "Neo QLED 8K Digital/694f1f174932955.64abc9463529b.webp",
           ],
           paragraphs:[],
+          labelKo:"프린트",
         },
         {
           label:"Behind the Scene",
@@ -1899,6 +1909,7 @@
             "Neo QLED 8K Digital/8b105c174932955.64abd1b63572e.webp",
           ],
           paragraphs:[],
+          labelKo:"비하인드 더 신",
         }
       ],
       credits:[
