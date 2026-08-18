@@ -328,6 +328,26 @@ def crop_image(payload):
     return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
+def delete_image(payload):
+    """Remove a stale intermediate crop output from disk (e.g. the "-crop" file
+    that a second crop just superseded with a "-crop-crop" file). Only ever
+    called by the builder right after crop_image()/revert produces a new
+    orphaned path, so as a defense-in-depth check against a client bug sending
+    the wrong path, this refuses to touch anything whose filename doesn't
+    contain "-crop" — never the true original."""
+    rel_path = (payload.get("relPath") or "").strip()
+    if not rel_path:
+        raise ValueError("relPath가 필요합니다.")
+    abs_path = os.path.normpath(os.path.join(BASE_DIR, rel_path))
+    if not (abs_path + os.sep).startswith(BASE_DIR + os.sep):
+        raise ValueError("허용되지 않는 경로입니다.")
+    if "-crop" not in os.path.basename(rel_path):
+        raise ValueError("크롭 결과물만 삭제할 수 있습니다.")
+    if os.path.isfile(abs_path):
+        os.remove(abs_path)
+    return {"deleted": rel_path}
+
+
 def _probe_duration(path):
     proc = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
@@ -1372,7 +1392,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, dict({"ok": True}, **result))
             return
 
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/optimize-video", "/trim-video-existing"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/delete-image", "/optimize-video", "/trim-video-existing"):
             self._send_json(404, {"error": "not found"})
             return
         try:
@@ -1391,6 +1411,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return
             except Exception as e:
                 self._send_json(500, {"error": "크롭 실패: %s" % e})
+                return
+            self._send_json(200, dict({"ok": True}, **result))
+            return
+
+        if parsed.path == "/delete-image":
+            try:
+                result = delete_image(payload)
+            except ValueError as e:
+                self._send_json(400, {"error": str(e)})
+                return
+            except Exception as e:
+                self._send_json(500, {"error": "삭제 실패: %s" % e})
                 return
             self._send_json(200, dict({"ok": True}, **result))
             return

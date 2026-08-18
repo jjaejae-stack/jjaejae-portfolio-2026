@@ -3808,6 +3808,14 @@
         im.original = { relPath: im.relPath, name: im.name, url: im.url, file: im.file };
       } else if(im.file){
         try{ URL.revokeObjectURL(im.url); }catch(err){}
+      } else if(im.relPath && im.relPath.includes("/")){
+        /* re-cropping an already-cropped on-disk file: im.original still points to the
+           true source, so the file this crop just replaced is now orphaned — delete it
+           so repeated cropping doesn't pile up "-crop-crop-crop..." files on disk/git. */
+        fetch(GENERATE_SERVER + "/delete-image", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ relPath: im.relPath })
+        }).catch(() => {});
       }
       im.relPath = data.relPath;
       im.name = data.relPath.split("/").pop();
@@ -5269,6 +5277,9 @@
         snapshot();
         const im = found.im;
         const orig = im.original;
+        /* the cropped file we're reverting away from is about to become unreferenced —
+           delete it from disk too (same "-crop"-only-guarded endpoint used after a re-crop). */
+        const staleRelPath = (!im.file && im.relPath && im.relPath.includes("/")) ? im.relPath : null;
         try{ if(im.file) URL.revokeObjectURL(im.url); }catch(err){}
         im.relPath = orig.relPath;
         im.name = orig.name;
@@ -5282,6 +5293,12 @@
         delete im.original;
         renderEditor();
         saveAndRefresh();
+        if(staleRelPath){
+          fetch(GENERATE_SERVER + "/delete-image", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ relPath: staleRelPath })
+          }).catch(() => {});
+        }
       }
       return;
     }
