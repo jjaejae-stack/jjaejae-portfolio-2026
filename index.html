@@ -493,6 +493,12 @@
   .p-hero{
     position:absolute; inset:0; z-index:1;
     overflow:hidden;
+    /* vw/vh는 항상 "진짜" 브라우저 뷰포트 기준이라, 빌더 미리보기의 데스크탑 시뮬레이션
+       (실제 iframe보다 좁을 수 있는 창을 transform:scale로 1440px처럼 보이게 만드는 트릭)
+       안에서는 이 박스의 실제 레이아웃 크기와 어긋남 — 아래 두 규칙을 vw/vh 대신
+       컨테이너 쿼리 단위(cqw/cqh)로 이 박스 자신을 기준 삼게 해서, 진짜 사이트(뷰포트를
+       꽉 채우는 상태)에서도 값이 동일하고 빌더의 축소 시뮬레이션 안에서도 정확함. */
+    container-type:size;
   }
   .p-hero img{
     width:100%; height:100%;
@@ -507,18 +513,23 @@
   .p-hero-video{position:absolute; inset:0;}
   .p-hero-video iframe{
     position:absolute; top:50%; left:50%;
-    width:100vw; height:56.25vw;
-    min-width:177.78vh; min-height:100vh;
+    width:100cqw; height:56.25cqw;
+    min-width:177.78cqh; min-height:100cqh;
     transform:translate(-50%,-50%);
     border:0; pointer-events:none;
   }
   /* 히어로 이미지 비파괴 크롭 — 빌더에서 저장한 crop 비율(--cw/--ch/--cx/--cy)과 그
      비율의 종횡비(--cr)로, 원본 파일은 그대로 두고 화면에 보일 영역만 계산해서 자름.
      .p-hero-video iframe과 같은 "고정 비율 박스로 화면을 꽉 채우는" 트릭을 재사용.
-     상세페이지 히어로/리스트 배경 미리보기는 둘 다 뷰포트를 꽉 채우는 레이어라 vw/svh로,
-     리스트 행의 작은 썸네일(.thumb)은 고정 픽셀 박스라 컨테이너 쿼리 단위(cqw/cqh)로 —
-     "박스를 꽉 채우면서 잘라내는" 계산 자체는 두 경우 다 똑같고 기준 단위만 다름. */
-  .p-hero .p-hero-crop,
+     리스트 배경 미리보기(.list-bg-layer)는 빌더 미리보기에 렌더링될 일이 없는 뷰포트
+     전용 레이어라 vw/svh 그대로 두고, 상세페이지 히어로는 위 이유로 cqw/cqh 사용. */
+  .p-hero .p-hero-crop{
+    position:absolute; top:50%; left:50%;
+    width:100cqw; height:calc(100cqw / var(--cr, 1.778));
+    min-width:calc(100cqh * var(--cr, 1.778)); min-height:100cqh;
+    transform:translate(-50%,-50%);
+    overflow:hidden;
+  }
   .list-bg-layer .p-hero-crop{
     position:absolute; top:50%; left:50%;
     width:100vw; height:calc(100vw / var(--cr, 1.778));

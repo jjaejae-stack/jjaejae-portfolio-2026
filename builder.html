@@ -5584,12 +5584,16 @@
     img{display:block;max-width:100%;}
     a{color:inherit;text-decoration:none;}
     .p-main{height:100vh;height:100svh;position:relative;overflow:hidden;background:#0d0d0d;--pmargin:2.2vmin;}
-    .p-hero{position:absolute;inset:0;z-index:1;overflow:hidden;}
+    .p-hero{position:absolute;inset:0;z-index:1;overflow:hidden;container-type:size;}
     .p-hero img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
     .p-hero video{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
     .p-hero-video{position:absolute;inset:0;}
-    .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
-    .p-hero .p-hero-crop{position:absolute;top:50%;left:50%;width:100vw;height:calc(100vw / var(--cr,1.778));min-width:calc(100svh * var(--cr,1.778));min-height:100svh;transform:translate(-50%,-50%);overflow:hidden;}
+    /* vw/vh는 실제 iframe 뷰포트 기준이라, PC 미리보기의 데스크탑 시뮬레이션(좁은 창을
+       transform:scale로 1440px처럼 보이게 만드는 트릭, sizePreviewStage/wrapDesktopSim 참고)
+       안에서는 이 박스의 실제(스케일 전) 레이아웃 크기와 어긋남 — cqw/cqh(컨테이너 쿼리
+       단위)로 .p-hero 자신을 기준 삼아야 시뮬레이션 배율과 무관하게 정확히 꽉 채움. */
+    .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100cqw;height:56.25cqw;min-width:177.78cqh;min-height:100cqh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
+    .p-hero .p-hero-crop{position:absolute;top:50%;left:50%;width:100cqw;height:calc(100cqw / var(--cr,1.778));min-width:calc(100cqh * var(--cr,1.778));min-height:100cqh;transform:translate(-50%,-50%);overflow:hidden;}
     .p-hero .p-hero-crop img{position:absolute;width:calc(100% / var(--cw,1));height:calc(100% / var(--ch,1));left:calc(-100% * var(--cx,0) / var(--cw,1));top:calc(-100% * var(--cy,0) / var(--ch,1));max-width:none;}
     .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border:3px solid #111;box-shadow:10px 10px 0 #111;color:#fff3ef;}
     .p-colorbox h1{font-size:calc(clamp(2.2rem,4.4vw,4.6rem) * var(--title-font-scale,1));font-weight:800;letter-spacing:-.02em;line-height:1.02;word-break:keep-all;white-space:pre-wrap;}
