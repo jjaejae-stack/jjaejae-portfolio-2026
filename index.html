@@ -514,20 +514,38 @@
   }
   /* 히어로 이미지 비파괴 크롭 — 빌더에서 저장한 crop 비율(--cw/--ch/--cx/--cy)과 그
      비율의 종횡비(--cr)로, 원본 파일은 그대로 두고 화면에 보일 영역만 계산해서 자름.
-     .p-hero-video iframe과 같은 "고정 비율 박스로 화면을 꽉 채우는" 트릭을 재사용. */
-  .p-hero .p-hero-crop{
+     .p-hero-video iframe과 같은 "고정 비율 박스로 화면을 꽉 채우는" 트릭을 재사용.
+     상세페이지 히어로/리스트 배경 미리보기는 둘 다 뷰포트를 꽉 채우는 레이어라 vw/svh로,
+     리스트 행의 작은 썸네일(.thumb)은 고정 픽셀 박스라 컨테이너 쿼리 단위(cqw/cqh)로 —
+     "박스를 꽉 채우면서 잘라내는" 계산 자체는 두 경우 다 똑같고 기준 단위만 다름. */
+  .p-hero .p-hero-crop,
+  .list-bg-layer .p-hero-crop{
     position:absolute; top:50%; left:50%;
     width:100vw; height:calc(100vw / var(--cr, 1.778));
     min-width:calc(100svh * var(--cr, 1.778)); min-height:100svh;
     transform:translate(-50%,-50%);
     overflow:hidden;
   }
-  .p-hero .p-hero-crop img{
+  /* .work-card .thumb img{object-fit:cover} 쪽 selector가 (.work-card .thumb img)
+     specificity가 더 높아서, 아래 위치 지정 규칙도 같은 조상 체인으로 명시해야 이김. */
+  .p-hero .p-hero-crop img,
+  .list-bg-layer .p-hero-crop img,
+  .work-card .thumb .p-hero-crop img{
     position:absolute;
     width:calc(100% / var(--cw, 1)); height:calc(100% / var(--ch, 1));
     left:calc(-100% * var(--cx, 0) / var(--cw, 1));
     top:calc(-100% * var(--cy, 0) / var(--ch, 1));
     max-width:none;
+  }
+  /* 리스트 행 썸네일은 뷰포트가 아니라 자기 자신의 고정 72×48 박스를 꽉 채워야 하므로,
+     컨테이너 쿼리 단위(cqw/cqh)로 같은 트릭을 재현 — vw/svh를 컨테이너 기준으로 바꾼 것뿐. */
+  .work-card .thumb{container-type:size;}
+  .work-card .thumb .p-hero-crop{
+    position:absolute; top:50%; left:50%;
+    width:100cqw; height:calc(100cqw / var(--cr, 1.5));
+    min-width:calc(100cqh * var(--cr, 1.5)); min-height:100cqh;
+    transform:translate(-50%,-50%);
+    overflow:hidden;
   }
   .p-colorbox{
     position:absolute; top:var(--pmargin); left:var(--pmargin); z-index:2;
@@ -1065,12 +1083,13 @@
      크롭 영역을 비율(x,y,w,h, 0~1)로만 저장해두고, 실제로는 여기서 CSS로 그 영역만
      보이게 자름. project.heroCrop이 없으면(크롭 안 한 프로젝트) 그냥 기존처럼 img 하나만
      반환 — .p-hero img{object-fit:cover}가 알아서 화면을 꽉 채움. */
-  function heroImgTag(heroPath, crop, alt){
+  function heroImgTag(heroPath, crop, alt, extraAttrs){
     const src = u(heroPath);
-    if(!crop || !crop.w || !crop.h || !crop.naturalW || !crop.naturalH) return `<img src="${src}" alt="${alt}">`;
+    const attrs = extraAttrs ? " " + extraAttrs : "";
+    if(!crop || !crop.w || !crop.h || !crop.naturalW || !crop.naturalH) return `<img src="${src}" alt="${alt}"${attrs}>`;
     const r = (crop.w * crop.naturalW) / (crop.h * crop.naturalH);
     const vars = `--cr:${r};--cw:${crop.w};--ch:${crop.h};--cx:${crop.x};--cy:${crop.y};`;
-    return `<div class="p-hero-crop" style="${vars}"><img src="${src}" alt="${alt}"></div>`;
+    return `<div class="p-hero-crop" style="${vars}"><img src="${src}" alt="${alt}"${attrs}></div>`;
   }
 
   /* a block "image" entry is a video if it's an http(s) link (Vimeo/YouTube/direct video URL)
@@ -3860,7 +3879,7 @@
     card.className = "work-card";
     card.innerHTML = `
       <div class="thumb">
-        <img src="${u(p.hero)}" loading="lazy" alt="${p.title}">
+        ${heroImgTag(p.hero, p.heroCrop, p.title, 'loading="lazy"')}
       </div>
       <div class="meta">
         <span class="name">${p.title}</span>
@@ -3958,10 +3977,7 @@
     layer.dataset.loaded = "1";
     const mediaEl = buildHeroMediaEl(p);
     if(!mediaEl){
-      const img = document.createElement("img");
-      img.alt = p.title;
-      img.src = u(p.hero);
-      layer.appendChild(img);
+      layer.insertAdjacentHTML("beforeend", heroImgTag(p.hero, p.heroCrop, p.title));
       return;
     }
     /* 로컬 업로드 video만 정지 썸네일 → loadeddata 페이드인(같은 출처라 이벤트가 안정적).
