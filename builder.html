@@ -51,10 +51,31 @@
   #topbar a{font-size:12px; color:var(--muted); border-bottom:1px solid var(--line-strong); padding-bottom:2px;}
   #topbar a:hover{color:var(--fg); border-color:var(--fg);}
 
-  #app{display:grid; grid-template-columns:260px 1fr 1fr; height:calc(100vh - 52px);}
+  #app{position:relative; display:grid; grid-template-columns:260px 1fr 1fr; height:calc(100vh - 52px);}
+  /* Draggable dividers between the 3 columns — plain absolutely-positioned strips
+     overlaid on top of the grid rather than actual grid tracks, so they don't need
+     the grid definition (and every column-count-dependent rule/media-query) to
+     change. JS keeps them positioned at the live column boundary and drives the
+     resize by writing percentage values into #app's grid-template-columns —
+     percentages (not px) so the layout stays naturally responsive on window
+     resize without any extra recalculation. */
+  .col-resize-handle{
+    position:absolute; top:0; bottom:0; width:9px; margin-left:-4px; z-index:60;
+    cursor:col-resize; touch-action:none;
+  }
+  .col-resize-handle::after{
+    content:""; position:absolute; top:0; bottom:0; left:4px; width:1px;
+    background:var(--line-strong); opacity:0; transition:opacity .15s, background .15s;
+  }
+  .col-resize-handle:hover::after,
+  .col-resize-handle.dragging::after{ opacity:1; background:var(--accent); }
 
   /* ---------- sidebar ---------- */
-  #sidebar{border-right:1px solid var(--line); overflow-y:auto; padding:18px;}
+  /* container-type lets .project-item react to the SIDEBAR PANEL'S own rendered
+     width (via @container below) instead of the viewport — needed now that the
+     panel itself is user-resizable (see the column-resize-handle JS), so dragging
+     it wider can reveal more columns without a page-level breakpoint. */
+  #sidebar{border-right:1px solid var(--line); overflow-y:auto; padding:18px; container-type:inline-size;}
   #category-tabs{width:100%; margin-bottom:14px;}
   #category-tabs button{flex:1;}
   #new-project-btn{
@@ -91,13 +112,18 @@
   .project-item.active{background:var(--fg); color:var(--bg);}
   .project-item.dragging{opacity:.35;}
   .project-item-main{display:flex; align-items:flex-start; gap:10px;}
-  .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; border:1px solid var(--line-strong); margin-top:4px;}
+  .project-item .dot{width:10px; height:10px; border-radius:50%; flex:0 0 auto; background:var(--pc); border:1px solid var(--line-strong); margin-top:4px;}
+  .project-item .num{font-size:11px; color:var(--muted); flex:0 0 auto; width:26px; font-variant-numeric:tabular-nums; margin-top:2px;}
   .project-item .drag-handle{margin-top:2px;}
   .project-item .del{flex:0 0 auto; margin-top:1px;}
   .project-item .info{flex:1; min-width:0; display:flex; flex-direction:column; gap:2px;}
   .project-item .p-title{display:block; font-size:13px; font-weight:600; white-space:pre-wrap; overflow-wrap:break-word; line-height:1.3;}
   .project-item .p-sub{display:block; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .project-item.active .p-sub{opacity:.65;}
+  /* .p-cat/.p-year are extra table-style columns, only ever shown in the mono
+     theme's wide-panel layout below — hidden here so blue/dark and the mono
+     theme's own narrow/default state don't render them twice alongside .p-sub. */
+  .project-item .p-cat, .project-item .p-year{display:none;}
   .project-item-actions{display:flex; gap:8px; padding-left:34px;}
   .project-item .move,
   .project-item .hide-toggle{
@@ -222,7 +248,12 @@
   .selection-toolbar select{width:auto; padding:6px 8px; font-size:12px;}
   .image-row .thumb{width:44px; height:44px; object-fit:cover; background:var(--fg); flex:0 0 auto;}
   .image-row .fname{flex:1; min-width:0; font-size:12px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .fname{font-size:12px; color:var(--fg);}
+  /* used bare inside .field-row rows (e.g. the hero video upload row) alongside
+     sibling action buttons — without truncation, a long filename just wraps to a
+     second line instead of shrinking, and that second line overlaps the buttons
+     sitting next to it (.field-row > * are all flex:1/min-width:0, so this element
+     CAN shrink, it just wasn't told to clip instead of wrap). */
+  .fname{font-size:12px; color:var(--fg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   #font-preview-box{transition:border-color .15s, background .15s; background:var(--surface); color:var(--fg); box-shadow:var(--card-shadow);}
   #font-preview-box.drag-over{border-color:var(--accent) !important; background:color-mix(in srgb, var(--accent) 10%, var(--surface));}
   .image-row .hero-badge{font-size:10px; padding:2px 7px; border-radius:10px; background:var(--accent); color:var(--bg); flex:0 0 auto;}
@@ -255,6 +286,15 @@
   .view-toggle button{padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600;}
   .view-toggle button.active{background:var(--fg); color:var(--bg);}
   .preview-stage{flex:1; display:flex; align-items:center; justify-content:center; overflow:auto; padding:28px; background:color-mix(in srgb, var(--fg) 8%, var(--bg));}
+  /* PC content is often taller than the visible stage (a real page scrolled to see
+     everything below the hero) — align-items:center on an overflowing flex item
+     clips the top out of scroll reach, so PC mode top-aligns instead (mobile mode's
+     fixed small box stays vertically centered). */
+  .preview-stage.pc{align-items:flex-start;}
+  /* .preview-frame-wrap just fills the available panel space — the real-desktop-
+     width simulation (and its down-scaling) happens INSIDE the iframe's own
+     document instead (see wrapDesktopSim in JS), so there's nothing content-
+     dependent to size from out here. */
   .preview-frame-wrap{flex:0 0 auto; box-shadow:0 10px 40px rgba(0,0,0,.18); background:#fff;}
   .preview-stage.mobile .preview-frame-wrap{border-radius:26px; overflow:hidden;}
   .preview-stage iframe{border:0; background:#fff; display:block; width:100%; height:100%;}
@@ -391,6 +431,98 @@
   #theme-toggle:hover{transform:scale(1.1);}
   #theme-toggle:active{transform:scale(.94);}
 
+  /* ---------- mono (white) theme: hairline minimal UI ----------
+     Reference: https://www.symbolstudio.pl/en/ — thin gray divider lines
+     instead of black borders/hard offset shadows, pill-shaped buttons/tabs,
+     and hover states that recolor text instead of flipping backgrounds.
+     Scoped to body:not([data-theme]) only — blue/dark keep their existing
+     looks untouched. Same selector-grouping pattern as the dark theme block
+     below, just with hairline/soft values instead of pill/borderless ones. */
+  body:not([data-theme]) .block-card,
+  body:not([data-theme]) .image-row,
+  body:not([data-theme]) .selection-toolbar,
+  body:not([data-theme]) .modal-box,
+  body:not([data-theme]) #font-preview-box{
+    border:1px solid var(--line); box-shadow:none; border-radius:14px;
+  }
+  body:not([data-theme]) .hero-thumb{ border-color:var(--line); border-radius:10px; }
+
+  body:not([data-theme]) .btn-primary,
+  body:not([data-theme]) .btn-secondary,
+  body:not([data-theme]) .btn-sm,
+  body:not([data-theme]) #new-project-btn,
+  body:not([data-theme]) #info-nav-btn{
+    border-radius:999px; box-shadow:none;
+  }
+  body:not([data-theme]) .btn-secondary,
+  body:not([data-theme]) .btn-sm,
+  body:not([data-theme]) #new-project-btn,
+  body:not([data-theme]) #info-nav-btn{ border:1px solid var(--line); }
+  body:not([data-theme]) .btn-sm:hover{ border-color:var(--fg); }
+  body:not([data-theme]) #sync-order-btn,
+  body:not([data-theme]) .sidebar-util-btn{ border-color:var(--line); border-radius:10px; }
+
+  body:not([data-theme]) .tag-tabs button{ border:none; }
+  body:not([data-theme]) .tag-tabs button:hover{ background:color-mix(in srgb, var(--fg) 6%, var(--bg)); }
+  body:not([data-theme]) .tag-tabs button.add-tag{ border:1px dashed var(--line); }
+
+  body:not([data-theme]) .field,
+  body:not([data-theme]) .field-inline{
+    border:none; border-bottom:1px solid var(--line); border-radius:0; padding-left:2px; padding-right:2px;
+  }
+  body:not([data-theme]) .field:focus,
+  body:not([data-theme]) .field-inline:focus{ outline:none; border-bottom-color:var(--fg); }
+
+  body:not([data-theme]) #theme-toggle{ border:none; box-shadow:0 1px 8px rgba(0,0,0,.15); }
+
+  /* left project list: card-with-shadow → thin-divider list row, numbered
+     like the reference's project index table. Hover/active recolor via
+     --pc (each project's own color dot) instead of --accent, since --accent
+     equals --fg (near-black) in this theme and would be invisible as a
+     text-highlight color. */
+  body:not([data-theme]) .project-item{
+    border:none; box-shadow:none; border-radius:0;
+    border-bottom:1px solid var(--line); margin-bottom:0; padding:12px 4px;
+  }
+  body:not([data-theme]) .project-item .dot{ border:none; }
+  body:not([data-theme]) .project-item:hover{ background:color-mix(in srgb, var(--fg) 4%, var(--bg)); }
+  body:not([data-theme]) .project-item:hover .num,
+  body:not([data-theme]) .project-item:hover .p-title{ color:var(--pc); }
+  body:not([data-theme]) .project-item .num,
+  body:not([data-theme]) .project-item .p-title{ transition:color .18s; }
+  body:not([data-theme]) .project-item.active{ background:color-mix(in srgb, var(--fg) 4%, var(--bg)); color:var(--fg); }
+  body:not([data-theme]) .project-item.active .num,
+  body:not([data-theme]) .project-item.active .p-title{ color:var(--pc); font-weight:700; }
+  body:not([data-theme]) .project-item.active .p-sub{ opacity:.65; }
+  body:not([data-theme]) .project-item .move,
+  body:not([data-theme]) .project-item .hide-toggle{ border:none; background:none; }
+  body:not([data-theme]) .project-item .move:hover,
+  body:not([data-theme]) .project-item .hide-toggle:hover{ color:var(--pc); border-color:transparent; }
+  body:not([data-theme]) .project-item.active .move,
+  body:not([data-theme]) .project-item.active .hide-toggle{ background:none; }
+
+  /* Wide-panel table view — once the resizable sidebar is dragged past ~460px,
+     spread the row out into number/title/category/year columns (like a spreadsheet
+     row) instead of the compact stacked title+subtitle used at the default width.
+     @container reacts to #sidebar's own rendered width (container-type:inline-size
+     set on #sidebar above), not the viewport, since it's the PANEL being resized,
+     not the window. */
+  @container (min-width: 460px){
+    body:not([data-theme]) .project-item-main{
+      display:grid; grid-template-columns:14px 26px 10px 1fr 96px 46px 14px;
+      align-items:center; gap:10px;
+    }
+    body:not([data-theme]) .project-item .info{ flex-direction:row; }
+    body:not([data-theme]) .project-item .p-title{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    body:not([data-theme]) .project-item .p-sub{ display:none; }
+    body:not([data-theme]) .project-item .p-cat,
+    body:not([data-theme]) .project-item .p-year{
+      display:block; font-size:12px; color:var(--muted);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    body:not([data-theme]) .project-item .p-year{ font-variant-numeric:tabular-nums; }
+  }
+
   /* ---------- dark theme: pill UI ----------
      Reference: rounded chip/pill buttons, rounded cards with no border or hard
      offset shadow, rounded photo thumbnails, orange section labels — a softer
@@ -502,6 +634,8 @@
         </div>
       </div>
     </section>
+    <div class="col-resize-handle" data-col-resize="0"></div>
+    <div class="col-resize-handle" data-col-resize="1"></div>
   </div>
 
   <button id="theme-toggle" title="테마 전환"></button>
@@ -1424,19 +1558,23 @@
         + ' 프로젝트가 아직 없습니다.<br>위 버튼으로 새 프로젝트를 시작하세요.</div>';
       return;
     }
-    sidebarList.innerHTML = visible.map(p => {
+    sidebarList.innerHTML = visible.map((p, i) => {
       const active = (mode === "project" && p.id === currentId) ? " active" : "";
       const hiddenClass = p.hidden ? " project-hidden" : "";
       const otherCategory = activeCategory === "play" ? "work" : "play";
       const otherLabel = otherCategory === "play" ? "Play" : "Work";
-      return '<div class="project-item' + active + hiddenClass + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '">'
+      const num = String(i + 1).padStart(3, "0");
+      return '<div class="project-item' + active + hiddenClass + '" data-sort-item data-item-id="' + p.id + '" data-project-id="' + p.id + '" style="--pc:' + escapeHTML(p.color) + '">'
         + '<div class="project-item-main">'
         +   '<span class="drag-handle">⠿</span>'
-        +   '<span class="dot" style="background:' + escapeHTML(p.color) + '"></span>'
+        +   '<span class="num">' + num + '</span>'
+        +   '<span class="dot"></span>'
         +   '<span class="info">'
         +     '<span class="p-title">' + escapeHTML(p.title || "Untitled") + '</span>'
         +     '<span class="p-sub">' + escapeHTML([p.tag, p.year].filter(Boolean).join(" · ") || "—") + (p.hidden ? ' <span class="hidden-badge">숨김</span>' : '') + '</span>'
         +   '</span>'
+        +   '<span class="p-cat">' + escapeHTML(p.tag || "—") + '</span>'
+        +   '<span class="p-year">' + escapeHTML(p.year ? String(p.year) : "—") + '</span>'
         +   '<button class="del" data-action="delete-project" data-project-id="' + p.id + '" title="삭제">✕</button>'
         + '</div>'
         + '<div class="project-item-actions">'
@@ -5369,11 +5507,22 @@
   /* ======================================================================
      7. live preview
   ====================================================================== */
+  /* Preview iframes use srcdoc (no real page URL of their own), so plain relative
+     paths like "icons/youtube.png" or "fonts/SUIT-ExtraBold.woff2" don't reliably
+     resolve to this project's actual files — same file names work fine on the
+     real production site because THAT page has a real URL to resolve against.
+     previewAssetURL() resolves such paths against the builder page's own real
+     location instead, so the srcdoc content always points at the right file
+     regardless of the iframe's own (nonexistent) base URL. */
+  function previewAssetURL(path){
+    return new URL(path, window.location.href).href;
+  }
   /* colorable icons: the shape comes from a white PNG used as a CSS mask, so the
      rendered color follows currentColor (project text color) instead of being baked
      into the image — same technique as index.html's socialIcon(). */
   function socialIconMask(file){
-    return '<span class="social-icon-mask" style="-webkit-mask-image:url(icons/' + file + ');mask-image:url(icons/' + file + ');"></span>';
+    const url = previewAssetURL("icons/" + file);
+    return '<span class="social-icon-mask" style="-webkit-mask-image:url(' + url + ');mask-image:url(' + url + ');"></span>';
   }
   const SOCIAL_ICONS = {
     youtube: socialIconMask("youtube.png"),
@@ -5382,9 +5531,9 @@
   };
 
   const PREVIEW_CSS = `
-    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:block;}
-    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:block;}
-    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraBold';src:url('${previewAssetURL("fonts/SUIT-ExtraBold.woff2")}') format('woff2');font-weight:800;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraLight';src:url('${previewAssetURL("fonts/SUIT-ExtraLight.woff2")}') format('woff2');font-weight:200;font-display:block;}
+    @font-face{font-family:'SUIT-Medium';src:url('${previewAssetURL("fonts/SUIT-Medium.woff2")}') format('woff2');font-weight:500;font-display:block;}
     :root{--bg:#f3f2ee;--fg:#111;--muted:#78756c;--line:rgba(17,17,17,.14);
       --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
       --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
@@ -6040,9 +6189,9 @@
      styling (background, grain, lead/body/tagline typography, links), since
      that overlay is never rendered by the project-detail preview above. ---- */
   const INFO_PREVIEW_CSS = `
-    @font-face{font-family:'SUIT-ExtraBold';src:url('fonts/SUIT-ExtraBold.woff2') format('woff2');font-weight:800;font-display:block;}
-    @font-face{font-family:'SUIT-ExtraLight';src:url('fonts/SUIT-ExtraLight.woff2') format('woff2');font-weight:200;font-display:block;}
-    @font-face{font-family:'SUIT-Medium';src:url('fonts/SUIT-Medium.woff2') format('woff2');font-weight:500;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraBold';src:url('${previewAssetURL("fonts/SUIT-ExtraBold.woff2")}') format('woff2');font-weight:800;font-display:block;}
+    @font-face{font-family:'SUIT-ExtraLight';src:url('${previewAssetURL("fonts/SUIT-ExtraLight.woff2")}') format('woff2');font-weight:200;font-display:block;}
+    @font-face{font-family:'SUIT-Medium';src:url('${previewAssetURL("fonts/SUIT-Medium.woff2")}') format('woff2');font-weight:500;font-display:block;}
     :root{
       --font-bold:'SUIT-ExtraBold', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
       --font-thin:'SUIT-ExtraLight', -apple-system, "Apple SD Gothic Neo", "Pretendard", "Malgun Gothic", "Helvetica Neue", Arial, sans-serif;
@@ -6101,6 +6250,64 @@
     refreshPreview();
   });
 
+  /* editing a field re-renders the whole srcdoc document (there's no partial-patch
+     path into the iframe), which normally resets scroll to the top on every
+     keystroke — very disruptive when you're checking something further down the
+     page. So: capture the iframe's current scroll position before swapping the
+     doc, and restore it once the new doc loads — but only when the refresh is a
+     live-edit of the SAME project/info doc; switching to a different project (or
+     between the INFO tab and a project) should still start at the top, since the
+     old scroll offset has no meaning on genuinely different content. */
+  let lastPreviewKey = null;
+  function setPreviewSrcdoc(key, html){
+    let scrollX = 0, scrollY = 0;
+    if(key === lastPreviewKey){
+      try{
+        scrollX = previewFrame.contentWindow.scrollX;
+        scrollY = previewFrame.contentWindow.scrollY;
+      }catch(e){}
+    }
+    lastPreviewKey = key;
+    previewFrame.addEventListener("load", function restoreScroll(){
+      previewFrame.removeEventListener("load", restoreScroll);
+      if(!scrollX && !scrollY) return;
+      try{ previewFrame.contentWindow.scrollTo(scrollX, scrollY); }catch(e){}
+    });
+    previewFrame.srcdoc = html;
+  }
+
+  /* Wraps <body> content in a fixed-1440px-wide "desktop simulation" div and scales
+     IT DOWN from INSIDE the iframe's own document — not from the builder side. Scaling
+     from outside (transform/zoom applied to the iframe or a wrapper around it) turned
+     out unreliable: the on-screen footprint has to be computed independently of the
+     scale and kept in sync, and that computation/browser behavior diverged badly
+     (worked one way in one browser test, produced an oversized box in another, and
+     `zoom` isn't even consistently supported). Doing it inside the iframe sidesteps
+     all of that: `getBoundingClientRect()` reads back the ACTUAL rendered (post-
+     transform) size directly from the browser instead of us re-deriving it, so there's
+     nothing to get out of sync — and the site's own vw/clamp() CSS still computes
+     against a genuine 1440px desktop width (window.innerWidth inside the simulation
+     div itself stays real, only the visual presentation is shrunk). Mobile mode skips
+     this — 390px already IS a real phone width, no simulation needed. */
+  function wrapDesktopSim(bodyHTML){
+    if(currentView === "mobile") return bodyHTML;
+    return '<div id="pf-desktop-shell" style="overflow:hidden;">'
+      + '<div id="pf-desktop-sim" style="width:' + DESKTOP_WIDTH + 'px; transform-origin:top left;">'
+      + bodyHTML
+      + '</div></div>'
+      + '<script>(function(){'
+      + 'var sim=document.getElementById("pf-desktop-sim"),shell=document.getElementById("pf-desktop-shell");'
+      + 'function apply(){'
+      +   'var s=window.innerWidth/' + DESKTOP_WIDTH + ';'
+      +   'sim.style.transform="scale("+s+")";'
+      +   'shell.style.height=sim.getBoundingClientRect().height+"px";'
+      + '}'
+      + 'apply();'
+      + 'window.addEventListener("resize",apply);'
+      + 'if(window.ResizeObserver) new ResizeObserver(apply).observe(sim);'
+      + '})();<' + '/script>';
+  }
+
   const refreshPreview = debounce(function(){
     /* Re-measure the PC/Mobile box on every refresh (not just on window resize or
        an explicit PC/Mobile click) — switching between project editing and the INFO
@@ -6111,44 +6318,43 @@
       const infoDoc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
         + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
         + "<style>" + INFO_PREVIEW_CSS + "</style></head><body>"
-        + buildInfoPreviewBodyHTML(infoData)
+        + wrapDesktopSim(buildInfoPreviewBodyHTML(infoData))
         + "</body></html>";
-      previewFrame.srcdoc = infoDoc;
+      setPreviewSrcdoc("info", infoDoc);
       return;
     }
     const project = getCurrentProject();
-    if(!project){ previewFrame.srcdoc = EMPTY_DOC; return; }
+    if(!project){ lastPreviewKey = null; previewFrame.srcdoc = EMPTY_DOC; return; }
     const doc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
       + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
       + "<style>" + PREVIEW_CSS + buildFontFaceCSS(project) + "</style></head><body>"
-      + buildPreviewBodyHTML(project)
-      + "<script>" + PREVIEW_RUNTIME_JS + "<" + "/script>"
+      + wrapDesktopSim(buildPreviewBodyHTML(project) + "<script>" + PREVIEW_RUNTIME_JS + "<" + "/script>")
       + "</body></html>";
-    previewFrame.srcdoc = doc;
+    setPreviewSrcdoc("project:" + project.id, doc);
   }, 120);
 
   /* ---- PC / Mobile toggle ----
-     The frame's box is sized in JS (not CSS aspect-ratio) so it reliably fits — as large as
-     possible — inside whatever space the 3-column layout leaves, without ever going taller
-     than it is wide for the PC view. */
+     The desktop-width simulation happens entirely INSIDE the iframe now (see
+     wrapDesktopSim above), so the outer box has nothing content-dependent to
+     compute — it just fills the available panel space, plain and simple. If the
+     (scaled-down, inside the iframe) page content is taller than that, the iframe
+     shows its own native internal scrollbar — standard, no coordination needed. */
+  const DESKTOP_WIDTH = 1440;
   const previewStage = document.getElementById("preview-stage");
   const previewFrameWrap = document.querySelector(".preview-frame-wrap");
   let currentView = "pc";
 
   function sizePreviewStage(){
     const padding = 28 * 2;
-    const availW = previewStage.clientWidth - padding;
-    const availH = previewStage.clientHeight - padding;
+    const availW = Math.max(previewStage.clientWidth - padding, 0);
+    const availH = Math.max(previewStage.clientHeight - padding, 0);
     if(currentView === "mobile"){
-      previewFrameWrap.style.width = "390px";
-      previewFrameWrap.style.height = "844px";
+      previewFrameWrap.style.width = previewFrame.style.width = "390px";
+      previewFrameWrap.style.height = previewFrame.style.height = "844px";
       return;
     }
-    const ratio = 16/9;
-    let w = availW, h = w / ratio;
-    if(h > availH){ h = availH; w = h * ratio; }
-    previewFrameWrap.style.width = Math.max(w, 0) + "px";
-    previewFrameWrap.style.height = Math.max(h, 0) + "px";
+    previewFrameWrap.style.width = previewFrame.style.width = availW + "px";
+    previewFrameWrap.style.height = previewFrame.style.height = availH + "px";
   }
 
   document.querySelectorAll(".preview-toolbar .view-toggle button").forEach(btn => {
@@ -6163,6 +6369,82 @@
   });
   window.addEventListener("resize", sizePreviewStage);
   sizePreviewStage();
+
+  /* ---- resizable column dividers (sidebar | editor | preview) ----
+     Grid columns are driven by percentages (not px), so window resizes stay
+     proportional automatically without any recalculation — dragging just writes
+     a new set of percentages. minmax() floors keep any column from being dragged
+     down to unusable/zero width. The two handles are plain absolutely-positioned
+     strips (not real grid tracks), repositioned from the actual rendered column
+     boundaries so they stay correct even when a minmax() floor is clamping a
+     column away from its "ideal" percentage. */
+  const COL_STORAGE_KEY = "pf-builder-col-ratios";
+  const COL_MIN_PX = [200, 340, 300];
+  const appEl = document.getElementById("app");
+  const sidebarEl = document.getElementById("sidebar");
+  const previewPaneEl = document.getElementById("preview-pane");
+  const colHandles = Array.from(document.querySelectorAll(".col-resize-handle"));
+
+  let colRatios = [0.18, 0.41, 0.41];
+  try{
+    const saved = JSON.parse(localStorage.getItem(COL_STORAGE_KEY) || "null");
+    if(Array.isArray(saved) && saved.length === 3 && saved.every(n => typeof n === "number" && n > 0)){
+      colRatios = saved;
+    }
+  }catch(e){}
+
+  function applyColRatios(){
+    appEl.style.gridTemplateColumns = colRatios
+      .map((r, i) => "minmax(" + COL_MIN_PX[i] + "px, " + (r * 100) + "%)")
+      .join(" ");
+  }
+
+  function positionColHandles(){
+    const appRect = appEl.getBoundingClientRect();
+    const sidebarRect = sidebarEl.getBoundingClientRect();
+    const previewRect = previewPaneEl.getBoundingClientRect();
+    colHandles[0].style.left = (sidebarRect.right - appRect.left) + "px";
+    colHandles[1].style.left = (previewRect.left - appRect.left) + "px";
+  }
+
+  applyColRatios();
+  positionColHandles();
+  window.addEventListener("resize", positionColHandles);
+
+  let colDrag = null;
+  colHandles.forEach((handle, idx) => {
+    handle.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      colDrag = { idx, startX: e.clientX, startRatios: colRatios.slice(), appWidth: appEl.getBoundingClientRect().width };
+      handle.classList.add("dragging");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    });
+  });
+  window.addEventListener("mousemove", (e) => {
+    if(!colDrag) return;
+    const deltaRatio = (e.clientX - colDrag.startX) / colDrag.appWidth;
+    /* Handle 0 sits between columns [0,1]; handle 1 sits between [1,2] — only the
+       two ratios touching the dragged handle change, the third stays put, so the
+       column on the far side of the OTHER handle never moves while you drag. */
+    const a = colDrag.idx, b = colDrag.idx + 1;
+    const next = colDrag.startRatios.slice();
+    next[a] = colDrag.startRatios[a] + deltaRatio;
+    next[b] = colDrag.startRatios[b] - deltaRatio;
+    if(next[a] <= 0 || next[b] <= 0) return;
+    colRatios = next;
+    applyColRatios();
+    positionColHandles();
+    sizePreviewStage();
+  });
+  window.addEventListener("mouseup", () => {
+    if(!colDrag) return;
+    colHandles[colDrag.idx].classList.remove("dragging");
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    colDrag = null;
+    try{ localStorage.setItem(COL_STORAGE_KEY, JSON.stringify(colRatios)); }catch(e){}
+  });
 
   /* ======================================================================
      8. export
