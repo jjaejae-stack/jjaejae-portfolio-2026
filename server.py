@@ -27,7 +27,7 @@ import tempfile
 import unicodedata
 import urllib.parse
 
-from PIL import Image, ImageSequence
+from PIL import Image, ImageSequence, ImageFilter
 
 PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -225,16 +225,33 @@ def _unique_plain_path(out_dir, name_noext, ext):
     return candidate
 
 
+def _sharpen(img):
+    """Modest unsharp-mask pass, applied to every saved/cropped photo. Doesn't add
+    real detail (that would need actual super-resolution, not available here) —
+    just raises local edge contrast so existing detail reads crisper on screen,
+    which matters most for hero images that get magnified full-bleed via
+    object-fit:cover. Skips palette-mode frames (e.g. GIF), which the filter
+    doesn't apply cleanly to."""
+    if img.mode in ("RGB", "L"):
+        return img.filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
+    if img.mode == "RGBA":
+        alpha = img.split()[-1]
+        sharpened = img.convert("RGB").filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
+        sharpened.putalpha(alpha)
+        return sharpened
+    return img
+
+
 def _resize_cap(img, max_dim=MAX_IMAGE_DIM):
     """Downscale (never upscale) so neither dimension exceeds max_dim, preserving
     aspect ratio — like optimize_video's ffmpeg scale filter, but for stills. Runs
     on every freshly-uploaded photo so a full-res camera/design export never ships
     at full size just because nobody remembered to resize it first."""
     w, h = img.size
-    if max(w, h) <= max_dim:
-        return img
-    scale = max_dim / float(max(w, h))
-    return img.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+    if max(w, h) > max_dim:
+        scale = max_dim / float(max(w, h))
+        img = img.resize((max(1, round(w * scale)), max(1, round(h * scale))), Image.LANCZOS)
+    return _sharpen(img)
 
 
 def _resize_cap_frames(frames, max_dim=MAX_IMAGE_DIM):
@@ -243,11 +260,11 @@ def _resize_cap_frames(frames, max_dim=MAX_IMAGE_DIM):
     if not frames:
         return frames
     w, h = frames[0].size
-    if max(w, h) <= max_dim:
-        return frames
-    scale = max_dim / float(max(w, h))
-    size = (max(1, round(w * scale)), max(1, round(h * scale)))
-    return [f.resize(size, Image.LANCZOS) for f in frames]
+    if max(w, h) > max_dim:
+        scale = max_dim / float(max(w, h))
+        size = (max(1, round(w * scale)), max(1, round(h * scale)))
+        frames = [f.resize(size, Image.LANCZOS) for f in frames]
+    return [_sharpen(f) for f in frames]
 
 
 def crop_image(payload):
