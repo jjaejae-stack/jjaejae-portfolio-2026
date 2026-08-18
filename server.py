@@ -35,6 +35,10 @@ INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 MAX_IMAGE_DIM = 2000
+# Hero images are shown full-bleed (object-fit:cover on the whole viewport), so they
+# need more native resolution than a gallery/block photo to avoid visible upscale blur
+# on large screens — a higher cap just for that one upload slot.
+HERO_MAX_IMAGE_DIM = 3000
 # GitHub hard-rejects any pushed blob over 100MB. Target a bit under that so the
 # safety margin absorbs container/muxing overhead on the final mp4.
 MAX_VIDEO_BYTES = 95 * 1024 * 1024
@@ -1240,6 +1244,7 @@ def save_project_image(payload):
     name_noext, ext = os.path.splitext(base_name)
     if not ext:
         ext = ".jpg"
+    max_dim = HERO_MAX_IMAGE_DIM if payload.get("isHero") else MAX_IMAGE_DIM
 
     out_dir = os.path.join(BASE_DIR, folder) if folder else BASE_DIR
     os.makedirs(out_dir, exist_ok=True)
@@ -1253,14 +1258,14 @@ def save_project_image(payload):
         for frame in ImageSequence.Iterator(img):
             frames.append(frame.convert("RGBA"))
             durations.append(frame.info.get("duration", 100))
-        frames = _resize_cap_frames(frames)
+        frames = _resize_cap_frames(frames, max_dim=max_dim)
         frames[0].save(
             out_abs, save_all=True, append_images=frames[1:],
             loop=img.info.get("loop", 0), duration=durations, disposal=2,
         )
         out_w, out_h = frames[0].size
     else:
-        img = _resize_cap(img)
+        img = _resize_cap(img, max_dim=max_dim)
         save_kwargs = {}
         if ext.lower() in (".jpg", ".jpeg"):
             if img.mode not in ("RGB", "L"):

@@ -512,6 +512,23 @@
     transform:translate(-50%,-50%);
     border:0; pointer-events:none;
   }
+  /* 히어로 이미지 비파괴 크롭 — 빌더에서 저장한 crop 비율(--cw/--ch/--cx/--cy)과 그
+     비율의 종횡비(--cr)로, 원본 파일은 그대로 두고 화면에 보일 영역만 계산해서 자름.
+     .p-hero-video iframe과 같은 "고정 비율 박스로 화면을 꽉 채우는" 트릭을 재사용. */
+  .p-hero .p-hero-crop{
+    position:absolute; top:50%; left:50%;
+    width:100vw; height:calc(100vw / var(--cr, 1.778));
+    min-width:calc(100svh * var(--cr, 1.778)); min-height:100svh;
+    transform:translate(-50%,-50%);
+    overflow:hidden;
+  }
+  .p-hero .p-hero-crop img{
+    position:absolute;
+    width:calc(100% / var(--cw, 1)); height:calc(100% / var(--ch, 1));
+    left:calc(-100% * var(--cx, 0) / var(--cw, 1));
+    top:calc(-100% * var(--cy, 0) / var(--ch, 1));
+    max-width:none;
+  }
   .p-colorbox{
     position:absolute; top:var(--pmargin); left:var(--pmargin); z-index:2;
     width:fit-content;
@@ -1043,6 +1060,18 @@
   /* ---------------- helpers ---------------- */
   const u = (path) => encodeURI(path);
   const ssfSet = (n, count) => Array.from({length:count}, (_, i) => `SSF SHOP/Capture/${n}-${i+1}.jpg`);
+
+  /* 히어로 이미지의 "크롭"은 빌더에서 새 파일을 만들지 않는 비파괴 방식 — 원본 대비
+     크롭 영역을 비율(x,y,w,h, 0~1)로만 저장해두고, 실제로는 여기서 CSS로 그 영역만
+     보이게 자름. project.heroCrop이 없으면(크롭 안 한 프로젝트) 그냥 기존처럼 img 하나만
+     반환 — .p-hero img{object-fit:cover}가 알아서 화면을 꽉 채움. */
+  function heroImgTag(heroPath, crop, alt){
+    const src = u(heroPath);
+    if(!crop || !crop.w || !crop.h || !crop.naturalW || !crop.naturalH) return `<img src="${src}" alt="${alt}">`;
+    const r = (crop.w * crop.naturalW) / (crop.h * crop.naturalH);
+    const vars = `--cr:${r};--cw:${crop.w};--ch:${crop.h};--cx:${crop.x};--cy:${crop.y};`;
+    return `<div class="p-hero-crop" style="${vars}"><img src="${src}" alt="${alt}"></div>`;
+  }
 
   /* a block "image" entry is a video if it's an http(s) link (Vimeo/YouTube/direct video URL)
      or ends in a common video extension — builder.html uses the same rule when exporting. */
@@ -4465,7 +4494,7 @@
       ? `<div class="p-hero-video"><iframe src="https://www.youtube.com/embed/${project.heroYoutubeId}?autoplay=1&mute=1&loop=1&playlist=${project.heroYoutubeId}&controls=0&showinfo=0&modestbranding=1&playsinline=1" title="${project.title}" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>`
       : project.heroType === "upload"
       ? `<video src="${u(project.heroVideoFile)}" autoplay muted loop playsinline></video>`
-      : `<img src="${u(project.hero)}" alt="${project.title}">`;
+      : heroImgTag(project.hero, project.heroCrop, project.title);
 
     scrollRoot.innerHTML = `
       <div class="p-main">

@@ -2775,7 +2775,7 @@
               +       '<div class="field-row">'
               +         '<button type="button" class="btn-sm" data-action="hero-upload">새 이미지 첨부</button>'
               +         (project.heroImage ? '<button type="button" class="icon-btn crop-btn" data-action="crop-image" data-image-id="' + project.heroImage.id + '">크롭</button>' : '')
-              +         (project.heroImage && project.heroImage.original ? '<button type="button" class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + project.heroImage.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '')
+              +         (project.heroImage && (project.heroImage.original || project.heroImage.crop) ? '<button type="button" class="icon-btn revert-btn" data-action="revert-image" data-image-id="' + project.heroImage.id + '" title="크롭 전 원본으로 되돌리기">되돌리기</button>' : '')
               +         (project.heroImage ? '<button type="button" class="icon-btn" data-action="remove-hero-image">제거</button>' : '')
               +       '</div>'
               +     '</div></div>'
@@ -3091,7 +3091,7 @@
     if(project.heroType !== "image") project.heroType = "image";
     renderEditor();
     saveAndRefresh();
-    persistImageFileToDisk(project, im, file, () => getCurrentProject()?.heroImage === im);
+    persistImageFileToDisk(project, im, file, () => getCurrentProject()?.heroImage === im, true);
   }
   const heroFileInput = document.createElement("input");
   heroFileInput.type = "file"; heroFileInput.accept = "image/*";
@@ -3116,12 +3116,12 @@
      is still the thing it's supposed to be attached to before writing the
      server's result back, in case the user removed/replaced it while this was
      in flight. */
-  async function persistDataUrlToDisk(project, im, dataUrl, filename, stillWanted, revokeUrl){
+  async function persistDataUrlToDisk(project, im, dataUrl, filename, stillWanted, revokeUrl, isHero){
     try{
       const res = await fetch(GENERATE_SERVER + "/upload-project-image", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(filename) })
+        body: JSON.stringify({ dataUrl: dataUrl, folder: inferProjectFolder(project), filename: nfc(filename), isHero: !!isHero })
       });
       const data = await res.json().catch(() => ({}));
       if(!res.ok || !data.ok) return;
@@ -3136,9 +3136,9 @@
       saveAndRefresh();
     }catch(err){ /* offline/server down — local blob/dataUrl preview keeps working */ }
   }
-  function persistImageFileToDisk(project, im, file, stillWanted){
+  function persistImageFileToDisk(project, im, file, stillWanted, isHero){
     const reader = new FileReader();
-    reader.onload = () => { persistDataUrlToDisk(project, im, reader.result, file.name, stillWanted, true); };
+    reader.onload = () => { persistDataUrlToDisk(project, im, reader.result, file.name, stillWanted, true, isHero); };
     reader.readAsDataURL(file);
   }
 
@@ -3261,11 +3261,11 @@
          THIS machine — completes the job wherever the server happens to
          be running when someone actually looks at it. */
       projects.forEach(p => {
-        const tryImg = (im) => {
-          if(im && im.dataUrl) persistDataUrlToDisk(p, im, im.dataUrl, im.name || "image.jpg", () => true, false);
+        const tryImg = (im, isHero) => {
+          if(im && im.dataUrl) persistDataUrlToDisk(p, im, im.dataUrl, im.name || "image.jpg", () => true, false, isHero);
         };
-        tryImg(p.heroImage);
-        (p.blocks || []).forEach(b => (b.images || []).forEach(tryImg));
+        tryImg(p.heroImage, true);
+        (p.blocks || []).forEach(b => (b.images || []).forEach(im => tryImg(im, false)));
       });
 
       alert("가져오기 완료 (" + count + "개 프로젝트).");
@@ -3775,6 +3775,22 @@
     const natY = Math.round(cropBox.y / cropScale);
     const natW = Math.round(cropBox.w / cropScale);
     const natH = Math.round(cropBox.h / cropScale);
+
+    /* 히어로 이미지는 서버에 새 파일을 만들지 않음 — 크롭 영역을 원본 대비 비율로만
+       저장해두고, 화면에 보여줄 때(publish/preview 양쪽) CSS로 그 영역만 보이게 잘라냄.
+       원본 파일은 절대 안 건드리므로 "되돌리기"도 이 crop 값만 지우면 끝. */
+    if(found.isHero){
+      snapshot();
+      im.crop = {
+        x: natX / cropNatural.w, y: natY / cropNatural.h,
+        w: natW / cropNatural.w, h: natH / cropNatural.h,
+        naturalW: cropNatural.w, naturalH: cropNatural.h
+      };
+      renderEditor();
+      saveAndRefresh();
+      closeCropModal();
+      return;
+    }
 
     cropConfirmBtn.disabled = true;
     cropConfirmBtn.textContent = "자르는 중...";
@@ -5273,7 +5289,14 @@
     const revertImageBtn = e.target.closest('[data-action="revert-image"]');
     if(revertImageBtn){
       const found = findImage(project, revertImageBtn.dataset.imageId);
-      if(found && found.im.original){
+      if(found && found.im.crop){
+        /* non-destructive hero crop — nothing was ever written to disk, so reverting
+           is just clearing the stored crop rectangle. */
+        snapshot();
+        delete found.im.crop;
+        renderEditor();
+        saveAndRefresh();
+      } else if(found && found.im.original){
         snapshot();
         const im = found.im;
         const orig = im.original;
@@ -5566,6 +5589,8 @@
     .p-hero video{width:100%;height:100%;object-fit:cover;position:absolute;inset:0;}
     .p-hero-video{position:absolute;inset:0;}
     .p-hero-video iframe{position:absolute;top:50%;left:50%;width:100vw;height:56.25vw;min-width:177.78vh;min-height:100vh;transform:translate(-50%,-50%);border:0;pointer-events:none;}
+    .p-hero .p-hero-crop{position:absolute;top:50%;left:50%;width:100vw;height:calc(100vw / var(--cr,1.778));min-width:calc(100svh * var(--cr,1.778));min-height:100svh;transform:translate(-50%,-50%);overflow:hidden;}
+    .p-hero .p-hero-crop img{position:absolute;width:calc(100% / var(--cw,1));height:calc(100% / var(--ch,1));left:calc(-100% * var(--cx,0) / var(--cw,1));top:calc(-100% * var(--cy,0) / var(--ch,1));max-width:none;}
     .p-colorbox{position:absolute;top:var(--pmargin);left:var(--pmargin);z-index:2;width:fit-content;max-width:min(80vw,var(--box-max-w,680px));min-width:var(--box-min-w,240px);height:clamp(var(--box-h-min,300px),var(--box-h-vh,46vh),var(--box-h-max,620px));display:flex;flex-direction:column;justify-content:flex-start;padding:56px 48px;border:3px solid #111;box-shadow:10px 10px 0 #111;color:#fff3ef;}
     .p-colorbox h1{font-size:calc(clamp(2.2rem,4.4vw,4.6rem) * var(--title-font-scale,1));font-weight:800;letter-spacing:-.02em;line-height:1.02;word-break:keep-all;white-space:pre-wrap;}
     .p-social{position:absolute;right:var(--pmargin);bottom:var(--pmargin);z-index:20;display:flex;flex-direction:column;gap:12px;padding:14px;border:3px solid #111;box-shadow:8px 8px 0 #111;color:#fff3ef;}
@@ -6095,6 +6120,13 @@
     }
     return field === "label" ? block.label : field === "heading" ? (block.heading || "") : (block.paragraphs || []);
   }
+  /* index.html의 heroImgTag()와 동일한 로직 — 비파괴 히어로 크롭을 프리뷰에도 그대로 보여줌. */
+  function heroImgTagPreview(url, crop){
+    if(!crop || !crop.w || !crop.h || !crop.naturalW || !crop.naturalH) return '<img src="' + url + '" alt="">';
+    const r = (crop.w * crop.naturalW) / (crop.h * crop.naturalH);
+    const vars = '--cr:' + r + ';--cw:' + crop.w + ';--ch:' + crop.h + ';--cx:' + crop.x + ';--cy:' + crop.y + ';';
+    return '<div class="p-hero-crop" style="' + vars + '"><img src="' + url + '" alt=""></div>';
+  }
   function buildPreviewBodyHTML(project){
     const imgs = allImages(project);
     const hero = project.heroImage || imgs[0];
@@ -6104,7 +6136,7 @@
       ? '<div class="p-hero-video"><iframe src="https://www.youtube.com/embed/' + encodeURIComponent(project.heroYoutubeId) + '?autoplay=1&mute=1&loop=1&playlist=' + encodeURIComponent(project.heroYoutubeId) + '&controls=0&showinfo=0&modestbranding=1&playsinline=1" allow="autoplay; fullscreen; picture-in-picture"></iframe></div>'
       : (project.heroType === "upload" && project.heroVideoFile)
       ? '<video src="' + project.heroVideoFile + '" autoplay muted loop playsinline></video>'
-      : (hero ? '<img src="' + hero.url + '" alt="">' : "");
+      : (hero ? heroImgTagPreview(hero.url, hero === project.heroImage ? hero.crop : null) : "");
 
     const blocksHTML = project.blocks.map((block, bi) => {
       const labelText = previewBlockText(block, "label");
@@ -6492,6 +6524,7 @@
     if(project.client) L.push("  client:" + JSON.stringify(project.client) + ",");
     if(project.agency) L.push("  agency:" + JSON.stringify(project.agency) + ",");
     L.push("  hero:" + JSON.stringify(heroPath) + ",");
+    if(project.heroImage && project.heroImage.crop) L.push("  heroCrop:" + JSON.stringify(project.heroImage.crop) + ",");
     L.push("  heroType:" + JSON.stringify(project.heroType||"image") + ",");
     if(project.heroType === "video") L.push("  heroVideoId:" + JSON.stringify(project.heroVideoId||"") + ",");
     if(project.heroType === "youtube") L.push("  heroYoutubeId:" + JSON.stringify(project.heroYoutubeId||"") + ",");
