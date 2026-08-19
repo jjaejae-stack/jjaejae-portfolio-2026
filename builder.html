@@ -1458,6 +1458,10 @@
      자주(디바운스 120ms) 다시 그리므로, 매번 "en"으로 리셋되면 토글해서 확인하는 도중에도
      계속 영어로 되돌아가 버림. 여기 상태만 별도로 들고 refreshPreview()가 참조. */
   let previewLang = "en";
+  /* INFO 탭 프리뷰용 별도 언어 상태 — previewLang(프로젝트 프리뷰)과 공유하지 않는 이유는
+     실제 사이트에서도 projectLang과 (앞으로 추가될) infoLang이 서로 독립적인 세션 상태이기
+     때문 — 프로젝트 탭에서 KOR로 보다가 INFO 탭으로 넘어가도 INFO는 항상 자기 상태를 따로 기억함. */
+  let previewInfoLang = "en";
   /* collapsible sections (e.g. typography) re-render their whole HTML on every
      edit, which would otherwise reset them to collapsed each time — track open
      state here instead of relying on the DOM class surviving a re-render. */
@@ -1896,14 +1900,15 @@
   function defaultInfo(){
     return {
       lead: "안녕하세요!\n아트디렉터 최재훈입니다.",
+      leadKo: "",
       paragraphs: [
-        { id: uid(), type:"body", text:"jjaejae(째재)\n이것은 어릴적 친구들이 내 이름을 부르던 방식입니다.\n그들은 '최재'라고 부르기 시작해 어느새 '째재'로 불렀습니다." },
-        { id: uid(), type:"tagline", text:"A RAW NAME FOR SHARP IDEAS" },
-        { id: uid(), type:"body", text:"이름은 아주 즉흥적이게, 날 것으로 태어났지만\n정교한 크리에이티브와 결과물을 만든다." },
-        { id: uid(), type:"body", text:"jjae / jae — 비슷한 음절의 반복\n새로운 크리에이티브는 전에 없던 것이 아니라\n익숙한 것을 다시 보게 만드는 것이라 믿는다." },
-        { id: uid(), type:"body", text:"그것이 곧 새로운 것이 되고, 보고싶은 콘텐츠가 되며,\n사람들이 다시 보게 만든다." },
-        { id: uid(), type:"tagline", text:"LOOK AGAIN" },
-        { id: uid(), type:"body", text:"사람들이 다시 한번 보게 만드는 아이디어를 낸다.\n브랜드와 브랜드, 브랜드와 사람 사이를 새로운 관점으로 본다." }
+        { id: uid(), type:"body", text:"jjaejae(째재)\n이것은 어릴적 친구들이 내 이름을 부르던 방식입니다.\n그들은 '최재'라고 부르기 시작해 어느새 '째재'로 불렀습니다.", textKo:"" },
+        { id: uid(), type:"tagline", text:"A RAW NAME FOR SHARP IDEAS", textKo:"" },
+        { id: uid(), type:"body", text:"이름은 아주 즉흥적이게, 날 것으로 태어났지만\n정교한 크리에이티브와 결과물을 만든다.", textKo:"" },
+        { id: uid(), type:"body", text:"jjae / jae — 비슷한 음절의 반복\n새로운 크리에이티브는 전에 없던 것이 아니라\n익숙한 것을 다시 보게 만드는 것이라 믿는다.", textKo:"" },
+        { id: uid(), type:"body", text:"그것이 곧 새로운 것이 되고, 보고싶은 콘텐츠가 되며,\n사람들이 다시 보게 만든다.", textKo:"" },
+        { id: uid(), type:"tagline", text:"LOOK AGAIN", textKo:"" },
+        { id: uid(), type:"body", text:"사람들이 다시 한번 보게 만드는 아이디어를 낸다.\n브랜드와 브랜드, 브랜드와 사람 사이를 새로운 관점으로 본다.", textKo:"" }
       ],
       links: [
         { label:"Instagram ↗", url:"https://www.instagram.com/jjaejae__/" },
@@ -1922,7 +1927,8 @@
       }
     }catch(e){}
     if(!data) data = defaultInfo();
-    data.paragraphs.forEach(p => { if(!p.id) p.id = uid(); });
+    if(data.leadKo == null) data.leadKo = "";
+    data.paragraphs.forEach(p => { if(!p.id) p.id = uid(); if(p.textKo == null) p.textKo = ""; });
     return data;
   }
 
@@ -1945,11 +1951,14 @@
   function saveInfoAndRefresh(){ scheduleSaveInfo(); refreshPreview(); }
 
   function handleInfoField(el){
-    if(el.hasAttribute("data-info-field") && el.dataset.infoField === "lead"){
-      infoData.lead = el.value;
+    if(el.hasAttribute("data-info-field") && (el.dataset.infoField === "lead" || el.dataset.infoField === "leadKo")){
+      infoData[el.dataset.infoField] = el.value;
     } else if(el.hasAttribute("data-info-paragraph-text")){
       const p = infoData.paragraphs.find(x => x.id === el.dataset.paraId);
       if(p) p.text = el.value;
+    } else if(el.hasAttribute("data-info-paragraph-text-ko")){
+      const p = infoData.paragraphs.find(x => x.id === el.dataset.paraId);
+      if(p) p.textKo = el.value;
     } else if(el.hasAttribute("data-info-link-field")){
       const idx = parseInt(el.dataset.index, 10);
       const field = el.dataset.infoLinkField;
@@ -2174,12 +2183,13 @@
       +     '<button type="button" data-value="body"' + (p.type!=="tagline"?' class="active"':'') + '>본문</button>'
       +     '<button type="button" data-value="tagline"' + (p.type==="tagline"?' class="active"':'') + '>태그라인</button>'
       +   '</div>'
-      +   '<button class="icon-btn" data-action="translate-info-para-ko-en" data-para-id="' + p.id + '" title="이 문단만 한국어 → 영어로 번역">KR → EN</button>'
-      +   '<button class="icon-btn" data-action="translate-info-para-en-ko" data-para-id="' + p.id + '" title="이 문단만 영어 → 한국어로 번역">EN → KR</button>'
+      +   '<button class="icon-btn" data-action="translate-info-para-en-ko" data-para-id="' + p.id + '" title="영어 본문을 한국어로 번역해 아래 한국어 칸에 채웁니다">EN → KR</button>'
+      +   '<button class="icon-btn" data-action="translate-info-para-ko-en" data-para-id="' + p.id + '" title="한국어 칸을 영어로 번역해 위 영어 칸에 채웁니다">KR → EN</button>'
       +   '<button class="icon-btn" data-toggle="' + styleId + '">스타일</button>'
       +   '<button class="icon-btn" data-action="remove-info-paragraph" data-para-id="' + p.id + '">삭제</button>'
       + '</div>'
-      + '<textarea class="field" data-info-paragraph-text data-para-id="' + p.id + '" placeholder="줄바꿈 = 줄바꿈으로 그대로 표시됩니다">' + escapeHTML(p.text||"") + '</textarea>'
+      + '<textarea class="field" data-info-paragraph-text data-para-id="' + p.id + '" placeholder="영어 (기본으로 표시됨) — 줄바꿈 그대로 유지">' + escapeHTML(p.text||"") + '</textarea>'
+      + '<textarea class="field" data-info-paragraph-text-ko data-para-id="' + p.id + '" style="margin-top:6px;" placeholder="한국어 (KOR 토글 시 표시 — 비워두면 자동으로 영어가 표시됩니다)">' + escapeHTML(p.textKo||"") + '</textarea>'
       + '<div class="section' + (styleOpen ? '' : ' collapsed') + '" id="' + styleId + '" style="margin-top:10px;">'
       +   '<div class="section-body">'
       +     infoStyleFieldsHTML("para", p.id, styleOpts)
@@ -2222,13 +2232,15 @@
       + '<p id="info-publish-status" style="display:none; font-size:12px; color:var(--muted); margin:-10px 0 14px;"></p>'
       + '<div class="field-group">'
       +   '<label class="field-label" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">'
-      +     '<span>인사말 (첫 문단, 줄바꿈 그대로 유지)</span>'
+      +     '<span>인사말 (첫 문단, 줄바꿈 그대로 유지) — 영어 (기본으로 표시됨)</span>'
       +     '<span>'
-      +       '<button class="icon-btn" id="translate-info-lead-ko-en-btn" data-action="translate-info-lead-ko-en" title="인사말만 한국어 → 영어로 번역">KR → EN</button>'
-      +       '<button class="icon-btn" id="translate-info-lead-en-ko-btn" data-action="translate-info-lead-en-ko" title="인사말만 영어 → 한국어로 번역">EN → KR</button>'
+      +       '<button class="icon-btn" id="translate-info-lead-en-ko-btn" data-action="translate-info-lead-en-ko" title="영어 인사말을 한국어로 번역해 아래 한국어 칸에 채웁니다">EN → KR</button>'
+      +       '<button class="icon-btn" id="translate-info-lead-ko-en-btn" data-action="translate-info-lead-ko-en" title="한국어 칸을 영어로 번역해 위 영어 칸에 채웁니다">KR → EN</button>'
       +     '</span>'
       +   '</label>'
       +   '<textarea class="field" data-info-field="lead">' + escapeHTML(infoData.lead||"") + '</textarea>'
+      +   '<label class="field-label" style="margin-top:10px;">한국어 (KOR 토글 시 표시 — 비워두면 자동으로 영어가 표시됩니다)</label>'
+      +   '<textarea class="field" data-info-field="leadKo">' + escapeHTML(infoData.leadKo||"") + '</textarea>'
       + '</div>'
       + '<div class="section' + (leadStyleOpen ? '' : ' collapsed') + '" id="info-lead-style">'
       +   '<div class="section-head" data-toggle="info-lead-style"><span><span class="chevron">▾</span>인사말 스타일</span></div>'
@@ -2962,7 +2974,7 @@
   });
   editorEl.addEventListener("input", (e) => {
     if(mode === "info"){
-      const infoEl = e.target.closest("[data-info-field], [data-info-paragraph-text], [data-info-link-field], [data-info-para-style], [data-info-lead-style]");
+      const infoEl = e.target.closest("[data-info-field], [data-info-paragraph-text], [data-info-paragraph-text-ko], [data-info-link-field], [data-info-para-style], [data-info-lead-style]");
       if(infoEl) handleInfoField(infoEl);
       return;
     }
@@ -5123,12 +5135,21 @@
      보낼 땐 paragraphs를 빈 배열로, 문단 하나만 보낼 땐 lead를 빈 문자열로 보내는 식으로
      같은 엔드포인트를 그대로 재사용함(서버 쪽 스키마/엔드포인트 추가 없이 해결됨). 문단의
      id/type/스타일 필드는 안 건드리고 text만 교체. undo는 GENERATE 전용 1단계 슬롯
-     (infoGenerateUndo)과는 별개라 지원 안 함(GENERATE와 동일한 기존 한계). */
+     (infoGenerateUndo)과는 별개라 지원 안 함(GENERATE와 동일한 기존 한계).
+     lead/leadKo, text/textKo 두 칸으로 나뉜 뒤로는 번역이 원본 칸을 덮어쓰지 않고
+     "다른 쪽" 칸에 채워넣음 — en-ko는 lead를 읽어 leadKo에, ko-en은 leadKo를 읽어
+     lead에 쓰는 식이라 두 언어를 항상 동시에 보관/편집할 수 있음(예전엔 번역이 곧
+     원문을 지우는 1회성 동작이었음). */
   async function runInfoLeadTranslate(direction){
     const btnId = direction === "ko-en" ? "translate-info-lead-ko-en-btn" : "translate-info-lead-en-ko-btn";
     const btn = document.getElementById(btnId);
     const status = document.getElementById("info-generate-status");
     const origLabel = btn ? btn.textContent : "";
+    const sourceText = direction === "ko-en" ? (infoData.leadKo || "") : (infoData.lead || "");
+    if(!sourceText.trim()){
+      alert(direction === "ko-en" ? "한국어 칸이 비어있습니다." : "영어 칸이 비어있습니다.");
+      return;
+    }
     if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
     if(status){ status.style.display = "block"; status.textContent = "인사말을 번역하는 중..."; }
 
@@ -5136,7 +5157,7 @@
       const res = await fetch(GENERATE_SERVER + "/translate-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction: direction, lead: infoData.lead || "", paragraphs: [] })
+        body: JSON.stringify({ direction: direction, lead: sourceText, paragraphs: [] })
       });
       if(!res.ok){
         const errBody = await res.json().catch(() => ({}));
@@ -5145,7 +5166,7 @@
       const data = await res.json();
       if(data.lead == null) throw new Error("번역 결과가 비어있습니다.");
 
-      infoData.lead = data.lead;
+      if(direction === "ko-en") infoData.lead = data.lead; else infoData.leadKo = data.lead;
       renderEditor();
       saveInfoAndRefresh();
       const status2 = document.getElementById("info-generate-status");
@@ -5168,6 +5189,11 @@
     if(!para) return;
     const status = document.getElementById("info-generate-status");
     const origLabel = btn ? btn.textContent : "";
+    const sourceText = direction === "ko-en" ? (para.textKo || "") : (para.text || "");
+    if(!sourceText.trim()){
+      alert(direction === "ko-en" ? "한국어 칸이 비어있습니다." : "영어 칸이 비어있습니다.");
+      return;
+    }
     if(btn){ btn.disabled = true; btn.textContent = "번역 중..."; }
     if(status){ status.style.display = "block"; status.textContent = "이 문단을 번역하는 중..."; }
 
@@ -5175,7 +5201,7 @@
       const res = await fetch(GENERATE_SERVER + "/translate-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ direction: direction, lead: "", paragraphs: [para.text || ""] })
+        body: JSON.stringify({ direction: direction, lead: "", paragraphs: [sourceText] })
       });
       if(!res.ok){
         const errBody = await res.json().catch(() => ({}));
@@ -5185,7 +5211,7 @@
       const translated = Array.isArray(data.paragraphs) ? data.paragraphs[0] : null;
       if(translated == null) throw new Error("번역 결과가 비어있습니다.");
 
-      para.text = translated;
+      if(direction === "ko-en") para.text = translated; else para.textKo = translated;
       renderEditor();
       saveInfoAndRefresh();
       const status2 = document.getElementById("info-generate-status");
@@ -6261,13 +6287,29 @@
     .info-page-preview .info-tagline{font-family:var(--font-thin); margin-top:26px; font-size:clamp(1rem, 1.7vw, 1.2rem); font-weight:800; color:#15171c;}
     .info-page-preview .links{margin-top:44px; display:flex; gap:26px; font-size:15px; font-weight:700;}
     .info-page-preview .links a{border-bottom:2px solid rgba(17,17,17,.5); padding-bottom:2px;}
+    .lang-toggle{display:flex; align-items:center; gap:4px; width:fit-content; margin:0 0 28px; padding:4px; border-radius:999px; background:rgba(17,17,17,.05); border:1px solid rgba(17,17,17,.14);}
+    .lang-toggle-btn{font-size:11px; letter-spacing:.04em; padding:5px 12px; border-radius:999px; color:#78756c; transition:background .2s, color .2s;}
+    .lang-toggle-btn.active{background:#111111; color:#f3f2ee;}
   `;
 
   function textToBrHTML(t){ return escapeHTML(t||"").replace(/\n/g, "<br>"); }
 
+  /* index.html의 blockText()/빌더 프로젝트 프리뷰의 previewBlockText()와 동일한 규칙 —
+     previewInfoLang이 "ko"인데 해당 필드의 한글 버전이 비어있으면 영어로 폴백. */
+  function infoPreviewText(en, ko){
+    return (previewInfoLang === "ko" && ko && ko.trim()) ? ko : (en || "");
+  }
+
   function buildInfoPreviewBodyHTML(info){
+    const hasKorean = !!(info.leadKo && info.leadKo.trim()) || (info.paragraphs||[]).some(p => p.textKo && p.textKo.trim());
+    const langToggleHTML = hasKorean ? (
+      '<div class="lang-toggle">'
+      + '<button type="button" class="lang-toggle-btn' + (previewInfoLang === "en" ? " active" : "") + '" data-lang="en">ENG</button>'
+      + '<button type="button" class="lang-toggle-btn' + (previewInfoLang === "ko" ? " active" : "") + '" data-lang="ko">KOR</button>'
+      + '</div>'
+    ) : "";
     const paras = (info.paragraphs||[]).map(p =>
-      '<p class="info-' + (p.type==="tagline"?"tagline":"body") + '"' + infoParagraphStyleAttr(p) + '>' + textToBrHTML(p.text) + '</p>'
+      '<p class="info-' + (p.type==="tagline"?"tagline":"body") + '"' + infoParagraphStyleAttr(p) + '>' + textToBrHTML(infoPreviewText(p.text, p.textKo)) + '</p>'
     ).join("");
     const links = (info.links||[]).map(l =>
       '<a href="' + escapeHTML(l.url||"#") + '">' + escapeHTML(l.label||"") + '</a>'
@@ -6283,12 +6325,24 @@
     return '<div class="info-page-preview">'
       + '<div class="info-bg" style="background-image:url(\'' + bgUrl + '\')"></div><div class="info-grain"></div>'
       + '<div class="info-inner"><div class="info-content">'
-      +   '<p class="info-lead"' + infoLeadStyleAttr(info) + '>' + textToBrHTML(info.lead) + '</p>'
+      +   langToggleHTML
+      +   '<p class="info-lead"' + infoLeadStyleAttr(info) + '>' + textToBrHTML(infoPreviewText(info.lead, info.leadKo)) + '</p>'
       +   paras
       +   '<div class="links">' + links + '</div>'
       + '</div></div>'
       + '</div>';
   }
+
+  /* INFO 프리뷰 iframe 안에 심는 아주 작은 런타임 — 프로젝트 프리뷰의 PREVIEW_RUNTIME_JS
+     끝부분(EN/KOR 클릭 → postMessage)과 똑같은 패턴이지만, INFO 프리뷰는 갤러리 등
+     복잡한 런타임이 필요 없어서 이 토글 리스너 하나만 별도로 둠. */
+  const INFO_PREVIEW_RUNTIME_JS = [
+    'document.addEventListener("click", function(e){',
+    '  var langBtn = e.target.closest(".lang-toggle-btn");',
+    '  if(!langBtn) return;',
+    '  parent.postMessage({ type: "pf-preview-lang", lang: langBtn.dataset.lang }, "*");',
+    '});'
+  ].join("\n");
 
   const previewFrame = document.getElementById("preview-frame");
   const EMPTY_DOC = '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body style="display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif;color:#999;">프로젝트를 선택하세요</body></html>';
@@ -6299,7 +6353,8 @@
      바뀌는 구조라 이 편이 더 안전함). */
   window.addEventListener("message", (e) => {
     if(!e.data || e.data.type !== "pf-preview-lang") return;
-    previewLang = e.data.lang === "ko" ? "ko" : "en";
+    if(mode === "info") previewInfoLang = e.data.lang === "ko" ? "ko" : "en";
+    else previewLang = e.data.lang === "ko" ? "ko" : "en";
     refreshPreview();
   });
 
@@ -6371,7 +6426,7 @@
       const infoDoc = '<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">'
         + '<meta name="viewport" content="width=device-width, initial-scale=1.0">'
         + "<style>" + INFO_PREVIEW_CSS + "</style></head><body>"
-        + wrapDesktopSim(buildInfoPreviewBodyHTML(infoData))
+        + wrapDesktopSim(buildInfoPreviewBodyHTML(infoData) + "<script>" + INFO_PREVIEW_RUNTIME_JS + "<" + "/script>")
         + "</body></html>";
       setPreviewSrcdoc("info", infoDoc);
       return;

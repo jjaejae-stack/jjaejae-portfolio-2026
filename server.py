@@ -1111,6 +1111,14 @@ def _info_text_to_html(text):
     return html_lib.escape(text or "", quote=False).replace("\n", "<br>")
 
 
+def _info_text_to_attr(text):
+    """Same as _info_text_to_html but quote=True (safe to sit inside a "..."
+    data-en/data-ko attribute) — used to stash both language variants on each
+    <p> so index.html's applyInfoLang() can swap innerHTML client-side without
+    a full re-render."""
+    return html_lib.escape(text or "", quote=True).replace("\n", "<br>")
+
+
 INFO_PARA_FONT_VARS = {"thin": "var(--font-thin)", "medium": "var(--font-medium)", "bold": "var(--font-bold)"}
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
@@ -1167,17 +1175,34 @@ def render_info_content_html(data):
     """Render builder.html's INFO edit form data back into the exact markup
     shape index.html's #info-view expects (see its `.info-content` block)."""
     lead = data.get("lead") or ""
+    lead_ko = data.get("leadKo") or ""
     paragraphs = data.get("paragraphs") or []
     links = data.get("links") or []
 
-    parts = ['<p class="info-lead"%s>%s</p>' % (_info_lead_style_attr(data), _info_text_to_html(lead))]
+    # Only bother emitting the EN/KO toggle + data-en/data-ko attrs at all once
+    # at least one field actually has a Korean translation — otherwise every
+    # <p> would carry a dead data-ko="" attribute for no visible benefit.
+    has_ko = bool(lead_ko.strip()) or any((p.get("textKo") or "").strip() for p in paragraphs)
+
+    parts = []
+    if has_ko:
+        parts.append(
+            '<div class="lang-toggle">\n'
+            '          <button type="button" class="lang-toggle-btn active" data-lang="en">ENG</button>\n'
+            '          <button type="button" class="lang-toggle-btn" data-lang="ko">KOR</button>\n'
+            '        </div>'
+        )
+    lead_lang_attr = ' data-en="%s" data-ko="%s"' % (_info_text_to_attr(lead), _info_text_to_attr(lead_ko)) if has_ko else ""
+    parts.append('<p class="info-lead"%s%s>%s</p>' % (_info_lead_style_attr(data), lead_lang_attr, _info_text_to_html(lead)))
     for p in paragraphs:
         text = (p.get("text") or "").strip()
         if not text:
             continue
+        text_ko = p.get("textKo") or ""
         ptype = "tagline" if p.get("type") == "tagline" else "body"
+        lang_attr = ' data-en="%s" data-ko="%s"' % (_info_text_to_attr(text), _info_text_to_attr(text_ko)) if has_ko else ""
         parts.append(
-            '<p class="info-%s"%s>%s</p>' % (ptype, _info_paragraph_style_attr(p), _info_text_to_html(text))
+            '<p class="info-%s"%s%s>%s</p>' % (ptype, _info_paragraph_style_attr(p), lang_attr, _info_text_to_html(text))
         )
 
     link_parts = []

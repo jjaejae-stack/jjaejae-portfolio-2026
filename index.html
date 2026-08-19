@@ -5328,6 +5328,23 @@
   document.addEventListener("keydown", (e) => { if(e.key === "Escape" && !lightbox.classList.contains("open")) goHome(); });
 
   const infoView = document.getElementById("info-view");
+  /* INFO 페이지 EN/한글 토글 — 프로젝트 상세페이지의 projectLang(:4124 부근)과 같은 패턴.
+     빌더에서 한글 번역을 넣고 Publish한 문단만 data-ko를 갖고 있고(비어있으면 폴백으로
+     data-en 유지), 토글 버튼 자체도 한글 콘텐츠가 하나도 없으면 publish_info()가 아예
+     렌더링하지 않으므로 이 리스너는 그런 경우엔 그냥 아무 버튼도 못 찾고 조용히 넘어감. */
+  let infoLang = "en";
+  function applyInfoLang(lang){
+    infoLang = lang;
+    infoView.querySelectorAll(".lang-toggle-btn").forEach(b => b.classList.toggle("active", b.dataset.lang === lang));
+    infoView.querySelectorAll("[data-en]").forEach(el => {
+      el.innerHTML = lang === "ko" ? (el.dataset.ko || el.dataset.en) : el.dataset.en;
+    });
+  }
+  infoView.addEventListener("click", (e) => {
+    const langBtn = e.target.closest(".lang-toggle-btn");
+    if(!langBtn) return;
+    applyInfoLang(langBtn.dataset.lang);
+  });
   function openInfo(){
     infoView.classList.add("open");
     document.body.classList.add("info-open");
