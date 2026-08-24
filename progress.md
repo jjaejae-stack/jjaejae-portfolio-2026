@@ -1,6 +1,18 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-08-18
+최종 업데이트: 2026-08-19
+
+## 세션 요약 — Info 페이지 EN/KOR 언어 토글 추가 (2026-08-19)
+
+"Info 페이지도 한글/영문 버튼으로 왔다갔다 할 수 있게 해줘" 요청으로, 이미 존재하던 프로젝트 상세페이지의 EN/KOR 토글(`projectLang`/`blockText`/`applyProjectLang`, `index.html`)과 똑같은 패턴을 Info 페이지에도 이식.
+
+- **빌더(`builder.html`)**: `infoData`에 `leadKo`(인사말)와 각 문단의 `textKo` 필드 추가. 편집 패널에 영어 칸 아래 한국어 칸이 새로 생기고, 기존 "KR→EN"/"EN→KR" 번역 버튼은 더 이상 원문을 지우지 않고 **반대쪽 칸에** 번역 결과를 채워 넣도록 변경(이전엔 번역 = 원문을 영구히 덮어쓰는 1회성 동작이었음). 미리보기(iframe)에도 한글이 하나라도 있으면 ENG/KOR 토글이 뜨고, 클릭하면 `postMessage({type:"pf-preview-lang"})`로 부모(빌더 메인 페이지)에 알려 `previewInfoLang`을 바꾸고 다시 렌더링(프로젝트 프리뷰의 `previewLang` 패턴과 동일, 별도 상태로 분리).
+- **서버(`server.py`)**: `render_info_content_html()`이 `leadKo`/`textKo` 중 하나라도 채워져 있으면(`has_ko`) 각 `<p>`에 `data-en`/`data-ko` 속성(둘 다 HTML 이스케이프 + `\n`→`<br>`)을 추가하고, `info-content` 맨 위에 `<div class="lang-toggle">` 버튼 마크업을 함께 렌더링. 한글이 전혀 없으면 예전과 100% 동일한 마크업(속성도, 토글도 없음) — 기존 프로젝트들에 아무 영향 없음.
+- **실사이트(`index.html`)**: `applyInfoLang(lang)` 함수가 `#info-view [data-en]` 요소들의 innerHTML을 `data-en`/`data-ko` 중 선택해서 즉시 교체(한글 없는 필드는 `data-en`으로 자연 폴백). `#info-view`에 위임된 클릭 리스너로 `.lang-toggle-btn` 클릭을 받음.
+
+**트러블슈팅 — 빌더 PUBLISH가 "성공"했는데 실제로는 아무것도 안 바뀌었던 사건**: 사용자가 Info 편집 화면에서 한글 내용을 입력하고 PUBLISH를 눌렀는데도 git에 새 커밋이 전혀 안 생기는 문제 발생. `git_commit_and_push()`(`server.py`)는 `git status --porcelain`이 비어있으면(=diff 없음) 에러 없이 조용히 `{"committed":false, "note":"변경사항이 없습니다..."}`를 200 OK로 반환하는데, 버튼은 이 경우에도 "PUBLISHED ✓"로 바뀌어서 사용자 입장에선 성공처럼 보임 — 실패를 알아차리기 어려운 UX. 브라우저 콘솔에서 `localStorage.getItem('pf-builder-info')`를 직접 꺼내보니 `leadKo`/`textKo` 데이터 자체는 정상적으로 다 들어있었음(코드 로직 문제 아님) — 즉 fetch("/publish-info")가 서버까지 도달은 했는데 뭔가의 이유로 결과적으로 diff가 없었거나, 혹은 요청 자체가 씹혔거나 원인 불명. **근본 원인은 못 찾음** — 임시 조치로 사용자가 붙여넣어준 localStorage 값을 `server.publish_info()`에 직접 넣어 수동 커밋/푸시로 우회 해결. 다음에 Info PUBLISH가 또 "성공했는데 안 보이면" 이 패턴부터 의심할 것.
+
+**부수적으로 확인된 배포 이슈**: 이번 세션엔 Vercel 프로덕션 빌드가 평소(~3분)보다 훨씬 오래 걸림(한 번은 11분, 한 번은 15분 넘게 Queued/Building에 머묾) — Hobby 플랜 동시 빌드 제한 때문으로 추정되나 미확인. `vercel --prod`로 로컬에서 강제 배포를 시도했더니 리포 전체(1.9GB, 영상 파일 포함)를 업로드하려고 해서 오히려 더 느리고 비효율적이었음 — **다음엔 이 방법 쓰지 말고 그냥 git push 기반 자동 배포가 끝날 때까지 기다릴 것**(`vercel ls --prod`로 상태만 확인).
 
 ## 세션 요약 — 갤러리 클릭-롤링+확대버튼 재설계, Neo QLED 깨진 이미지, 빌더 흰색 테마 리디자인(레퍼런스 사이트) + 좌측 리스트 넘버링, 미리보기 데스크탑 시뮬레이션, 3탭 가로폭 리사이즈 (2026-08-16~18)
 
