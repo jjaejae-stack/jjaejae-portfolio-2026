@@ -2,6 +2,18 @@
 
 최종 업데이트: 2026-08-25
 
+## 세션 요약 — builder.html 좌상단 워드마크 로고 (2026-08-25)
+
+builder.html 좌상단 "jjaejae Builder" 텍스트를 사용자 제공 워드마크 이미지로 교체.
+
+- 소스 `~/Desktop/jjaejae/jjaejae bulider title.png`(파일명 오타 "bulider" 그대로) → Pillow로 배경 제거(흰 글자, `alpha=밝기`) + autocrop + height 80 다운스케일 → **`jjaejae-builder-logo.png`**(builder.html 옆, 298×80, 13KB).
+- 마크업: `<div class="brand">jjaejae <span>Builder</span></div>`(line ~610) → `<div class="brand"><img class="brand-logo" src="jjaejae-builder-logo.png" alt="jjaejae builder"></div>`.
+- **테마별 색상**: 흰색 글자 PNG를 `<img>`로 넣고 `filter`로 제어 — 기본(모노/흰색)·`data-theme="blue"`(하늘색)은 `filter:invert(1)`(검게), `data-theme="dark"`는 `filter:none`(흰색 그대로). (처음엔 CSS `mask`+`var(--fg)`로 했으나 그 환경에서 렌더가 안 떠서 `<img>`+filter로 교체 — 이게 확실히 보임.)
+- **크기**: 최종 height **35.88px**(20px→23px(+15%)→27.6px(+20%)→35.88px(+30%), 반복 요청 누적).
+- **좌측 정렬**: 아래 `#sidebar`(탭들)가 `padding:18px`라, 토픽바도 `padding:0 20px 0 18px` + `.brand`의 margin-left 제거 → 로고 왼쪽이 사이드바 탭 왼쪽과 18px로 일직선.
+- 새 파일 `jjaejae-builder-logo.png`는 다음 **Publish**(`git add -A`) 때 같이 커밋·배포됨. index.html(라이브 사이트) 무관 — 빌더 편집기 자체 chrome이라 미러 불필요.
+- 확인: builder 탭 새로고침 필요(열려있던 탭은 옛 CSS).
+
 ## 세션 요약 — git 히스토리 정리(3.5GB→2.0GB) + 복원 실수 수정 (2026-08-25)
 
 **1) git 히스토리 대청소**

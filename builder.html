@@ -44,10 +44,16 @@
 
   #topbar{
     height:52px; display:flex; align-items:center; justify-content:space-between;
-    padding:0 20px; border-bottom:1px solid var(--line);
+    padding:0 20px 0 18px; border-bottom:1px solid var(--line);
   }
-  #topbar .brand{font-weight:800; letter-spacing:-.01em;}
+  #topbar .brand{font-weight:800; letter-spacing:-.01em; display:flex; align-items:center;}
   #topbar .brand span{color:var(--accent);}
+  /* Wordmark logo replaces the "jjaejae Builder" text. The PNG is white glyphs
+     on transparent; a plain <img> guarantees it renders (unlike a CSS mask,
+     which failed to show here). Color per theme via filter: mono(white)/blue
+     themes invert white->black for contrast; dark theme keeps it white. */
+  #topbar .brand-logo{ display:block; height:35.88px; width:auto; filter:invert(1); }
+  body[data-theme="dark"] #topbar .brand-logo{ filter:none; }
   #topbar a{font-size:12px; color:var(--muted); border-bottom:1px solid var(--line-strong); padding-bottom:2px;}
   #topbar a:hover{color:var(--fg); border-color:var(--fg);}
 
@@ -598,7 +604,7 @@
 <body>
 
   <div id="topbar">
-    <div class="brand">jjaejae <span>Builder</span></div>
+    <div class="brand"><img class="brand-logo" src="jjaejae-builder-logo.png" alt="jjaejae builder"></div>
     <a href="index.html" target="_blank" rel="noopener">사이트 보기 ↗</a>
   </div>
 
