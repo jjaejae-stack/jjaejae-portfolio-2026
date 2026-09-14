@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 import unicodedata
 import urllib.parse
 
@@ -1323,8 +1324,31 @@ def save_project_image(payload):
     return {"relPath": out_rel, "width": out_w, "height": out_h}
 
 
-def _run_git(args):
-    return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True)
+def _run_git(args, timeout=30):
+    return subprocess.run(["git"] + args, cwd=BASE_DIR, capture_output=True, text=True, timeout=timeout)
+
+
+# GitHub pushes occasionally hit a transient network blip on this network (same class
+# of flakiness seen against Vercel's API — see progress.md) — a bare `git push` with no
+# timeout can also hang indefinitely on a stalled connection. Retry a few times with a
+# short backoff before surfacing a failure to the Publish button; only report failure if
+# every attempt actually fails.
+PUSH_RETRIES = 3
+PUSH_RETRY_DELAY_SEC = 3
+
+
+def _push_with_retry():
+    last = None
+    for attempt in range(1, PUSH_RETRIES + 1):
+        try:
+            last = _run_git(["push"], timeout=60)
+        except subprocess.TimeoutExpired:
+            last = None
+        if last is not None and last.returncode == 0:
+            return last
+        if attempt < PUSH_RETRIES:
+            time.sleep(PUSH_RETRY_DELAY_SEC)
+    return last
 
 
 def git_commit_and_push(title):
@@ -1340,10 +1364,12 @@ def git_commit_and_push(title):
     commit = _run_git(["commit", "-m", "Publish: %s" % title])
     if commit.returncode != 0:
         raise RuntimeError(commit.stderr[:800])
-    push = _run_git(["push"])
-    if push.returncode != 0:
+    push = _push_with_retry()
+    if push is None or push.returncode != 0:
+        detail = push.stderr[:800] if push is not None else "네트워크 응답 없음(타임아웃)"
         raise RuntimeError(
-            "커밋은 완료됐지만 push에 실패했습니다: %s" % push.stderr[:800]
+            "커밋은 완료됐지만 %d번 재시도 후에도 push에 실패했습니다: %s (index.html은 이미 로컬에 커밋되어 있으니, 잠시 후 Publish를 다시 누르면 새 커밋 없이 이번 커밋이 그대로 push됩니다.)"
+            % (PUSH_RETRIES, detail)
         )
     return {
         "committed": True,
