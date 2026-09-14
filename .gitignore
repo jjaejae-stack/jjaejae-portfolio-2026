@@ -7,5 +7,8 @@ __pycache__/
 # local-only dedupe manifest for /optimize-video (server.py) — not needed on the deployed site
 .video_cache.json
 
+# local-only debug log for git push retry diagnostics (server.py)
+.push_debug.log
+
 # raw/working retouch exports — not web-optimized, not meant for the live site
 YUNJAC/리터칭_최종 완료_OUT/

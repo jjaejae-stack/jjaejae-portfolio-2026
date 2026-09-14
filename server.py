@@ -1337,13 +1337,31 @@ PUSH_RETRIES = 3
 PUSH_RETRY_DELAY_SEC = 3
 
 
+PUSH_DEBUG_LOG = os.path.join(BASE_DIR, ".push_debug.log")
+
+
+def _log_push_attempt(attempt, result, timed_out):
+    try:
+        with open(PUSH_DEBUG_LOG, "a") as f:
+            f.write("--- attempt %d @ %s ---\n" % (attempt, time.strftime("%Y-%m-%d %H:%M:%S")))
+            if timed_out:
+                f.write("TIMEOUT\n")
+            else:
+                f.write("returncode=%s\nstdout=%s\nstderr=%s\n" % (result.returncode, result.stdout, result.stderr))
+    except Exception:
+        pass
+
+
 def _push_with_retry():
     last = None
     for attempt in range(1, PUSH_RETRIES + 1):
+        timed_out = False
         try:
             last = _run_git(["push"], timeout=60)
         except subprocess.TimeoutExpired:
             last = None
+            timed_out = True
+        _log_push_attempt(attempt, last, timed_out)
         if last is not None and last.returncode == 0:
             return last
         if attempt < PUSH_RETRIES:
