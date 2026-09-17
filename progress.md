@@ -1,6 +1,21 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-09-14
+최종 업데이트: 2026-09-17
+
+## 세션 요약 — 리스트/JBL 로딩 속도 개선 + OOH 이미지 복구 (2026-09-17)
+
+**증상**: "Work/Play 리스트 로딩이 예전보다 길어졌다", "J 커서가 버벅거린다", "JBL PULSE6 프로젝트 상세페이지 이미지/영상 로딩이 너무 길다", "JBL OOH 블록 사진 하나가 안 불러와진다"는 4가지 리포트.
+
+**원인 및 수정**:
+1. **리스트 로딩**: `buildListBgLayers()`가 목록을 열 때 항목 전부(지금은 30개 이상, 영상 22개)의 배경 미디어를 동시에 로드 시작하도록 돼 있었음(예전에 "선택 즉시 재생"을 위해 의도적으로 그렇게 만든 것 — [[feedback_portfolio_list_eager_preload]] 참고, 이 정책 자체는 유지). 그때보다 프로젝트 수가 훨씬 늘어서 부담이 커진 것이 원인. **첫 항목만 즉시 로드하고 나머지는 `requestIdleCallback`(폴백 `setTimeout` 120ms)으로 순서대로 흩뿌려 깔도록 수정** — "고르면 로딩 없이 바로 재생"은 그대로 유지하면서 목록을 여는 순간의 동시 부하만 분산시킴. 필터 전환/재오픈 시 이전 큐를 무효화하는 토큰(`listBgLoadToken`)도 추가.
+2. **J 커서 버벅거림**: 커서 자체 로직(`requestAnimationFrame` + `will-change:transform`)은 문제 없었음 — 1번 문제로 메인 스레드가 리스트 오픈 순간 막히면서 같이 끊겨 보인 것으로 판단, 1번 수정으로 같이 완화될 것으로 예상(실제 브라우저 확인은 이 세션에서 Chrome 확장 미연결로 못 함).
+3. **프로젝트 상세 갤러리 로딩**: `mediaFrameInner()`가 만드는 갤러리 `<video>`에 `preload="metadata"`, Vimeo/YouTube `<iframe>`에 `loading="lazy"` 추가 — 화면에 들어와 `galleryVideoAutoplayObserver`가 `play()`를 부르는 시점에야 본편 데이터를 받도록 함. **주의**: 갤러리 `<img>`에는 `loading="lazy"`를 못 씀 — 여러 페이지짜리 갤러리(`showGalleryPageRow`)가 트랙 전체 너비를 계산하려고 **모든** 프레임의 이미지가 로드될 때까지(`waitFrameMediaReady`) 기다리는 구조라, 화면 밖 이미지가 지연되면 그 갤러리 전체가 영영 사이즈를 못 잡고 깨짐 — 한 번 걸었다가 이 회귀를 발견하고 되돌림. `decoding="async"`만 남김.
+4. **JBL PULSE6 이미지 용량**: 실제로는 불투명한데 알파 채널이 있는 채로 PNG로 저장돼 있던 이미지 3장(`JBL_Car`, `PA_JBL_PULSE6_Black_Inner_Page...`, `JBL Tone and Mood`)을 JPEG q85로 재압축 — 2.7MB/2.3MB/1.7MB → 약 200KB 안팎(화질 손실 거의 없음). 실제 반투명을 쓰는 `Balcony_Campfire` PNG는 그대로 둠.
+5. **OOH 깨진 이미지**: `Seoul-traffic-ad-01.jpg`가 index.html엔 참조돼 있는데 폴더에도 git 기록에도 아예 존재한 적 없는(최초 업로드 자체가 안 된) 파일이었음. 사용자가 다운로드 폴더에 원본을 다시 받아줘서 폴더에 복사 + 연결.
+
+**⚠️ 빌더 동시 편집 재발 — 다시 한 번 확인된 패턴**: 위 수정을 커밋·푸시한 직후, 그새 열려 있던 **builder.html 탭**(IndexedDB에 여전히 옛날 PNG 참조·별도로 업로드된 OOH 사본이 남아있던 상태)에서 사용자가 JBL PULSE6를 Publish + "Sync project order"를 실행 — `git add -A` 방식이라 **방금 고친 3개 이미지 경로(.jpg→.png)가 도로 무거운 버전으로 되돌아가고, OOH 이미지도 사용자가 빌더에 별도로 올려둔 사본(`Seoul-traffic-ad-01-2.jpg`)으로 교체**됨(`3ca9010`). 다시 .jpg 참조로 재수정 + 중복 파일 정리. [[feedback_2026_portfolio_publish_git_add_a]], [[feedback_portfolio_reload_after_fix]] 두 메모 모두와 정확히 일치하는 패턴 — **builder.html을 이 프로젝트에서 계속 쓸 거면, git 레벨에서 직접 고친 이미지 파일명 변경은 빌더의 IndexedDB에도 반영(빌더에서 다시 드래그해 새 파일로 교체하거나, 최소한 그 프로젝트는 당분간 빌더에서 재발행하지 않기)해야 다시 덮어써지지 않음.**
+
+**파일**: `JBL PULSE6/JBL_Car.png`, `PA_JBL_PULSE6_Black_Inner_Page_20260316_RT_V1.png`, `JBL Tone and Mood.png`(구버전, 이제 미사용이지만 빌더 재발행 안전망 삼아 폴더엔 남겨둠) / `*.jpg`(신규, 실사용) / `Seoul-traffic-ad-01-2.jpg`(OOH, 실사용 — 사용자가 빌더로 올린 버전을 최종본으로 채택, 제가 복구했던 `Seoul-traffic-ad-01.jpg`는 중복이라 삭제).
 
 ## 세션 요약 — 빌더 Publish "push 실패" 근본 수정: upstream 브랜치 누락 (2026-09-14)
 
