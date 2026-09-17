@@ -1,6 +1,21 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-08-25
+최종 업데이트: 2026-09-14
+
+## 세션 요약 — 빌더 Publish "push 실패" 근본 수정: upstream 브랜치 누락 (2026-09-14)
+
+**증상**: 빌더에서 JBL PULSE6 프로젝트를 Publish하면 "커밋은 완료됐지만 push에 실패했습니다"가 계속 떴음. 재시도해도 매번 같은 실패.
+
+**오진 과정**: 처음엔 이 Mac에서 이미 겪은 바 있는 Vercel API `ETIMEDOUT`([[project_graphic_toolkit]] 참고)과 같은 네트워크 플레이키니스로 추정하고 `git_commit_and_push`의 push 단계에 재시도(3회, 3초 간격, 60초 타임아웃) + 실패 시 상세 stderr를 `.push_debug.log`에 남기는 로직을 먼저 추가했음. 하지만 재시도를 넣은 뒤에도 여전히 실패 — 사용자가 실제 에러 화면 스크린샷을 캡처해줘서 진짜 원인이 드러남.
+
+**진짜 원인**: `fatal: The current branch main has no upstream branch.` — 로컬 `main` 브랜치에 추적(upstream) 브랜치 설정 자체가 없었음(`git branch -vv`로 확인, `branch.main.remote`/`branch.main.merge` 둘 다 비어있음). `server.py`의 `_push_with_retry()`는 인자 없이 그냥 `git push`만 실행하는데, upstream이 없으면 이게 무조건 실패함. 반면 진단하면서 내가 수동으로 실행한 `git push origin main`은 원격/브랜치를 직접 지정했기 때문에 매번 바로 성공했음 — 이 비대칭이 "사람이 push하면 되는데 빌더는 안 된다"는 증상의 정체였고, 네트워크는 애초에 무관했음. (upstream이 왜 빠졌는지는 특정 못 했지만, 8/25 "git 히스토리 정리(3.5GB→2.0GB)" 세션의 히스토리 재작성 작업 중 소실됐을 가능성이 높음 — 8/13에 있었던 "배스킨라빈스 push 막힘"은 커밋 히스토리에 낀 대용량 blob 때문이었던 완전히 다른 버그였음, 혼동 주의.)
+
+**수정**:
+1. `git push -u origin main`으로 즉시 upstream 재설정 + 밀려있던 커밋들 push.
+2. `server.py`의 push 호출을 `git push -u origin HEAD:main`으로 변경 — 원격/브랜치를 항상 명시해서, 로컬 브랜치의 추적 설정이 다시 어떤 이유로든 빠지더라도 이 클래스의 실패가 재발하지 않도록 함.
+3. 재시도(3회) + `.push_debug.log` 로깅은 그대로 유지 — 진짜 네트워크 문제가 다시 생겨도 원인을 바로 확인할 수 있게.
+
+**교훈**: "커밋은 되는데 push만 실패"가 매번 재현되고, 사람이 수동으로 `git push origin <branch>`를 실행하면 바로 성공한다면 — 네트워크보다 먼저 `git branch -vv`로 upstream 설정부터 확인할 것. 재시도 로직은 진짜 네트워크 플레이키니스에는 유효하지만, 이번처럼 100% 결정적으로 실패하는 케이스에는 (도움은 안 되도 해는 없지만) 근본 원인이 아니었음.
 
 ## 세션 요약 — builder.html 좌상단 워드마크 로고 (2026-08-25)
 

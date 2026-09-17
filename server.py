@@ -1357,7 +1357,11 @@ def _push_with_retry():
     for attempt in range(1, PUSH_RETRIES + 1):
         timed_out = False
         try:
-            last = _run_git(["push"], timeout=60)
+            # Explicit remote/branch + -u: works regardless of whether the local branch
+            # has an upstream tracking ref configured (that config was silently missing
+            # here once, which made every bare `git push` fail with "no upstream branch"
+            # even though nothing was actually wrong on the network or on GitHub).
+            last = _run_git(["push", "-u", "origin", "HEAD:main"], timeout=60)
         except subprocess.TimeoutExpired:
             last = None
             timed_out = True
