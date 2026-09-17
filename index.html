@@ -1125,11 +1125,14 @@
     return u(src.replace(/\.(mp4|webm|mov|m4v)(\?.*)?$/i, "-poster.jpg"));
   }
   function mediaFrameInner(src, noAutoplaySet){
-    if(!isVideoSrc(src)) return `<img src="${u(src)}" alt=""><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>`;
+    /* loading="lazy"는 여기 못 씀 — 여러 페이지짜리 갤러리(showGalleryPageRow)가 트랙 전체
+       너비를 계산하려고 "모든" 프레임의 이미지가 로드될 때까지 기다리는 구조라서, 화면 밖
+       이미지가 지연되면 그 갤러리 전체가 영영 크기를 못 잡고 깨짐 — decoding만 비동기로. */
+    if(!isVideoSrc(src)) return `<img src="${u(src)}" alt="" decoding="async"><button type="button" class="gallery-zoom-btn" aria-label="Zoom in">+</button>`;
     const vimeo = src.match(/vimeo\.com\/(?:video\/)?(\d+)/);
     const yt = src.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]+)/);
-    if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
-    if(yt) return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+    if(vimeo) return `<iframe src="https://player.vimeo.com/video/${vimeo[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
+    if(yt) return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe>`;
     /* muted — 스크롤로 화면에 들어오면 자동재생되는 영상은(아래 galleryVideoAutoplayObserver
        참고) 브라우저 자동재생 정책상 소리가 있으면 막히므로 무음으로 시작함. 자동재생을 끈
        영상(block.noAutoplay)은 애초에 관찰 대상에서 빠지므로, 방문자가 직접 눌러야만
@@ -1138,7 +1141,13 @@
     const mutedAttr = autoplayEnabled ? " muted" : "";
     const noAutoplayAttr = autoplayEnabled ? "" : ` data-no-autoplay="1"`;
     const posterAttr = /^https?:\/\//i.test(src) ? "" : ` poster="${posterUrlFor(src)}"`;
-    return `<video src="${u(src)}" controls${mutedAttr} playsinline${posterAttr}${noAutoplayAttr}></video>`;
+    /* preload="metadata" — 치수/길이 정보만 가볍게 받아옴(포스터 이미지는 별개 요청이라
+       그대로 바로 보임). 갤러리 레이아웃(waitMediaReady/mediaRatio)이 videoWidth/readyState를
+       필요로 해서 "none"으로 하면 화면 밖 영상 프레임이 영영 크기를 못 잡는 문제가 생기므로
+       "metadata"가 필요함 — 본편 데이터 자체는 galleryVideoAutoplayObserver가 화면에 들어와
+       play()를 호출하는 시점에야 받아지므로, 안 보이는 블록의 영상들이 페이지를 열자마자
+       전부 동시에 풀로 받아지던 부담만 없앰. */
+    return `<video src="${u(src)}" controls${mutedAttr} playsinline preload="metadata"${posterAttr}${noAutoplayAttr}></video>`;
   }
   function mediaFrameHTML(src, noAutoplaySet){
     return `<div class="gallery-frame">${mediaFrameInner(src, noAutoplaySet)}</div>`;
@@ -3876,7 +3885,7 @@
       meta:"",
       client:"harman/kardon, JBL",
       agency:"Cheil Worldwide",
-      hero:"JBL PULSE6/JBL_Car.png",
+      hero:"JBL PULSE6/JBL_Car.jpg",
       heroType:"upload",
       heroVideoFile:"JBL PULSE6/02_PDV_Car-web.mp4",
       social:{ youtube:"#", vimeo:"#", instagram:"#" },
@@ -3887,7 +3896,7 @@
           label:"Overview",
           galleryMode:"2",
           images:[
-            "JBL PULSE6/PA_JBL_PULSE6_Black_Inner_Page_20260316_RT_V1.png",
+            "JBL PULSE6/PA_JBL_PULSE6_Black_Inner_Page_20260316_RT_V1.jpg",
           ],
           paragraphs:["Portable sound maximizing visual pleasure.", "The launch campaign for the 6th series of JBL PULSE, the synonym for lighting speakers. To intuitively announce the newly added handle, the 360-degree lighting extending to it, and its enhanced portability, we planned an Animated Key Visual under the key copy, 'Sound to enjoy with your eyes'."],
           labelKo:"Overview",
@@ -3896,7 +3905,7 @@
         {
           label:"Concept",
           images:[
-            "JBL PULSE6/JBL Tone and Mood.png",
+            "JBL PULSE6/JBL Tone and Mood.jpg",
           ],
           paragraphs:["We made the everyday moments experienced with PULSE 6 look like emotional snapshots. Furthermore, by utilizing the Cinemagraph technique—where everything is frozen like a photograph while only the speaker's lighting moves—we completed a moving poster that keeps the viewer's gaze firmly on the product."],
           labelKo:"Concept",
@@ -4245,16 +4254,34 @@
     if(!layer || !p) return;
     loadListBgLayer(layer, p);
   }
+  /* 목록을 열 때 항목 수(현재 30개 이상, 영상 다수)만큼 배경 영상을 전부 "동시에" 로드
+     시작하면 그 순간 네트워크/디코딩이 한꺼번에 몰려서 체감 로딩이 길어지고, 메인 스레드가
+     막히는 동안 커서 애니메이션(requestAnimationFrame) 같은 다른 것도 같이 끊겨 보임.
+     "선택하면 로딩 없이 바로 재생"이라는 기존 정책(호버 시점 로드로는 안 됨 — 이전 세션에서
+     시도했다가 되돌림, progress.md 참고)은 그대로 유지하되, 첫 화면에 바로 보이는 항목만
+     즉시 로드하고 나머지는 짧은 간격으로 순서대로 흩뿌려 깔아서 초기 부하만 분산시킴. */
+  let listBgLoadToken = 0;
   function buildListBgLayers(list){
     listBgMedia.innerHTML = "";
+    const token = ++listBgLoadToken;
     listBgLayers = list.map((p) => {
       const layer = document.createElement("div");
       layer.className = "list-bg-layer";
       layer.dataset.loaded = "0";
       listBgMedia.appendChild(layer);
-      if(supportsHoverPreload) loadListBgLayer(layer, p);
       return layer;
     });
+    if(!supportsHoverPreload) return;
+    if(listBgLayers[0]) loadListBgLayer(listBgLayers[0], list[0]);
+    let i = 1;
+    function loadNext(){
+      if(token !== listBgLoadToken) return; // 목록이 다시 열리거나 필터가 바뀌어 무효화됨
+      if(i >= listBgLayers.length) return;
+      loadListBgLayer(listBgLayers[i], list[i]);
+      i++;
+      (window.requestIdleCallback || (fn => setTimeout(fn, 120)))(loadNext, { timeout: 200 });
+    }
+    if(listBgLayers.length > 1) loadNext();
   }
 
   /* 리스트 배경 미리보기 — 이미 buildListBgLayers()로 깔아둔 레이어 중 하나를 opacity로
