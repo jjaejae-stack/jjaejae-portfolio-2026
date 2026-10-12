@@ -1,6 +1,24 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-09-17
+최종 업데이트: 2026-10-12
+
+## 세션 요약 — 빌더 기기 간 작업 이어하기(클라우드 동기화) + 새 맥 셋업 가이드 (2026-10-12)
+
+**계기**: "이 맥에서는 빌더가 jjaejae.com에 올라간 최신 상태인데, 다른 맥에서 빌더를 열면 비어있거나 예전 상태다. 어디서 접속하든 최신으로 이어서 작업하고 싶다 — 발행 전 초안도 포함해서."
+
+**원인**: `builder.html`의 모든 데이터(프로젝트/INFO/커스텀 태그, 발행 전 초안 포함)는 브라우저별 **IndexedDB**(`pf-builder-db`)에만 있고, 이걸 index.html(git)로 내보내는 길(Publish)은 있어도 **반대로 받아오는 길이 전혀 없었음** — 그래서 다른 맥/다른 브라우저에서 열면 당연히 비어 있었음. (이미 있던 "다른 기기로 내보내기/가져오기" 버튼은 JSON 파일을 수동으로 옮겨야 해서 완전한 해법은 아니었음.)
+
+**구현**:
+1. **`server.py`**: `git_commit_and_push_paths(paths, title)` 추가 — 기존 `git_commit_and_push()`와 달리 **`git add -A`가 아니라 지정한 파일만** add/commit — `builder-state.json` 전용으로 써서, 빌더 동기화가 작업 트리의 다른 파일을 같이 쓸어가는 사고(바로 위 09-17 사건과 같은 클래스)를 구조적으로 막음. `save_builder_state`/`load_builder_state`로 `builder-state.json` 읽기/쓰기. 새 라우트: `GET /draft-state`(현재 서버에 저장된 동기화 상태 조회), `POST /draft-sync`(새 상태 저장 + 커밋/푸시, payload 40MB 초과 시 거절 — 이미지가 dataUrl로 안 올라가고 남아있는 비정상 상황 방지).
+2. **`builder.html`**: 모든 편집이 거쳐가는 `dbPut`/`dbDelete` 안에서 15초 디바운스로 `pushDraftState()`를 트리거 — 어느 조작 경로든(직접 편집/이동/숨김/삭제/순서변경/마이그레이션) 자동으로 서버에 동기화됨. 탭 종료 직전(`beforeunload`)에도 한 번 더 flush. 사이드바에 "☁ 서버에서 불러오기" 버튼 추가(명시적 확인 후에만 적용 — 절대 자동 덮어쓰기 안 함, 09-17 사건의 교훈 그대로 반영). 로드 시 조용히 서버 타임스탬프만 비교해서 "☁ 서버에 더 최신 작업이 있어요" 문구를 사이드바에 표시(자동 반영은 안 함).
+3. **`start-builder.command`**(신규, 더블클릭 실행) — 그 폴더에서 `git pull` → (꺼져 있으면) `server.py` 실행 → `builder.html` 오픈을 한 번에. python3/ffmpeg/pillow 중 뭐가 없으면 이유를 바로 알려주고 README를 보라고 안내.
+4. **`README.md`**(신규) — "완전히 새 맥, 아무것도 안 깔려있는 전제"로 Xcode CLT → Homebrew → `gh auth login` → python/ffmpeg/pillow → `git clone` → `start-builder.command` 순서를 전부 적어둠. **github.com 저장소 페이지(`github.com/jjaejae-stack/jjaejae-portfolio-2026`)에서 clone 없이도 바로 읽혀서**, 새 맥이 저장소를 받기도 전에 설치 순서를 확인할 수 있음 — 매번 AI한테 다시 물어볼 필요 없게 하려는 목적.
+
+**중요한 한계**: 완전한 "어디서나 웹처럼 접속"은 아님 — `builder.html`은 호스팅된 앱이 아니라 로컬 파일이라, **그 맥에 git clone이 돼 있고 `server.py`가 로컬로 켜져 있어야** 동기화가 동작함(둘 다 없으면 조용히 "오프라인"으로만 표시되고 그 기기의 로컬 작업은 평소처럼 계속됨).
+
+**테스트 중 실수 — 바로 정리**: 새 `/draft-sync` 엔드포인트를 curl로 테스트하면서 더미 데이터(`{"id":"test-x","title":"test"}`)가 실제로 git에 커밋·푸시돼버림(`97d6a77`) — 바로 `git rm`으로 지우고 정리 커밋(`375cd00`) push해서 원복. **다음에 이런 서버 엔드포인트를 curl로 스모크테스트할 때는, 실제로 git push까지 실행되는 엔드포인트라면 더미 데이터가 라이브 저장소에 올라갈 수 있다는 점을 먼저 고려할 것.**
+
+**관련 메모**: [[feedback_2026_portfolio_publish_git_add_a]](이번에 `git_commit_and_push_paths`로 같은 클래스의 문제를 구조적으로 회피), [[feedback_portfolio_reload_after_fix]], [[project_2026_portfolio_git_push_100mb_history]](40MB 캡으로 유사 사고 예방).
 
 ## 세션 요약 — 리스트/JBL 로딩 속도 개선 + OOH 이미지 복구 (2026-09-17)
 
