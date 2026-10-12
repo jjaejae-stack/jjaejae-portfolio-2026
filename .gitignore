@@ -10,5 +10,8 @@ __pycache__/
 # local-only debug log for git push retry diagnostics (server.py)
 .push_debug.log
 
+# local-only stdout/stderr log from start-builder.command's background server.py
+.server.log
+
 # raw/working retouch exports — not web-optimized, not meant for the live site
 YUNJAC/리터칭_최종 완료_OUT/

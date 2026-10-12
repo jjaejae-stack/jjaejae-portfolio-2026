@@ -33,6 +33,12 @@ from PIL import Image, ImageSequence, ImageFilter
 PORT = 8420
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_HTML_PATH = os.path.join(BASE_DIR, "index.html")
+# Full builder.html export (projects/INFO/custom tags, including anything still
+# unpublished) round-tripped through git so an in-progress draft follows you to
+# any machine — not just whatever's already Published into index.html. See
+# save_builder_state/load_builder_state and the /draft-sync, /draft-state routes.
+BUILDER_STATE_PATH = os.path.join(BASE_DIR, "builder-state.json")
+BUILDER_STATE_MAX_BYTES = 40 * 1024 * 1024
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v"}
 MAX_IMAGE_DIM = 2000
@@ -1373,6 +1379,45 @@ def _push_with_retry():
     return last
 
 
+def git_commit_and_push_paths(paths, title):
+    """Like git_commit_and_push, but stages only `paths` — never `-A` — so a
+    draft-state autosync can never sweep in unrelated dirty files sitting in
+    the working tree (that's exactly the builder-tab-overwrite class of bug
+    documented in progress.md; this path must not repeat it)."""
+    check = _run_git(["rev-parse", "--is-inside-work-tree"])
+    if check.returncode != 0:
+        raise RuntimeError("아직 git 저장소가 아닙니다. 먼저 GitHub 연동을 완료해주세요.")
+    add = _run_git(["add"] + list(paths))
+    if add.returncode != 0:
+        raise RuntimeError(add.stderr[:800])
+    status = _run_git(["status", "--porcelain"] + list(paths))
+    if not status.stdout.strip():
+        return {"committed": False, "pushed": False, "note": "변경사항이 없습니다 (이미 최신 상태)."}
+    commit = _run_git(["commit", "-m", "Sync: %s" % title, "--"] + list(paths))
+    if commit.returncode != 0:
+        raise RuntimeError(commit.stderr[:800])
+    push = _push_with_retry()
+    if push is None or push.returncode != 0:
+        detail = push.stderr[:800] if push is not None else "네트워크 응답 없음(타임아웃)"
+        raise RuntimeError(
+            "커밋은 완료됐지만 %d번 재시도 후에도 push에 실패했습니다: %s"
+            % (PUSH_RETRIES, detail)
+        )
+    return {"committed": True, "pushed": True, "note": "GitHub에 푸시 완료."}
+
+
+def save_builder_state(data):
+    with open(BUILDER_STATE_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False)
+
+
+def load_builder_state():
+    if not os.path.exists(BUILDER_STATE_PATH):
+        return None
+    with open(BUILDER_STATE_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 def git_commit_and_push(title):
     check = _run_git(["rev-parse", "--is-inside-work-tree"])
     if check.returncode != 0:
@@ -1448,6 +1493,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if parsed.path == "/ping":
             self._send_json(200, {"ok": True})
             return
+        if parsed.path == "/draft-state":
+            try:
+                data = load_builder_state()
+            except Exception as e:
+                self._send_json(500, {"error": "불러오기 실패: %s" % e})
+                return
+            self._send_json(200, {"exists": data is not None, "data": data})
+            return
         self._send_json(404, {"error": "not found"})
 
     def do_POST(self):
@@ -1487,15 +1540,50 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._send_json(200, dict({"ok": True}, **result))
             return
 
-        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/delete-image", "/optimize-video", "/trim-video-existing"):
+        if parsed.path not in ("/generate", "/generate-info", "/translate", "/translate-info", "/publish", "/publish-info", "/publish-order", "/upload-info-bg", "/upload-project-image", "/crop", "/delete-image", "/optimize-video", "/trim-video-existing", "/draft-sync"):
             self._send_json(404, {"error": "not found"})
             return
+        if parsed.path == "/draft-sync":
+            # builder-state.json is meant to hold project metadata, not bulk media —
+            # any image still embedded as a dataUrl (server upload never finished) is
+            # a fallback, not the normal case. A cap here stops a huge payload from
+            # quietly bloating git history the way raw video blobs once did (see
+            # progress.md's 100MB push-failure note) instead of failing loudly.
+            content_length = int(self.headers.get("Content-Length", "0") or "0")
+            if content_length > BUILDER_STATE_MAX_BYTES:
+                # Body is never read below, so the socket can't be reused for a
+                # further keep-alive request on this connection — force it closed
+                # rather than leave unread bytes to desync the next request.
+                self.close_connection = True
+                self._send_json(413, {
+                    "error": "동기화 데이터가 너무 큽니다(%dMB 초과). 이미지가 아직 서버로 업로드되지 않았을 수 있어요 — server.py가 켜진 상태로 잠시 기다린 뒤 다시 시도하세요." % (BUILDER_STATE_MAX_BYTES // (1024 * 1024))
+                })
+                return
         try:
             length = int(self.headers.get("Content-Length", "0"))
             raw = self.rfile.read(length) if length else b"{}"
             payload = json.loads(raw or b"{}")
         except Exception as e:
             self._send_json(400, {"error": "bad request: %s" % e})
+            return
+
+        if parsed.path == "/draft-sync":
+            if not isinstance(payload, dict) or not isinstance(payload.get("projects"), list):
+                self._send_json(400, {"error": "projects 배열이 필요합니다."})
+                return
+            try:
+                save_builder_state(payload)
+            except Exception as e:
+                self._send_json(500, {"error": "저장 실패: %s" % e})
+                return
+            try:
+                git_result = git_commit_and_push_paths(["builder-state.json"], "draft state")
+            except Exception as e:
+                self._send_json(500, {
+                    "error": "%s (builder-state.json은 이미 로컬에 저장되었습니다 — 다음 동기화 때 같이 커밋됩니다.)" % e
+                })
+                return
+            self._send_json(200, git_result)
             return
 
         if parsed.path == "/crop":

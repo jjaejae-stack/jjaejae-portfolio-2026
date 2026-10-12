@@ -97,7 +97,12 @@
   }
   #sync-order-btn:hover, .sidebar-util-btn:hover{border-color:var(--accent); color:var(--accent);}
   #sync-order-btn:disabled, .sidebar-util-btn:disabled{opacity:.6; cursor:default;}
-  #import-all-btn{margin-bottom:22px;}
+  #draft-pull-btn{margin-bottom:6px;}
+  .sidebar-sync-status{
+    font-size:11px; color:var(--muted); text-align:center;
+    margin-bottom:22px; opacity:.75;
+  }
+  .sidebar-sync-status.sidebar-sync-status--fresh{color:var(--accent); opacity:1;}
   #info-nav-btn{
     width:100%; padding:10px; border:1px solid var(--line-strong);
     font-weight:600; text-align:left; margin-bottom:14px;
@@ -619,6 +624,8 @@
       <button type="button" id="sync-order-btn" title="사이드바의 프로젝트 순서와 숨김 상태를 실제 Work/Play 리스트 페이지에도 반영합니다">↕ 순서·숨김 반영</button>
       <button type="button" id="export-all-btn" class="sidebar-util-btn" title="이 브라우저의 프로젝트/INFO 데이터를 JSON 파일로 내보냅니다 — 다른 컴퓨터로 옮길 때 사용">⇩ 다른 기기로 내보내기</button>
       <button type="button" id="import-all-btn" class="sidebar-util-btn" title="내보내기로 만든 JSON 파일을 가져와 이 브라우저에 반영합니다">⇧ 다른 기기에서 가져오기</button>
+      <button type="button" id="draft-pull-btn" class="sidebar-util-btn" title="server.py(로컬 서버, 켜져 있어야 함)를 통해 git에 저장된 최신 작업 상태를 받아옵니다">☁ 서버에서 불러오기</button>
+      <div id="draft-sync-status" class="sidebar-sync-status">편집하면 자동으로 서버에 저장됩니다</div>
       <div id="project-list" data-sort-scope="projects"></div>
     </aside>
 
@@ -1010,12 +1017,18 @@
       req.onerror = () => reject(req.error);
     });
   }
+  /* dbPut/dbDelete are the one choke point every mutation path (direct edits,
+     move/hide/delete, reorder, migrations) already goes through — hooking the
+     debounced cloud-sync push here means it covers all of them without having
+     to touch each call site. scheduleDraftSync is declared later in the file
+     (near exportAllData, which it needs) but is only ever CALLED once the app
+     is interactive, long after that declaration has run. */
   async function dbPut(project){
     const db = await dbOpen();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       tx.objectStore(STORE).put(project);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => { scheduleDraftSync(); resolve(); };
       tx.onerror = () => reject(tx.error);
     });
   }
@@ -1033,7 +1046,7 @@
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       tx.objectStore(STORE).delete(id);
-      tx.oncomplete = () => resolve();
+      tx.oncomplete = () => { scheduleDraftSync(); resolve(); };
       tx.onerror = () => reject(tx.error);
     });
   }
@@ -3234,6 +3247,40 @@
   importAllInput.type = "file"; importAllInput.accept = "application/json";
   document.body.appendChild(importAllInput);
   document.getElementById("import-all-btn").addEventListener("click", () => importAllInput.click());
+  /* Shared by the manual file-import flow and the cloud pull button below —
+     both end up with the same {version, exportedAt, projects, info,
+     customTags} shape, just sourced differently (a picked .json file vs a
+     GET from server.py's /draft-state). */
+  async function applyImportedData(data){
+    const count = data.projects.length;
+    for(const p of data.projects) await dbPut(p);
+    if(data.info){ infoData = data.info; saveInfo(); }
+    if(Array.isArray(data.customTags)){
+      saveCustomTags(Array.from(new Set(loadCustomTags().concat(data.customTags))));
+    }
+
+    projects = (await dbGetAll()).map(hydrateProject);
+    const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
+    if(firstInTab) currentId = firstInTab.id;
+    renderSidebar();
+    renderEditor();
+    refreshPreview();
+
+    /* any image that traveled as a dataUrl (not yet written to disk on
+       the machine it was added on) gets a fresh upload attempt now, on
+       THIS machine — completes the job wherever the server happens to
+       be running when someone actually looks at it. */
+    projects.forEach(p => {
+      const tryImg = (im, isHero) => {
+        if(im && im.dataUrl) persistDataUrlToDisk(p, im, im.dataUrl, im.name || "image.jpg", () => true, false, isHero);
+      };
+      tryImg(p.heroImage, true);
+      (p.blocks || []).forEach(b => (b.images || []).forEach(im => tryImg(im, false)));
+    });
+    if(data.exportedAt){ try{ localStorage.setItem(DRAFT_LAST_SYNC_KEY, data.exportedAt); }catch(e){} }
+    return count;
+  }
+
   importAllInput.addEventListener("change", async () => {
     const file = importAllInput.files && importAllInput.files[0];
     importAllInput.value = "";
@@ -3249,9 +3296,8 @@
       alert("올바른 내보내기 파일이 아닙니다.");
       return;
     }
-    const count = data.projects.length;
     if(!confirm(
-      count + "개 프로젝트를 가져옵니다.\n\n" +
+      data.projects.length + "개 프로젝트를 가져옵니다.\n\n" +
       "같은 id의 프로젝트는 이 파일 내용으로 덮어써지고, 없던 프로젝트는 새로 추가됩니다(이 기기에만 있던 다른 프로젝트는 그대로 남습니다).\n" +
       (data.info ? "INFO 페이지 내용도 이 파일 것으로 덮어씁니다.\n" : "") +
       "\n계속할까요?"
@@ -3261,31 +3307,7 @@
     const orig = btn.textContent;
     btn.disabled = true; btn.textContent = "가져오는 중...";
     try{
-      for(const p of data.projects) await dbPut(p);
-      if(data.info){ infoData = data.info; saveInfo(); }
-      if(Array.isArray(data.customTags)){
-        saveCustomTags(Array.from(new Set(loadCustomTags().concat(data.customTags))));
-      }
-
-      projects = (await dbGetAll()).map(hydrateProject);
-      const firstInTab = projects.find(p => projectCategory(p) === activeCategory);
-      if(firstInTab) currentId = firstInTab.id;
-      renderSidebar();
-      renderEditor();
-      refreshPreview();
-
-      /* any image that traveled as a dataUrl (not yet written to disk on
-         the machine it was added on) gets a fresh upload attempt now, on
-         THIS machine — completes the job wherever the server happens to
-         be running when someone actually looks at it. */
-      projects.forEach(p => {
-        const tryImg = (im, isHero) => {
-          if(im && im.dataUrl) persistDataUrlToDisk(p, im, im.dataUrl, im.name || "image.jpg", () => true, false, isHero);
-        };
-        tryImg(p.heroImage, true);
-        (p.blocks || []).forEach(b => (b.images || []).forEach(im => tryImg(im, false)));
-      });
-
+      const count = await applyImportedData(data);
       alert("가져오기 완료 (" + count + "개 프로젝트).");
     }catch(e){
       alert("가져오기 실패: " + e.message);
@@ -3509,6 +3531,97 @@
      no API key in the browser, no manual copy/paste. Run `python3 server.py` once
      from this folder, then click Generate. ---- */
   const GENERATE_SERVER = "http://localhost:8420";
+
+  /* ======================================================================
+     cloud sync — same export/import shape as the manual "다른 기기로
+     내보내기/가져오기" buttons above, but carried through git instead of a
+     manually-moved file, so an in-progress draft (not just already-
+     Published projects) follows you to any machine. Push is automatic+
+     debounced (triggered from dbPut/dbDelete, defined near the top of this
+     file); pull stays an explicit, confirmed action — never silently
+     overwrite a machine's local edits, same lesson as the builder-tab-
+     overwrite incident in progress.md. Requires server.py running locally
+     on both ends, same as every other builder→git action. */
+  const DRAFT_LAST_SYNC_KEY = "pf-builder-last-sync-at";
+  const draftSyncStatusEl = document.getElementById("draft-sync-status");
+  const draftPullBtn = document.getElementById("draft-pull-btn");
+  function setDraftSyncStatus(text, fresh){
+    if(!draftSyncStatusEl) return;
+    draftSyncStatusEl.textContent = text;
+    draftSyncStatusEl.classList.toggle("sidebar-sync-status--fresh", !!fresh);
+  }
+  let draftPushInFlight = false;
+  async function pushDraftState(){
+    if(draftPushInFlight) return;
+    draftPushInFlight = true;
+    try{
+      const data = await exportAllData();
+      const res = await fetch(GENERATE_SERVER + "/draft-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json().catch(() => ({}));
+      if(!res.ok || result.error){ setDraftSyncStatus("서버 동기화 실패 (server.py 켜져 있나요?)"); return; }
+      try{ localStorage.setItem(DRAFT_LAST_SYNC_KEY, data.exportedAt); }catch(e){}
+      setDraftSyncStatus("서버에 저장됨 · " + new Date(data.exportedAt).toLocaleTimeString("ko-KR"));
+    }catch(e){
+      setDraftSyncStatus("서버 동기화 실패 (server.py 켜져 있나요?)");
+    }finally{
+      draftPushInFlight = false;
+    }
+  }
+  const scheduleDraftSync = debounce(pushDraftState, 15000);
+  // 탭을 닫거나 다른 기기로 넘어가기 직전, 디바운스(15초)를 기다리지 않고 바로 한 번 더 밀어넣는다.
+  window.addEventListener("beforeunload", () => { pushDraftState(); });
+
+  async function pullDraftState(){
+    draftPullBtn.disabled = true;
+    const orig = draftPullBtn.textContent;
+    draftPullBtn.textContent = "불러오는 중...";
+    try{
+      const res = await fetch(GENERATE_SERVER + "/draft-state");
+      const result = await res.json().catch(() => ({}));
+      if(!res.ok || !result.exists || !result.data){
+        alert("서버에 저장된 동기화 데이터가 없습니다 (또는 server.py가 꺼져 있습니다).");
+        return;
+      }
+      const data = result.data;
+      if(!Array.isArray(data.projects)){
+        alert("서버의 동기화 데이터 형식이 올바르지 않습니다.");
+        return;
+      }
+      if(!confirm(
+        data.projects.length + "개 프로젝트를 서버에서 받아옵니다.\n\n" +
+        "같은 id의 프로젝트는 서버 내용으로 덮어써지고, 이 기기에만 있는 프로젝트는 그대로 남습니다.\n" +
+        "이 기기에서 아직 서버로 동기화 안 된 작업이 있다면 덮어써질 수 있습니다.\n\n계속할까요?"
+      )) return;
+      const count = await applyImportedData(data);
+      alert("불러오기 완료 (" + count + "개 프로젝트).");
+    }catch(e){
+      alert("불러오기 실패: " + e.message);
+    }finally{
+      draftPullBtn.disabled = false; draftPullBtn.textContent = orig;
+    }
+  }
+  draftPullBtn.addEventListener("click", pullDraftState);
+
+  /* On load, just peek at the server's timestamp (no data applied) so a
+     stale machine visibly knows there's something newer waiting, instead
+     of silently working on old data and finding out only after Publish —
+     the exact failure mode that prompted this whole feature. */
+  (async function checkDraftFreshness(){
+    try{
+      const res = await fetch(GENERATE_SERVER + "/draft-state");
+      const result = await res.json().catch(() => ({}));
+      if(!res.ok || !result.exists || !result.data || !result.data.exportedAt) return;
+      const remoteAt = result.data.exportedAt;
+      const localAt = localStorage.getItem(DRAFT_LAST_SYNC_KEY);
+      if(remoteAt && remoteAt !== localAt){
+        setDraftSyncStatus("☁ 서버에 더 최신 작업이 있어요 — 아래 버튼으로 받아오세요", true);
+      }
+    }catch(e){ /* server.py가 꺼져 있으면 조용히 무시 */ }
+  })();
 
   /* ---- Generate direction panel: shown before every Generate call so tone/
      structure/length/photo-flow/emphasis can be set. Persisted in localStorage
