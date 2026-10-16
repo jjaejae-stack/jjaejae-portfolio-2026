@@ -409,10 +409,11 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
         return cmd + ["-vf", scale_filter]
 
     cmd = base_cmd() + [
-        # crf 18 + preset slow: visually near-lossless x264 (crf 23/medium noticeably
-        # softened fine detail/motion on portfolio footage) — bigger files, but this
-        # runs once at upload time on a local machine, so the extra encode time is cheap.
-        "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+        # crf 21 + preset slow, capped at 6Mbps: crf 23/medium noticeably softened fine
+        # detail on portfolio footage, but the earlier uncapped crf 18 produced 12-14Mbps
+        # files (60s ad ≈ 85MB) that made the live site's list/detail pages load slowly
+        # (2026-10-16). 6Mbps is still above typical streaming 1080p bitrates.
+        "-c:v", "libx264", "-preset", "slow", "-crf", "21", "-maxrate", "6M", "-bufsize", "12M",
         "-c:a", "aac", "-b:a", "192k",
         "-movflags", "+faststart",
         out_abs,
@@ -421,7 +422,7 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
     if proc.returncode != 0:
         raise RuntimeError("ffmpeg 인코딩 실패: " + proc.stderr.strip()[-1500:])
 
-    # crf 18 has no size ceiling -- a long or high-motion clip (e.g. a 60s ad) can
+    # crf has no hard size ceiling -- a long or high-motion clip (e.g. a 60s ad) can
     # land north of GitHub's 100MB push limit, which only surfaces much later as a
     # confusing "git push" failure. If that happens here, redo it as a 2-pass encode
     # with a bitrate computed to fit MAX_VIDEO_BYTES, which (unlike a crf retry)
@@ -430,7 +431,7 @@ def _run_ffmpeg(input_source, out_abs, trim_start=None, trim_end=None):
         return
     duration = _probe_duration(out_abs)
     if not duration or duration <= 0:
-        return  # can't size a target bitrate without a duration -- leave the crf-18 file
+        return  # can't size a target bitrate without a duration -- leave the crf file
     target_video_bps = max(int((MAX_VIDEO_BYTES * 8) / duration) - AUDIO_BITRATE_BPS, 300_000)
     passlogfile = out_abs + ".passlog"
     try:
@@ -980,10 +981,108 @@ def _reindent_for_insert(code, base="    "):
     return "\n".join(base + ln if ln.strip() else ln for ln in lines)
 
 
+# 프로젝트 타이틀 폰트는 builder.html이 base64 dataUrl로 들고 있다가 그대로 발행하는데,
+# 그러면 index.html 자체가 폰트 개수만큼 무거워져서(11개 ≈ 1.85MB) 사이트 첫 화면이 그만큼
+# 늦게 뜸 — 발행 시점에 fonts/ 폴더의 파일로 빼고 경로만 남김. 빌더의 IndexedDB는 계속
+# dataUrl을 들고 있어도 매 발행마다 여기서 다시 변환되므로 되돌아가지 않음(내용 해시로
+# 파일명을 정해서 같은 폰트는 한 번만 저장됨). index.html은 이 값을 @font-face의 url()에
+# 그대로 넣으므로 dataUrl이든 상대경로든 똑같이 동작함.
+FONTS_DIR = os.path.join(BASE_DIR, "fonts")
+_FONT_DATA_URL_RE = re.compile(r'(titleFontDataUrl\s*:\s*")data:([^;"]*);base64,([A-Za-z0-9+/=]+)(")')
+_FONT_EXT_BY_MIME = {"font/otf": "otf", "font/ttf": "ttf", "font/woff": "woff", "font/woff2": "woff2",
+                     "application/x-font-otf": "otf", "application/x-font-ttf": "ttf",
+                     "application/font-woff": "woff", "application/vnd.ms-opentype": "otf"}
+
+
+def externalize_font_data_urls(code):
+    def repl(m):
+        raw = base64.b64decode(m.group(3))
+        ext = _FONT_EXT_BY_MIME.get(m.group(2).lower(), "otf")
+        name = "%s.%s" % (hashlib.sha1(raw).hexdigest()[:16], ext)
+        os.makedirs(FONTS_DIR, exist_ok=True)
+        path = os.path.join(FONTS_DIR, name)
+        if not os.path.exists(path):
+            with open(path, "wb") as f:
+                f.write(raw)
+        return m.group(1) + "fonts/" + name + m.group(4)
+    return _FONT_DATA_URL_RE.sub(repl, code)
+
+
+# 갤러리 GIF는 한 장에 수십 MB(최대 70MB)까지 나가서 프로젝트 상세 로딩을 가장 크게
+# 잡아먹던 원인 — 같은 내용을 H.264 MP4로 바꾸면 보통 1/10~1/30 크기가 됨. 원본 .gif 경로는
+# 데이터(빌더 IndexedDB/index.html PROJECTS)에 그대로 두고, 옆에 "<원본>.gif.mp4"를 만들어
+# 두면 index.html이 GIF_VIDEOS 목록을 보고 <img> 대신 무음 반복 <video>로 그림. 경로를 안
+# 바꾸므로 빌더에서 다시 발행해도 되돌아가지 않음. 투명 배경 GIF는 MP4가 알파를 못 담아서
+# 제외(원본 GIF 그대로 보임), 작은 GIF는 굳이 바꿀 이득이 없어서 제외.
+GIF_VIDEO_MIN_BYTES = 1_000_000
+_GIF_REF_RE = re.compile(r'"([^"\n]+\.gif)"', re.I)
+_GIF_VIDEOS_LINE_RE = re.compile(r"const GIF_VIDEOS = new Set\(\[.*?\]\);", re.S)
+
+
+def _gif_first_frame_has_alpha(abs_path):
+    try:
+        with Image.open(abs_path) as im:
+            alpha = im.convert("RGBA").getchannel("A")
+            return alpha.getextrema()[0] < 255
+    except Exception:
+        return True  # 못 읽으면 건드리지 않음
+
+
+def _make_gif_video(gif_abs, out_abs):
+    tmp = out_abs + ".tmp.mp4"
+    cmd = ["ffmpeg", "-y", "-v", "error", "-i", gif_abs,
+           "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2",
+           # maxrate: GIF 디더링 노이즈 때문에 crf만으로는 1080p 4초짜리가 33MB(65Mbps)까지
+           # 나온 적이 있어서 상한을 둠
+           "-c:v", "libx264", "-preset", "slow", "-crf", "20", "-maxrate", "8M", "-bufsize", "16M",
+           "-pix_fmt", "yuv420p", "-an", "-movflags", "+faststart", tmp]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+    if proc.returncode != 0 or not os.path.exists(tmp):
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        return False
+    os.replace(tmp, out_abs)
+    return True
+
+
+def ensure_gif_videos():
+    """index.html이 참조하는 GIF 중 MP4 짝이 없는 것을 변환하고, index.html의
+    `const GIF_VIDEOS = new Set([...]);` 줄을 실제로 짝이 있는 GIF 목록으로 갱신."""
+    with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
+        html = f.read()
+    if not _GIF_VIDEOS_LINE_RE.search(html):
+        return 0
+    converted = 0
+    have = []
+    for ref in sorted(set(_GIF_REF_RE.findall(html))):
+        if ref.startswith(("http://", "https://", "data:")):
+            continue
+        gif_abs = os.path.join(BASE_DIR, ref)
+        if not os.path.isfile(gif_abs):
+            continue
+        out_abs = gif_abs + ".mp4"
+        if not os.path.exists(out_abs):
+            if os.path.getsize(gif_abs) < GIF_VIDEO_MIN_BYTES or _gif_first_frame_has_alpha(gif_abs):
+                continue
+            if not _make_gif_video(gif_abs, out_abs):
+                continue
+            converted += 1
+        have.append(ref)
+    line = "const GIF_VIDEOS = new Set(%s);" % json.dumps(have, ensure_ascii=False)
+    new_html = _GIF_VIDEOS_LINE_RE.sub(lambda m: line, html, count=1)
+    if new_html != html:
+        with open(INDEX_HTML_PATH, "w", encoding="utf-8") as f:
+            f.write(new_html)
+    return converted
+
+
 def publish_project(project_id, code):
     """Insert or replace `project_id`'s object literal inside index.html's
     `const PROJECTS = [...]` array with `code` (a JS object literal string, as
     produced by builder.html's exportProjectCode)."""
+    code = externalize_font_data_urls(code)
     with open(INDEX_HTML_PATH, "r", encoding="utf-8") as f:
         html = f.read()
 
@@ -1646,6 +1745,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             except Exception as e:
                 self._send_json(500, {"error": "index.html 업데이트 실패: %s" % e})
                 return
+            try:
+                ensure_gif_videos()
+            except Exception as e:
+                # 실패해도 발행 자체는 그대로 진행 — 짝 MP4가 없는 GIF는 원본 GIF로 보일 뿐
+                print("[publish] GIF→MP4 변환 건너뜀: %s" % e)
             try:
                 git_result = git_commit_and_push(title)
             except Exception as e:
