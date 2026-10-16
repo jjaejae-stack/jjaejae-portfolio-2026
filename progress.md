@@ -1,6 +1,26 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-10-12
+최종 업데이트: 2026-10-16
+
+## 세션 요약 — 사이트 전체 로딩 속도 개선: 영상 재인코딩 + GIF→MP4 + 폰트 외부화 (2026-10-16)
+
+**증상**: "리스트 열 때, 프로젝트 들어가서 이미지/영상 불러오는 시간이 너무 길다. 예전엔 바로바로 떴는데."
+
+**원인(측정)**:
+1. index.html 자체가 2.1MB — 타이틀 폰트 11개가 base64(`titleFontDataUrl`)로 박혀 있었음(≈1.85MB).
+2. 업로드 영상이 crf 18 무제한이라 12~14Mbps(60초 광고 ≈ 85MB). 리스트는 배경 영상 8개를 전부 미리 로드 + **안 보이는 레이어까지 동시에 재생**하고 있었음(다운로드/디코딩 몰림 → 커서 버벅임).
+3. 갤러리 GIF 68개 총 667MB(1개 최대 70MB). 게다가 `isMediaReady`가 `img.complete`(파일 전체 다운로드)를 기다려서 큰 GIF/사진 하나가 그 갤러리 배치를 통째로 멈춤.
+
+**수정**:
+- 영상 15개 재인코딩(crf 21, 최대 6Mbps, 같은 파일명으로 덮어씀) — 예: Samsung History 87.5→26.5MB, UM Billboard 62.6→23MB. `server.py _run_ffmpeg`도 같은 설정으로 변경(앞으로 업로드분).
+- GIF 55개(1MB 이상·불투명) → 옆에 `<원본>.gif.mp4` 생성(648→83MB, crf 20 + maxrate 8M — maxrate 없을 땐 1080p 4초 GIF가 33MB 나왔음). index.html `const GIF_VIDEOS = new Set([...])` 목록에 있는 GIF는 `mediaFrameInner`가 `<video class="gif-video" muted loop>`로 그림(갤러리 자동재생 observer가 재생, 클릭 넘기기/드래그는 사진처럼, + 확대는 원본 GIF). **데이터 경로는 .gif 그대로라 빌더 재발행해도 안 되돌아감.** `server.py ensure_gif_videos()`가 매 /publish 후 새 GIF 변환 + 목록 갱신.
+- 폰트: `server.py externalize_font_data_urls()`가 /publish 때 dataUrl을 `fonts/<sha1>.ext`로 빼고 경로만 남김(빌더 IndexedDB는 계속 dataUrl이어도 됨). index.html 2.1MB → 320KB.
+- 1MB 넘는 JPG 재압축(q85, 긴 변 2560, 같은 파일명) — 42MB 절감.
+- 리스트: 미리 로드(eager)는 유지하되 업로드 영상은 `preload="auto"` + 정지, `syncListBgPlayback()`이 활성 항목만 재생. ([[feedback_portfolio_list_eager_preload]] 정책 유지)
+- `isMediaReady(IMG)` → `naturalWidth > 0`(헤더만 와도 배치), `waitMediaReady` 폴링을 30초까지 연장.
+- 원본 백업: `../2026 PF media backup (2026-10-16)/`(저장소 밖).
+
+**확인**: 로컬 Playwright로 리스트(영상 8개 중 1개만 재생)·GIF 프로젝트 4개(gif-video 전부 로드, 0px 프레임 없음)·폰트·확대 확인 후 push(`d0c82ee`), 라이브 반영 확인.
 
 ## 세션 요약 — 빌더 기기 간 작업 이어하기(클라우드 동기화) + 새 맥 셋업 가이드 (2026-10-12)
 
