@@ -1,6 +1,17 @@
 # 2026 포트폴리오 — 진행 상황
 
-최종 업데이트: 2026-10-16
+최종 업데이트: 2026-10-20
+
+## 세션 요약 — Info 페이지에 jjaejae Tools 링크 + 빌더 링크 순서 버튼 (2026-10-20)
+
+- **Info 링크 추가**: Instagram 오른쪽에 jjaejae Tools 링크(`https://tools.jjaejae.com/`, 새 탭), Email이 가장 오른쪽. 사용자가 빌더에서 라벨을 `jjaejae-tools ↗`로 넣고 Publish(커밋 c11664c "Publish: Info page") → jjaejae.com 라이브 반영 확인.
+- **링크 줄바꿈 CSS**: `#info-view .links`(index.html)와 빌더 미리보기 `.info-page-preview .links`에 `flex-wrap:wrap; gap:10px 26px`. 링크 3개면 모바일(390px)에서 Email이 다음 줄로 내려감(가로 스크롤 없음). PC는 한 줄.
+- **빌더 Info 링크 ▲▼ 순서 버튼**: `infoLinkRowHTML`에 `data-action="info-link-move"`(data-dir ±1) 버튼, 첫 줄 ▲/마지막 줄 ▼ disabled. `handleInfoEditorClick`에서 splice로 이동 → `renderEditor()` + `saveInfoAndRefresh()`(localStorage 저장은 400ms 디바운스). Playwright로 순서 변경·미리보기·저장값 확인.
+- **주의 — Info 링크의 원본은 빌더 localStorage(`pf-builder-info`)**: server.py `render_info_content_html()`이 Publish 때 이 목록으로 `.links`를 다시 만든다. index.html만 직접 고치면 다음 Info Publish 때 덮어써짐 → 빌더에서도 같은 변경을 해야 함.
+- 로컬 서버(server.py, 8420)가 꺼져 있어서 빌더 Publish가 안 됐음 → 다시 실행. 꺼지면 `start-builder.command` 더블클릭.
+
+### 같은 날 다른 작업 (참고)
+- jjaejae Tools 도메인 이전: `tools.jjaejae.com`(Cloudflare A tools → 76.76.21.21, DNS only), 예전 `jjaejae-tools.vercel.app`은 308 리디렉트. 상세는 `~/jjaejae Project/jjaejae tools/progress.md`.
 
 ## 세션 요약 — 사이트 전체 로딩 속도 개선: 영상 재인코딩 + GIF→MP4 + 폰트 외부화 (2026-10-16)
 
