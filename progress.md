@@ -1086,3 +1086,6 @@ python3 server.py
 - [ ] builder.html의 3테마 카드 디자인(각진 모서리 + 오프셋 그림자)을 index.html 쪽에도 적용할지 여부 확인
 - [x] ~~"Play"(개인 작업물) 섹션 데이터 연동~~ — `category` 플래그를 기존 `PROJECTS`에 추가하는 방식으로 완료 (2026-07-26, 위 "Work/Play 데이터 연동" 항목 참고). 이제 builder에서 Play 탭으로 프로젝트를 만들고 채운 뒤 Publish하면 됨.
 - [ ] "Play" 섹션에 실제 콘텐츠 채우기 (아직 프로젝트 0개 — Coming soon 문구만 있음)
+
+## 2026-10-23
+- **마우스 커서 사라지는 버그 수정**: `pointer:fine` 기기에서 `body.custom-cursor`만 있으면 기본 커서를 항상 숨겼는데, J 커서는 `body.cursor-ready`(#work-play가 화면에 보일 때)일 때만 표시됨 → 인트로 화면이나 `/slug`로 상세 페이지에 바로 들어가면(#work-play가 화면 밖) 기본 커서도, J도 없어서 커서가 완전히 사라졌음. 기본 커서는 J가 실제로 보일 때만 숨기고, J는 `cursor-ready` 또는 `project-open`/`list-open`/`info-open`일 때 표시하도록 `:is()` 셀렉터로 수정 (commit c6c7c75, 라이브 반영 확인).
