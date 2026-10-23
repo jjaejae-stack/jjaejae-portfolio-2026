@@ -966,8 +966,13 @@
      되는지 감이 안 잡힌다는 피드백이 있었음 — translate(-50%,-50%)로 이미지 중심을
      좌표에 맞추고 회전도 그 중심을 기준으로 돌게 해서, 정지했을 때 보이는 J의 중앙이
      실제 클릭 지점과 일치하도록 함. */
+  /* 기본 커서는 J가 실제로 보이는 상태에서만 숨김 — 예전엔 custom-cursor만으로 항상 숨겨서,
+     J가 안 보이는 구간(인트로, 또는 /slug 직접 접속처럼 #work-play가 화면에 없는 채로 상세가
+     열린 경우)에는 커서가 아예 사라지는 버그가 있었음. 상세/리스트/인포 오버레이가 열려 있을 땐
+     스크롤 위치와 무관하게 J를 켬. */
   @media (pointer:fine){
-    body.custom-cursor, body.custom-cursor *{ cursor:none !important; }
+    body.custom-cursor:is(.cursor-ready, .project-open, .list-open, .info-open),
+    body.custom-cursor:is(.cursor-ready, .project-open, .list-open, .info-open) *{ cursor:none !important; }
   }
   #cursor-j{
     position:fixed; top:0; left:0;
@@ -980,7 +985,7 @@
     opacity:0;
     transition:opacity .2s ease;
   }
-  body.custom-cursor.cursor-ready #cursor-j{ display:block; }
+  body.custom-cursor:is(.cursor-ready, .project-open, .list-open, .info-open) #cursor-j{ display:block; }
 </style>
 </head>
 <body>
